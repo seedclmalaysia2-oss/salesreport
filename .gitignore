@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.vite/
+
+# Local env (NEVER commit — contains service_role keys)
+.env
+.env.local
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Vercel
+.vercel/
+
+# Raw source workbooks — stay local. Aggregated data.json is committed.
+Sales & Forecast/
+
+# Local plan files
+plans/
+
+# Claude Code session files
+.claude/
