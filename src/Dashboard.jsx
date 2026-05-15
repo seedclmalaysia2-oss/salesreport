@@ -38,6 +38,56 @@ function recomputeFromRegistry(registry) {
   return aggregate(customerRows, brandRows);
 }
 
+function arrayBufferToBase64(buffer) {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function base64ToBlob(b64, type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+  const binary = atob(b64);
+  const arr = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+  return new Blob([arr], { type });
+}
+
+function fmtSize(n) {
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function detectedLabel(kind) {
+  return kind === "customer" ? "Sales Analysis · Customer" : "Stock Sales · Brand";
+}
+
+function slidesFedFor(kind) {
+  return kind === "customer"
+    ? ["Overview", "Customer Trends", "Top Customers", "Monthly", "YoY", "Targets"]
+    : ["Brand Performance", "Quantity Charts"];
+}
+
+function downloadEntry(entry) {
+  if (!entry.bytes) {
+    alert("Original file bytes not stored for this entry. Re-upload to enable Save.");
+    return;
+  }
+  const blob = base64ToBlob(entry.bytes);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = entry.name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const SALESPEOPLE_ORDER = ["Alan","Dino","Khen","Sakinah","Simon","Seed Malaysia"];
 const YEARS_FALLBACK = [2022,2023,2024,2025,2026];
@@ -129,6 +179,95 @@ function loadStoredData() {
   }
 }
 
+// ============================================================
+// 5 color themes designed for readability + sustained-screen comfort.
+// Each ships its full token set so charts (SVG-attr-based) work too.
+// ============================================================
+const THEMES = {
+  slate: {
+    name: "Slate", subtitle: "Soft dark · default", mode: "dark",
+    swatch: ["#0F172A", "#1E293B", "#E2E8F0", "#FB923C"],
+    bg: "#0F172A",
+    text: "#F1F5F9",
+    tintRgb: "226, 232, 240",
+    chartTickFill: "rgba(226, 232, 240, 0.65)",
+    chartTickFillDim: "rgba(226, 232, 240, 0.82)",
+    chartGrid: "rgba(148, 163, 184, 0.18)",
+    tooltipBg: "rgba(15, 23, 42, 0.97)",
+    tooltipBorder: "rgba(148, 163, 184, 0.35)",
+    tooltipText: "#F1F5F9",
+    cellTrack: "rgba(148, 163, 184, 0.06)",
+    heatmapBaseAlpha: 0.10,
+  },
+  midnight: {
+    name: "Midnight", subtitle: "Deep ocean blue", mode: "dark",
+    swatch: ["#0B1426", "#152843", "#BAE6FD", "#22D3EE"],
+    bg: "#0B1426",
+    text: "#E0F2FE",
+    tintRgb: "186, 230, 253",
+    chartTickFill: "rgba(186, 230, 253, 0.65)",
+    chartTickFillDim: "rgba(186, 230, 253, 0.82)",
+    chartGrid: "rgba(125, 211, 252, 0.16)",
+    tooltipBg: "rgba(11, 20, 38, 0.97)",
+    tooltipBorder: "rgba(125, 211, 252, 0.32)",
+    tooltipText: "#E0F2FE",
+    cellTrack: "rgba(186, 230, 253, 0.05)",
+    heatmapBaseAlpha: 0.10,
+  },
+  paper: {
+    name: "Paper", subtitle: "Warm cream", mode: "light",
+    swatch: ["#FAF7F2", "#FFFFFF", "#1C1917", "#EA580C"],
+    bg: "#FAF7F2",
+    text: "#1C1917",
+    tintRgb: "41, 37, 36",
+    chartTickFill: "rgba(41, 37, 36, 0.68)",
+    chartTickFillDim: "rgba(41, 37, 36, 0.85)",
+    chartGrid: "rgba(41, 37, 36, 0.10)",
+    tooltipBg: "rgba(255, 255, 255, 0.98)",
+    tooltipBorder: "rgba(28, 25, 23, 0.18)",
+    tooltipText: "#1C1917",
+    cellTrack: "rgba(28, 25, 23, 0.06)",
+    heatmapBaseAlpha: 0.05,
+  },
+  crisp: {
+    name: "Crisp", subtitle: "Cool light · pro", mode: "light",
+    swatch: ["#F1F5F9", "#FFFFFF", "#0F172A", "#0EA5E9"],
+    bg: "#F1F5F9",
+    text: "#0F172A",
+    tintRgb: "30, 41, 59",
+    chartTickFill: "rgba(30, 41, 59, 0.68)",
+    chartTickFillDim: "rgba(30, 41, 59, 0.85)",
+    chartGrid: "rgba(30, 41, 59, 0.10)",
+    tooltipBg: "rgba(255, 255, 255, 0.98)",
+    tooltipBorder: "rgba(30, 41, 59, 0.18)",
+    tooltipText: "#0F172A",
+    cellTrack: "rgba(30, 41, 59, 0.06)",
+    heatmapBaseAlpha: 0.05,
+  },
+  carbon: {
+    name: "Carbon", subtitle: "Max contrast", mode: "dark",
+    swatch: ["#000000", "#0F0F0F", "#FFFFFF", "#FFD60A"],
+    bg: "#000000",
+    text: "#FFFFFF",
+    tintRgb: "255, 255, 255",
+    chartTickFill: "rgba(255, 255, 255, 0.75)",
+    chartTickFillDim: "rgba(255, 255, 255, 0.92)",
+    chartGrid: "rgba(255, 255, 255, 0.18)",
+    tooltipBg: "rgba(0, 0, 0, 0.98)",
+    tooltipBorder: "rgba(255, 255, 255, 0.35)",
+    tooltipText: "#FFFFFF",
+    cellTrack: "rgba(255, 255, 255, 0.06)",
+    heatmapBaseAlpha: 0.12,
+  },
+};
+
+function migrateThemeKey(stored) {
+  if (stored && THEMES[stored]) return stored;
+  if (stored === "light") return "paper";
+  if (stored === "dark") return "slate";
+  return "slate";
+}
+
 export default function Dashboard({ data: incomingData, user, onLogout, onRefresh }) {
   const [tab, setTab] = useState("overview");
   const [selectedYear, setSelectedYear] = useState(2026);
@@ -136,35 +275,15 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [topCustomersBySpView, setTopCustomersBySpView] = useState("grid");
-  const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem("seedTheme") || "dark"; } catch { return "dark"; }
+  const [themeKey, setThemeKey] = useState(() => {
+    try { return migrateThemeKey(localStorage.getItem("seedTheme")); } catch { return "slate"; }
   });
-  useEffect(() => { try { localStorage.setItem("seedTheme", theme); } catch {} }, [theme]);
+  const [themePickerOpen, setThemePickerOpen] = useState(false);
+  useEffect(() => { try { localStorage.setItem("seedTheme", themeKey); } catch {} }, [themeKey]);
 
-  // Resolved colors for Recharts (which uses SVG attributes that don't read CSS vars)
-  const tk = theme === "light" ? {
-    bg: "#F5F7FA",
-    text: "#0F172A",
-    chartTickFill: "rgba(15,23,42,0.55)",
-    chartTickFillDim: "rgba(15,23,42,0.7)",
-    chartGrid: "rgba(15,23,42,0.08)",
-    tooltipBg: "rgba(var(--tint),0.98)",
-    tooltipBorder: "rgba(15,23,42,0.15)",
-    tooltipText: "#0F172A",
-    cellTrack: "rgba(15,23,42,0.06)",
-    heatmapBaseAlpha: 0.04,
-  } : {
-    bg: "#0A0A0F",
-    text: "#fff",
-    chartTickFill: "rgba(var(--tint),0.4)",
-    chartTickFillDim: "rgba(var(--tint),0.6)",
-    chartGrid: "rgba(var(--tint),0.05)",
-    tooltipBg: "rgba(15,15,20,0.95)",
-    tooltipBorder: "rgba(var(--tint),0.1)",
-    tooltipText: "#e0e0e0",
-    cellTrack: "rgba(var(--tint),0.02)",
-    heatmapBaseAlpha: 0.1,
-  };
+  // Active theme object. All tokens live here so Recharts gets resolved colors
+  // (SVG fill/stroke don't read CSS vars) and inline styles can use CSS vars.
+  const tk = THEMES[themeKey] || THEMES.slate;
 
   // Data source: localStorage upload > prop from App > baked-in fallback
   const [stored, setStored] = useState(() => loadStoredData());
@@ -532,35 +651,27 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
   }, [selectedSP, selectedYear, data]);
 
   return (
-    <div data-seed-theme={theme} style={{
+    <div data-seed-theme={themeKey} style={{
       minHeight:"100vh",
       background:"var(--bg)",
       color:"var(--text)",
-      fontFamily:"'DM Sans',sans-serif",
+      fontFamily:"'Inter','DM Sans',system-ui,sans-serif",
+      fontWeight: 450,
       padding:"0 0 60px 0",
     }}>
       <style>{`
-        [data-seed-theme="dark"] {
-          --bg: #0A0A0F;
-          --text: #fff;
-          --tint: 255, 255, 255;
-          --tooltip-bg: rgba(15,15,20,0.95);
-          --tooltip-border: rgba(255,255,255,0.1);
-          --tooltip-text: #e0e0e0;
+        [data-seed-theme="${themeKey}"] {
+          --bg: ${tk.bg};
+          --text: ${tk.text};
+          --tint: ${tk.tintRgb};
+          --tooltip-bg: ${tk.tooltipBg};
+          --tooltip-border: ${tk.tooltipBorder};
+          --tooltip-text: ${tk.tooltipText};
         }
-        [data-seed-theme="light"] {
-          --bg: #F5F7FA;
-          --text: #0F172A;
-          --tint: 15, 23, 42;
-          --tooltip-bg: rgba(255,255,255,0.98);
-          --tooltip-border: rgba(15,23,42,0.15);
-          --tooltip-text: #0F172A;
-        }
-        [data-seed-theme="light"] input,
-        [data-seed-theme="light"] button,
-        [data-seed-theme="light"] table { color: inherit; }
-        [data-seed-theme="light"] input::placeholder { color: rgba(15,23,42,0.45); }
+        [data-seed-theme] input::placeholder { color: rgba(${tk.tintRgb}, 0.5); }
+        [data-seed-theme] input, [data-seed-theme] button, [data-seed-theme] table { color: inherit; }
       `}</style>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
 
       <div style={{
@@ -590,25 +701,80 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
               {YEARS.map(y => <Pill key={y} label={y} active={y===selectedYear} onClick={()=>setSelectedYear(y)} />)}
             </div>
-            <button
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-              style={{
-                background:"rgba(var(--tint),0.05)",
-                border:"1px solid rgba(var(--tint),0.1)",
-                color:"var(--text)",
-                borderRadius:20,
-                padding:"6px 14px",
-                fontSize:13,
-                fontWeight:600,
-                cursor:"pointer",
-                fontFamily:"'DM Sans',sans-serif",
-                display:"flex",
-                alignItems:"center",
-                gap:6,
-              }}>
-              {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
-            </button>
+            <div style={{position:"relative"}}>
+              <button
+                onClick={() => setThemePickerOpen(o => !o)}
+                title="Choose color theme"
+                style={{
+                  background:"rgba(var(--tint),0.05)",
+                  border:"1px solid rgba(var(--tint),0.12)",
+                  color:"var(--text)",
+                  borderRadius:20,
+                  padding:"6px 14px",
+                  fontSize:13,
+                  fontWeight:600,
+                  cursor:"pointer",
+                  fontFamily:"'Inter',sans-serif",
+                  display:"flex",
+                  alignItems:"center",
+                  gap:8,
+                }}>
+                <span style={{display:"inline-flex",gap:2}}>
+                  {tk.swatch.map((c,i) => (
+                    <span key={i} style={{width:6,height:14,borderRadius:1,background:c,border:"1px solid rgba(var(--tint),0.1)"}} />
+                  ))}
+                </span>
+                {tk.name}
+                <span style={{fontSize:10,opacity:0.5}}>▼</span>
+              </button>
+              {themePickerOpen && (
+                <>
+                  <div onClick={() => setThemePickerOpen(false)} style={{position:"fixed",inset:0,zIndex:50}} />
+                  <div style={{
+                    position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:51,
+                    background:"var(--bg)",
+                    border:"1px solid rgba(var(--tint),0.18)",
+                    borderRadius:14,
+                    padding:8,
+                    width:300,
+                    boxShadow:"0 12px 40px rgba(0,0,0,0.5)",
+                  }}>
+                    <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1.5,color:"rgba(var(--tint),0.55)",padding:"6px 8px 10px"}}>
+                      Choose color theme
+                    </div>
+                    {Object.entries(THEMES).map(([key, t]) => {
+                      const active = themeKey === key;
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => { setThemeKey(key); setThemePickerOpen(false); }}
+                          style={{
+                            display:"flex",alignItems:"center",gap:10,
+                            width:"100%",padding:"10px 10px",marginBottom:4,
+                            background: active ? "rgba(var(--tint),0.08)" : "transparent",
+                            border: active ? "1px solid rgba(var(--tint),0.18)" : "1px solid transparent",
+                            color:"var(--text)",borderRadius:10,cursor:"pointer",textAlign:"left",
+                            fontFamily:"'Inter',sans-serif",
+                          }}
+                          onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(var(--tint),0.04)"; }}
+                          onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}>
+                          <span style={{display:"inline-flex",gap:3,flexShrink:0}}>
+                            {t.swatch.map((c,i) => (
+                              <span key={i} style={{width:14,height:34,borderRadius:3,background:c,border:"1px solid rgba(var(--tint),0.12)"}} />
+                            ))}
+                          </span>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>{t.name}</div>
+                            <div style={{fontSize:11,color:"rgba(var(--tint),0.55)"}}>{t.subtitle}</div>
+                          </div>
+                          {active && <span style={{color:"#E8633B",fontSize:14}}>●</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
             {user && (
               <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 12px 6px 8px",background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.08)",borderRadius:20}}>
                 <div style={{
@@ -1897,14 +2063,26 @@ function DataTab({ currentSource, currentMeta, onApply, onReset, data }) {
     }
   };
 
-  const applyResults = () => {
+  const applyResults = async () => {
     if (!results?.fileResults) return;
     const ok = results.fileResults.filter(r => r.ok);
     if (!ok.length) return;
     const now = Date.now();
-    // Replace existing entries with same name (revives from trash too); otherwise append.
+    // Build a lookup of the original File objects to grab size + bytes
+    const fileByName = new Map(selectedFiles.map(f => [f.name, f]));
     const byName = new Map(registry.map(e => [e.name, e]));
     for (const r of ok) {
+      const src = fileByName.get(r.file);
+      let bytes = null;
+      let sizeBytes = src?.size ?? 0;
+      if (src) {
+        try {
+          const buf = await src.arrayBuffer();
+          bytes = arrayBufferToBase64(buf);
+        } catch {
+          bytes = null;
+        }
+      }
       byName.set(r.file, {
         id: byName.get(r.file)?.id ?? `f_${now}_${Math.random().toString(36).slice(2, 8)}`,
         name: r.file,
@@ -1913,12 +2091,29 @@ function DataTab({ currentSource, currentMeta, onApply, onReset, data }) {
         kind: r.kind,
         rowCount: r.rowCount,
         rows: r.rows,
+        sizeBytes,
+        bytes,
         parsedAt: now,
         deletedAt: null,
       });
     }
     const next = [...byName.values()];
-    persistRegistry(next);
+    // Try persisting with bytes; if it overflows, drop bytes and retry.
+    let err = saveFileRegistry(next);
+    if (err) {
+      const slim = next.map(e => ({ ...e, bytes: null }));
+      err = saveFileRegistry(slim);
+      if (!err) {
+        setRegistry(slim);
+        setError("Saved file metadata but original bytes were dropped (localStorage too full to keep originals). Save/download won't work for these.");
+        applyRegistryToDashboard(slim);
+        setSelectedFiles([]);
+        setResults(null);
+        return;
+      }
+      setError(`Registry save failed: ${err}`);
+    }
+    setRegistry(next);
     applyRegistryToDashboard(next);
     setSelectedFiles([]);
     setResults(null);
@@ -1955,6 +2150,13 @@ function DataTab({ currentSource, currentMeta, onApply, onReset, data }) {
         setError(`Update failed: ${res.error}`);
         return;
       }
+      let bytes = null;
+      try {
+        const buf = await file.arrayBuffer();
+        bytes = arrayBufferToBase64(buf);
+      } catch {
+        bytes = null;
+      }
       // Replace this entry's rows/metadata; keep id. Use new filename in case user renamed.
       const next = registry.map(r => r.id === targetId ? {
         ...r,
@@ -1964,10 +2166,25 @@ function DataTab({ currentSource, currentMeta, onApply, onReset, data }) {
         kind: res.kind,
         rowCount: res.rowCount,
         rows: res.rows,
+        sizeBytes: file.size || 0,
+        bytes,
         parsedAt: Date.now(),
         deletedAt: null,
       } : r);
-      persistRegistry(next);
+      let err = saveFileRegistry(next);
+      if (err) {
+        const slim = next.map(r => r.id === targetId ? { ...r, bytes: null } : r);
+        err = saveFileRegistry(slim);
+        if (!err) {
+          setRegistry(slim);
+          setError("Updated but original bytes dropped (localStorage full). Download won't work for this entry.");
+          applyRegistryToDashboard(slim);
+          return;
+        }
+        setError(`Update save failed: ${err}`);
+        return;
+      }
+      setRegistry(next);
       applyRegistryToDashboard(next);
     } catch (err) {
       setError(`Update failed: ${err.message || err}`);
@@ -2168,12 +2385,14 @@ function DataTab({ currentSource, currentMeta, onApply, onReset, data }) {
         registry={registry}
         onView={onViewFile}
         onUpdate={onUpdateFile}
+        onSave={downloadEntry}
         onDelete={onDeleteFile}
         onRestore={onRestoreFile}
         onPurge={onPurgeFile}
         onEmptyTrash={onEmptyTrash}
         showTrash={showTrash}
         setShowTrash={setShowTrash}
+        onScrollToUpload={() => dropRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
       />
 
       <input
@@ -2189,98 +2408,212 @@ function DataTab({ currentSource, currentMeta, onApply, onReset, data }) {
   );
 }
 
-function UploadedFilesPanel({ registry, onView, onUpdate, onDelete, onRestore, onPurge, onEmptyTrash, showTrash, setShowTrash }) {
+function UploadedFilesPanel({ registry, onView, onUpdate, onSave, onDelete, onRestore, onPurge, onEmptyTrash, showTrash, setShowTrash, onScrollToUpload }) {
   const active = registry.filter(e => !e.deletedAt).sort((a,b) => (b.parsedAt||0) - (a.parsedAt||0));
   const trash = registry.filter(e => e.deletedAt).sort((a,b) => (b.deletedAt||0) - (a.deletedAt||0));
   if (!registry.length) return null;
+
+  // Coverage matrix: (SP, year) cells with customer + brand availability
+  const sps = [...new Set(active.map(e => e.sp))].sort();
+  const years = [...new Set(active.map(e => e.year))].sort();
+  const coverageKey = (sp, year, kind) => active.some(e => e.sp === sp && e.year === year && e.kind === kind);
+  const gaps = [];
+  sps.forEach(sp => years.forEach(year => {
+    const hasCust = coverageKey(sp, year, "customer");
+    const hasBrand = coverageKey(sp, year, "brand");
+    if (!hasCust || !hasBrand) gaps.push({ sp, year, missing: [!hasCust && "customer", !hasBrand && "brand"].filter(Boolean) });
+  }));
+
+  const totalSize = active.reduce((a, e) => a + (e.sizeBytes || 0), 0);
+  const withBytes = active.filter(e => e.bytes).length;
+
   return (
-    <Card style={{marginTop:20}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
-        <div style={{fontSize:14,fontWeight:600}}>
-          Uploaded files <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:12}}>· {active.length} active{trash.length ? ` · ${trash.length} in trash` : ""}</span>
+    <>
+      <Card style={{marginTop:20}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
+          <div style={{fontSize:14,fontWeight:600}}>
+            Uploaded files <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:12}}>· {active.length} active · {fmtSize(totalSize)} total · {withBytes}/{active.length} downloadable</span>
+          </div>
         </div>
-        {trash.length > 0 && (
-          <div style={{display:"flex",gap:8}}>
-            <button onClick={() => setShowTrash(s => !s)} style={{
-              background:"transparent",border:"1px solid rgba(var(--tint),0.15)",color:"rgba(var(--tint),0.7)",
-              borderRadius:8,padding:"6px 14px",fontSize:12,cursor:"pointer"
-            }}>{showTrash ? "Hide trash" : `Show trash (${trash.length})`}</button>
+
+        {active.length === 0 ? (
+          <div style={{fontSize:12,color:"rgba(var(--tint),0.4)",padding:"12px 0"}}>No active files. Upload above or restore from trash.</div>
+        ) : (
+          <div style={{overflow:"auto",border:"1px solid rgba(var(--tint),0.05)",borderRadius:10}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:880}}>
+              <thead>
+                <tr style={{background:"rgba(var(--tint),0.03)"}}>
+                  {["FILE","DETECTED AS","SLIDES FED","SIZE","UPLOADED","ACTIONS"].map(h => (
+                    <th key={h} style={thStyle}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {active.map(e => (
+                  <FileTableRow key={e.id} entry={e} variant="active"
+                    onView={onView} onUpdate={onUpdate} onSave={onSave} onDelete={onDelete}
+                  />
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-      </div>
+      </Card>
 
-      {active.length === 0 ? (
-        <div style={{fontSize:12,color:"rgba(var(--tint),0.4)",padding:"12px 0"}}>No active files. Upload above or restore from trash.</div>
-      ) : (
-        <div style={{border:"1px solid rgba(var(--tint),0.04)",borderRadius:8,overflow:"hidden"}}>
-          {active.map(e => (
-            <FileRow key={e.id} entry={e} variant="active" onView={onView} onUpdate={onUpdate} onDelete={onDelete} />
-          ))}
-        </div>
-      )}
-
-      {showTrash && trash.length > 0 && (
-        <>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:18,marginBottom:8}}>
-            <div style={{fontSize:12,fontWeight:600,color:"rgba(var(--tint),0.6)",textTransform:"uppercase",letterSpacing:1}}>Trash</div>
-            <button onClick={onEmptyTrash} style={{
-              background:"transparent",border:"1px solid rgba(248,113,113,0.3)",color:"#F87171",
-              borderRadius:8,padding:"6px 14px",fontSize:11,cursor:"pointer"
-            }}>Empty trash</button>
+      {gaps.length > 0 && (
+        <Card style={{marginTop:14}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:10}}>
+            <div style={{fontSize:13,fontWeight:600}}>Coverage gaps <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:12}}>· {gaps.length} (SP, year) combo{gaps.length===1?"":"s"} missing a file</span></div>
+            <button onClick={onScrollToUpload} style={{
+              background:"#3B82F6",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",fontSize:11,fontWeight:600,cursor:"pointer"
+            }}>↑ Upload here</button>
           </div>
-          <div style={{border:"1px solid rgba(var(--tint),0.04)",borderRadius:8,overflow:"hidden",opacity:0.85}}>
-            {trash.map(e => (
-              <FileRow key={e.id} entry={e} variant="trash" onView={onView} onRestore={onRestore} onPurge={onPurge} />
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))",gap:8}}>
+            {gaps.map((g, i) => (
+              <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",border:"1px solid rgba(var(--tint),0.06)",borderRadius:8,padding:"8px 12px",fontSize:12}}>
+                <div>
+                  <div style={{fontWeight:600}}>{g.sp} · {g.year}</div>
+                  <div style={{fontSize:10,color:"rgba(var(--tint),0.5)",fontFamily:"'Space Mono',monospace",marginTop:2}}>missing: {g.missing.join(" + ")}</div>
+                </div>
+                <span style={{color:"#F59E0B",fontSize:14}}>⚠</span>
+              </div>
             ))}
           </div>
-        </>
+        </Card>
       )}
-    </Card>
+
+      {trash.length > 0 && (
+        <Card style={{marginTop:14}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:10}}>
+            <div style={{fontSize:13,fontWeight:600,color:"#F87171"}}>
+              🗑 Recently deleted <span style={{color:"rgba(var(--tint),0.5)",fontWeight:400,fontSize:11}}>· {trash.length} file{trash.length===1?"":"s"} · restore any time</span>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={() => setShowTrash(s => !s)} style={{
+                background:"transparent",border:"1px solid rgba(var(--tint),0.15)",color:"rgba(var(--tint),0.7)",
+                borderRadius:8,padding:"6px 14px",fontSize:11,cursor:"pointer"
+              }}>{showTrash ? "Hide" : "Show"}</button>
+              {showTrash && (
+                <button onClick={onEmptyTrash} style={{
+                  background:"transparent",border:"1px solid rgba(248,113,113,0.3)",color:"#F87171",
+                  borderRadius:8,padding:"6px 14px",fontSize:11,cursor:"pointer"
+                }}>Empty trash</button>
+              )}
+            </div>
+          </div>
+          <div style={{fontSize:11,color:"rgba(var(--tint),0.4)",marginBottom:10}}>
+            Files you remove are kept here until you click <strong style={{color:"#F87171"}}>Delete forever</strong>. Click <strong style={{color:"#34D399"}}>Restore</strong> to put one back in the active set.
+          </div>
+          {showTrash && (
+            <div style={{overflow:"auto",border:"1px solid rgba(var(--tint),0.05)",borderRadius:10,opacity:0.92}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:760}}>
+                <thead>
+                  <tr style={{background:"rgba(var(--tint),0.03)"}}>
+                    {["FILE","DETECTED AS","SIZE","DELETED","ACTIONS"].map(h => (
+                      <th key={h} style={thStyle}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {trash.map(e => (
+                    <FileTableRow key={e.id} entry={e} variant="trash"
+                      onView={onView} onRestore={onRestore} onPurge={onPurge} onSave={onSave}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
+    </>
   );
 }
 
-function FileRow({ entry, variant, onView, onUpdate, onDelete, onRestore, onPurge }) {
+const thStyle = {
+  textAlign: "left",
+  padding: "10px 14px",
+  fontSize: 10,
+  fontWeight: 600,
+  letterSpacing: 1,
+  color: "rgba(var(--tint),0.45)",
+  borderBottom: "1px solid rgba(var(--tint),0.06)",
+  textTransform: "uppercase",
+  fontFamily: "'DM Sans',sans-serif",
+  whiteSpace: "nowrap",
+};
+
+const tdStyle = {
+  padding: "10px 14px",
+  borderBottom: "1px solid rgba(var(--tint),0.04)",
+  verticalAlign: "middle",
+};
+
+function FileTableRow({ entry, variant, onView, onUpdate, onSave, onDelete, onRestore, onPurge }) {
   const ts = variant === "trash" ? entry.deletedAt : entry.parsedAt;
+  const slides = slidesFedFor(entry.kind);
+  const kindColor = entry.kind === "customer" ? "#34D399" : "#A855F7";
   return (
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",borderBottom:"1px solid rgba(var(--tint),0.03)",fontSize:12,gap:10,flexWrap:"wrap"}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:240}}>
-        <span style={{color: entry.kind === "customer" ? "#34D399" : "#A855F7",fontWeight:600,fontSize:10,fontFamily:"'Space Mono',monospace",width:64,flexShrink:0}}>{entry.kind.toUpperCase()}</span>
-        <div style={{display:"flex",flexDirection:"column",minWidth:0,flex:1}}>
-          <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{entry.name}</span>
-          <span style={{color:"rgba(var(--tint),0.4)",fontSize:10,fontFamily:"'Space Mono',monospace",marginTop:2}}>
-            {entry.sp} · {entry.year} · {entry.rowCount} rows · {variant==="trash"?"deleted":"uploaded"} {ts ? new Date(ts).toLocaleString() : "—"}
-          </span>
+    <tr>
+      <td style={{...tdStyle,maxWidth:260}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+          <span style={{color:kindColor,fontSize:14,marginTop:1,flexShrink:0}}>📄</span>
+          <div style={{minWidth:0}}>
+            <div style={{fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240}}>{entry.name}</div>
+            <div style={{fontSize:10,color:"rgba(var(--tint),0.45)",fontFamily:"'Space Mono',monospace",marginTop:2}}>{entry.sp} · {entry.year} · {entry.rowCount} rows</div>
+          </div>
         </div>
-      </div>
-      <div style={{display:"flex",gap:6,flexShrink:0}}>
-        <button onClick={() => onView(entry)} style={btnStyle("#3B82F6")}>View</button>
-        {variant === "active" ? (
-          <>
-            <button onClick={() => onUpdate(entry)} style={btnStyle("#E8633B")}>Update</button>
-            <button onClick={() => onDelete(entry)} style={btnStyle("#F87171")}>Delete</button>
-          </>
-        ) : (
-          <>
-            <button onClick={() => onRestore(entry)} style={btnStyle("#34D399")}>Restore</button>
-            <button onClick={() => onPurge(entry)} style={btnStyle("#F87171")}>Delete forever</button>
-          </>
-        )}
-      </div>
-    </div>
+      </td>
+      <td style={tdStyle}>
+        <span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,background:`${kindColor}15`,color:kindColor,fontSize:11,fontWeight:600}}>{detectedLabel(entry.kind)}</span>
+      </td>
+      {variant === "active" && (
+        <td style={tdStyle}>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+            {slides.map(s => (
+              <span key={s} style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:"rgba(var(--tint),0.04)",color:"rgba(var(--tint),0.65)",fontFamily:"'Space Mono',monospace"}}>{s}</span>
+            ))}
+          </div>
+        </td>
+      )}
+      <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",whiteSpace:"nowrap"}}>{fmtSize(entry.sizeBytes)}</td>
+      <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.6)",whiteSpace:"nowrap",fontSize:11}}>
+        {ts ? new Date(ts).toLocaleString("en-MY", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" }) : "—"}
+      </td>
+      <td style={tdStyle}>
+        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+          <button onClick={() => onView(entry)} style={actionBtn("#3B82F6")}>👁 View</button>
+          {variant === "active" ? (
+            <>
+              <button onClick={() => onSave(entry)} disabled={!entry.bytes} style={actionBtn("#34D399", !entry.bytes)} title={entry.bytes ? "Download original .xlsx" : "Original bytes not stored"}>⬇ Save</button>
+              <button onClick={() => onUpdate(entry)} style={actionBtn("#E8633B")}>↻ Update</button>
+              <button onClick={() => onDelete(entry)} style={actionBtn("#F87171")}>🗑 Remove</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => onSave(entry)} disabled={!entry.bytes} style={actionBtn("#34D399", !entry.bytes)}>⬇ Save</button>
+              <button onClick={() => onRestore(entry)} style={actionBtn("#34D399")}>↺ Restore</button>
+              <button onClick={() => onPurge(entry)} style={actionBtn("#F87171")}>✕ Delete forever</button>
+            </>
+          )}
+        </div>
+      </td>
+    </tr>
   );
 }
 
-function btnStyle(color) {
+function actionBtn(color, disabled = false) {
   return {
-    background:"transparent",
-    border:`1px solid ${color}55`,
-    color,
-    borderRadius:6,
-    padding:"5px 10px",
-    fontSize:11,
-    fontWeight:600,
-    cursor:"pointer",
-    fontFamily:"'DM Sans',sans-serif",
+    background: "transparent",
+    border: `1px solid ${disabled ? "rgba(255,255,255,0.08)" : color + "55"}`,
+    color: disabled ? "rgba(var(--tint),0.25)" : color,
+    borderRadius: 6,
+    padding: "5px 10px",
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontFamily: "'DM Sans',sans-serif",
+    whiteSpace: "nowrap",
   };
 }
 
