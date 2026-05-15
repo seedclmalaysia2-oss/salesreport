@@ -27,13 +27,12 @@ except ImportError:
 
 # Salesperson roster + email convention. Edit emails to match real addresses.
 USERS = [
-    {"sp": "Alan",          "email": "alan@seedcl.example",          "is_admin": False},
-    {"sp": "Dino",          "email": "dino@seedcl.example",          "is_admin": False},
-    {"sp": "Khen",          "email": "khen@seedcl.example",          "is_admin": False},
-    {"sp": "Sakinah",       "email": "sakinah@seedcl.example",       "is_admin": False},
-    {"sp": "Simon",         "email": "simon@seedcl.example",         "is_admin": False},
-    {"sp": "Seed Malaysia", "email": "seedmalaysia@seedcl.example",  "is_admin": False},
-    {"sp": "admin",         "email": "admin@seedcl.example",         "is_admin": True},
+    {"sp": "Alan",          "email": "alan@seed-malaysia.com",       "is_admin": False},
+    {"sp": "Dino",          "email": "dino@seed-malaysia.com",       "is_admin": False},
+    {"sp": "Khen",          "email": "khen@seed-malaysia.com",       "is_admin": False},
+    {"sp": "Sakinah",       "email": "seedclmalaysia2@gmail.com",    "is_admin": False},
+    {"sp": "Simon",         "email": "simon@seed-malaysia.com",      "is_admin": True},   # Simon doubles as admin
+    {"sp": "Seed Malaysia", "email": "ac@seed-malaysia.com",         "is_admin": False},
 ]
 
 

@@ -98,21 +98,38 @@ function parseBrandRows(rows) {
   }
   if (amtCol < 0) return [];
 
-  const out = [];
+  // Scan rows building blocks of (customer, amtRow, qtyRow).
+  const blocks = [];
+  let pending = null;
   for (let r = 8; r < rows.length; r++) {
     if (!rows[r]) continue;
-    if (rows[r][amtCol] !== "Amt") continue;
+    const label = rows[r][amtCol];
     const cust = rows[r][1];
-    if (!cust) continue;
-    const custStr = String(cust).trim();
-    if (custStr.toLowerCase() === "total") break;
+    if (label === "Amt") {
+      if (cust) {
+        const cs = String(cust).trim();
+        if (cs.toLowerCase() === "total") break;
+        pending = { customer: cs, amtRow: r };
+      }
+    } else if (label === "Qty" && pending) {
+      blocks.push({ ...pending, qtyRow: r });
+      pending = null;
+    }
+  }
+  if (pending) blocks.push({ ...pending, qtyRow: null });
+
+  const out = [];
+  for (const blk of blocks) {
     for (const cKey of Object.keys(brandCols)) {
       const c = Number(cKey);
       const brand = brandCols[c];
       if (!isSalesBrand(brand)) continue;
-      const v = rows[r][c];
-      if (typeof v === "number" && v !== 0) {
-        out.push({ customer: custStr, brand, amt: v });
+      const amtV = rows[blk.amtRow]?.[c];
+      const qtyV = blk.qtyRow != null ? rows[blk.qtyRow]?.[c] : null;
+      const amt = typeof amtV === "number" && amtV !== 0 ? amtV : 0;
+      const qty = typeof qtyV === "number" && qtyV !== 0 ? qtyV : 0;
+      if (amt !== 0 || qty !== 0) {
+        out.push({ customer: blk.customer, brand, amt, qty });
       }
     }
   }

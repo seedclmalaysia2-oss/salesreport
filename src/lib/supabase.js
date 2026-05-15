@@ -17,23 +17,40 @@ export const supabase = createClient(url || "", anonKey || "", {
   },
 });
 
-// Fetch all rows from a table, paginating past the default 1000-row cap.
+// Fetch all rows from a table. Past the 1000-row cap, fires every page in
+// parallel after a head-only count query, so 22 sequential round-trips
+// become 1 + (22 in parallel) ≈ 2 round-trips.
 export async function fetchAll(table, columns = "*") {
   const PAGE = 1000;
-  let from = 0;
-  const out = [];
-  while (true) {
-    const { data, error } = await supabase
-      .from(table)
-      .select(columns)
-      .range(from, from + PAGE - 1);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    out.push(...data);
-    if (data.length < PAGE) break;
-    from += PAGE;
+
+  // 1) cheap head-only request to learn the row count
+  const { count, error: countErr } = await supabase
+    .from(table)
+    .select(columns, { count: "exact", head: true });
+  if (countErr) throw countErr;
+  if (!count) return [];
+
+  // 2) build page ranges
+  const ranges = [];
+  for (let from = 0; from < count; from += PAGE) {
+    ranges.push([from, Math.min(from + PAGE - 1, count - 1)]);
   }
-  return out;
+
+  // 3) fire all pages concurrently
+  const results = await Promise.all(
+    ranges.map(([from, to]) =>
+      supabase
+        .from(table)
+        .select(columns)
+        .range(from, to)
+        .then((r) => {
+          if (r.error) throw r.error;
+          return r.data || [];
+        })
+    )
+  );
+
+  return results.flat();
 }
 
 // Aggregate raw customer + brand rows into the same shape as src/data.json
@@ -88,6 +105,7 @@ export function aggregateFromRaw(customers, brandSales) {
       customer: r.customer,
       brand: r.brand,
       amt: Number(r.amt),
+      qty: Number(r.qty || 0),
     })),
   };
 }

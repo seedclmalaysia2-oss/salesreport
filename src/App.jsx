@@ -8,6 +8,10 @@ const supabaseConfigured = !!(
   import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
+// TEMPORARY: when false, the dashboard runs without auth. Re-enable when
+// the mid-update period is over (and re-enable RLS via 0006_reenable_auth.sql).
+const AUTH_ENABLED = false;
+
 function FullScreenMessage({ title, detail, accent = "#E8633B" }) {
   return (
     <div style={{
@@ -32,7 +36,11 @@ export default function App() {
 
   useEffect(() => {
     if (!supabaseConfigured) {
-      // Local dev without Supabase env: skip auth, use baked data.
+      setSessionLoaded(true);
+      return;
+    }
+    if (!AUTH_ENABLED) {
+      // Login disabled — mark loaded so the fetch effect runs without a session.
       setSessionLoaded(true);
       return;
     }
@@ -46,9 +54,11 @@ export default function App() {
     return () => sub.subscription?.unsubscribe();
   }, []);
 
+  const [refreshTick, setRefreshTick] = useState(0);
+
   useEffect(() => {
     if (!supabaseConfigured) return;
-    if (!session) {
+    if (AUTH_ENABLED && !session) {
       setData(null);
       setUser(null);
       setError(null);
@@ -57,23 +67,51 @@ export default function App() {
     (async () => {
       try {
         setError(null);
-        const [customers, brandSales, mapRow] = await Promise.all([
+        const fetches = [
           fetchAll("customers_data", "sp,year,customer,months,total"),
-          fetchAll("brand_sales_data", "sp,year,customer,brand,amt"),
-          supabase.from("sp_user_map").select("*")
-            .eq("user_id", session.user.id).maybeSingle(),
-        ]);
-        setData(aggregateFromRaw(customers, brandSales));
-        setUser({
-          email: session.user.email,
-          sp: mapRow.data?.sp || "(unmapped)",
-          isAdmin: !!mapRow.data?.is_admin,
-        });
+          fetchAll("brand_sales_data", "sp,year,customer,brand,amt,qty"),
+          fetchAll("sales_targets", "year,month,sp,target_amt"),
+          fetchAll("weekly_sales", "period_start,period_end,sp,amount,uploaded_at"),
+        ];
+        if (AUTH_ENABLED) {
+          fetches.push(
+            supabase.from("sp_user_map").select("*")
+              .eq("user_id", session.user.id).maybeSingle()
+          );
+        }
+        const results = await Promise.all(fetches);
+        const [customers, brandSales, targets, weekly, mapRow] = results;
+        const aggregated = aggregateFromRaw(customers, brandSales);
+        aggregated.targets = targets.map(t => ({
+          year: t.year,
+          month: t.month,
+          sp: t.sp,
+          target: Number(t.target_amt),
+        }));
+        aggregated.weeklySales = weekly.map(w => ({
+          periodStart: w.period_start,
+          periodEnd: w.period_end,
+          sp: w.sp,
+          amount: Number(w.amount),
+          uploadedAt: w.uploaded_at,
+        }));
+        setData(aggregated);
+
+        if (AUTH_ENABLED) {
+          setUser({
+            email: session.user.email,
+            sp: mapRow.data?.sp || "(unmapped)",
+            isAdmin: !!mapRow.data?.is_admin,
+          });
+        } else {
+          // Open access — show everything as admin would. No logout button.
+          setUser({ email: "", sp: "Open access", isAdmin: true });
+        }
       } catch (e) {
         setError(e.message || String(e));
       }
     })();
-  }, [session]);
+  }, [session, refreshTick]);
 
   if (!sessionLoaded) {
     return <FullScreenMessage title="Loading…" />;
@@ -84,7 +122,7 @@ export default function App() {
     return <Dashboard data={bakedData} user={null} onLogout={null} />;
   }
 
-  if (!session) return <LoginScreen />;
+  if (AUTH_ENABLED && !session) return <LoginScreen />;
 
   if (error) {
     return (
@@ -102,7 +140,8 @@ export default function App() {
     <Dashboard
       data={data}
       user={user}
-      onLogout={() => supabase.auth.signOut()}
+      onLogout={AUTH_ENABLED ? () => supabase.auth.signOut() : null}
+      onRefresh={() => setRefreshTick(t => t + 1)}
     />
   );
 }

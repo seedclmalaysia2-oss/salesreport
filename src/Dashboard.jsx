@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList } from "recharts";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, ReferenceLine } from "recharts";
 import bakedData from "./data.json";
 import { buildDataFromFiles, parseFilename } from "./lib/parseXlsx.js";
+import WeeklySalesCard from "./WeeklySalesCard.jsx";
 
 const STORAGE_KEY = "salesDashboardUserData";
 
@@ -96,7 +97,7 @@ function loadStoredData() {
   }
 }
 
-export default function Dashboard({ data: incomingData, user, onLogout }) {
+export default function Dashboard({ data: incomingData, user, onLogout, onRefresh }) {
   const [tab, setTab] = useState("overview");
   const [selectedYear, setSelectedYear] = useState(2026);
   const [selectedSP, setSelectedSP] = useState("All");
@@ -124,6 +125,7 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
   const TOP_CUSTOMERS = data.topCustomers || [];
   const CUSTOMERS = data.customers || [];
   const BRAND_SALES = data.brandSales || [];
+  const TARGETS = data.targets || [];
 
   const yearTotals = useMemo(() => {
     const t = {};
@@ -136,7 +138,44 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
   const prevYearTotal = yearTotals[selectedYear - 1] || 0;
   const yoyChange = prevYearTotal > 0 ? ((currentYearTotal - prevYearTotal) / prevYearTotal) * 100 : 0;
 
+  const annualQtyBySpYear = useMemo(() => {
+    const m = new Map();
+    BRAND_SALES.forEach(r => {
+      const key = `${r.sp}|${r.year}`;
+      m.set(key, (m.get(key) || 0) + (r.qty || 0));
+    });
+    return m;
+  }, [data]);
+
+  const monthlyQtyData = useMemo(() => {
+    return MONTH_NAMES.map((m, i) => {
+      const row = { month: m };
+      const filtered = selectedSP === "All" ? SUMMARY : SUMMARY.filter(s => s.sp === selectedSP);
+      const inYear = filtered.filter(s => s.year === selectedYear);
+      let total = 0;
+      inYear.forEach(s => {
+        const annualQty = annualQtyBySpYear.get(`${s.sp}|${s.year}`) || 0;
+        const proportion = s.total > 0 ? s.months[i] / s.total : 0;
+        const v = Math.round(annualQty * proportion);
+        row[s.sp] = v;
+        total += v;
+      });
+      row.total = total;
+      return row;
+    }).filter((_, i) => {
+      const allMonthsThisYear = SUMMARY.filter(s => s.year === selectedYear);
+      if (!allMonthsThisYear.length) return true;
+      const futureMonthEmpty = !allMonthsThisYear.some(s => s.months[i] > 0);
+      if (futureMonthEmpty) {
+        const anyLater = allMonthsThisYear.some(s => s.months.slice(i).some(v => v > 0));
+        return anyLater;
+      }
+      return true;
+    });
+  }, [selectedYear, selectedSP, data, annualQtyBySpYear]);
+
   const monthlyData = useMemo(() => {
+    const targetSp = selectedSP === "All" ? "_TEAM" : selectedSP;
     return MONTH_NAMES.map((m, i) => {
       const row = { month: m };
       const filtered = selectedSP === "All" ? SUMMARY : SUMMARY.filter(s => s.sp === selectedSP);
@@ -144,14 +183,13 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
         row[s.sp] = s.months[i];
       });
       row.total = filtered.filter(s => s.year === selectedYear).reduce((acc, s) => acc + s.months[i], 0);
+      const t = TARGETS.find(t => t.year === selectedYear && t.month === i + 1 && t.sp === targetSp);
+      row.target = t ? t.target : 0;
       return row;
     }).filter((_, i) => {
-      // Trim trailing empty months (for partial-year datasets like 2026)
       const allMonthsThisYear = SUMMARY.filter(s => s.year === selectedYear);
       if (!allMonthsThisYear.length) return true;
-      const monthHasAny = allMonthsThisYear.some(s => s.months[i] > 0);
       const futureMonthEmpty = !allMonthsThisYear.some(s => s.months[i] > 0);
-      // Only trim from the right: keep the month if any month >= it has data
       if (futureMonthEmpty) {
         const anyLater = allMonthsThisYear.some(s => s.months.slice(i).some(v => v > 0));
         return anyLater;
@@ -159,6 +197,37 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
       return true;
     });
   }, [selectedYear, selectedSP, data]);
+
+  const annualTarget = useMemo(() => {
+    const targetSp = selectedSP === "All" ? "_TEAM" : selectedSP;
+    return TARGETS
+      .filter(t => t.year === selectedYear && t.sp === targetSp)
+      .reduce((a, t) => a + t.target, 0);
+  }, [selectedYear, selectedSP, data]);
+
+  const ytd = useMemo(() => {
+    const summary = SUMMARY.filter(s => s.year === selectedYear);
+    if (!summary.length) return { actual: 0, target: 0, lastMonth: 0 };
+    let lastMonth = 0;
+    for (let i = 11; i >= 0; i--) {
+      if (summary.some(s => s.months[i] > 0)) { lastMonth = i + 1; break; }
+    }
+    let actual = 0;
+    if (selectedSP === "All") {
+      summary.forEach(s => { for (let i = 0; i < lastMonth; i++) actual += s.months[i]; });
+    } else {
+      const s = summary.find(d => d.sp === selectedSP);
+      if (s) for (let i = 0; i < lastMonth; i++) actual += s.months[i];
+    }
+    const targetSp = selectedSP === "All" ? "_TEAM" : selectedSP;
+    let target = 0;
+    TARGETS.filter(t => t.year === selectedYear && t.sp === targetSp && t.month <= lastMonth)
+      .forEach(t => { target += t.target; });
+    return { actual, target, lastMonth };
+  }, [selectedYear, selectedSP, data]);
+
+  const ytdAchievement = ytd.target > 0 ? (ytd.actual / ytd.target) * 100 : 0;
+  const annualAchievement = annualTarget > 0 ? (currentYearTotal / annualTarget) * 100 : 0;
 
   const yearCompData = useMemo(() => {
     return YEARS.map(y => {
@@ -268,27 +337,50 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
     return YEARS.map(y => ({ year: y.toString(), total: activeCustomer.perYear[y] || 0 }));
   }, [activeCustomer, data]);
 
-  const customerTopBrands = useMemo(() => {
+  const customerTopBrandsByAmt = useMemo(() => {
     if (!activeCustomer) return [];
     const m = new Map();
     BRAND_SALES.filter(r => r.customer === activeCustomer.customer).forEach(r => {
-      m.set(r.brand, (m.get(r.brand) || 0) + r.amt);
+      const e = m.get(r.brand) || { amt: 0, qty: 0 };
+      e.amt += r.amt; e.qty += r.qty || 0;
+      m.set(r.brand, e);
     });
     return [...m.entries()]
-      .map(([brand, amt]) => ({ brand, amt }))
+      .map(([brand, v]) => ({ brand, amt: v.amt, qty: v.qty }))
       .sort((a, b) => b.amt - a.amt)
+      .slice(0, 12);
+  }, [activeCustomer, data]);
+
+  const customerTopBrandsByQty = useMemo(() => {
+    if (!activeCustomer) return [];
+    const m = new Map();
+    BRAND_SALES.filter(r => r.customer === activeCustomer.customer).forEach(r => {
+      const e = m.get(r.brand) || { amt: 0, qty: 0 };
+      e.amt += r.amt; e.qty += r.qty || 0;
+      m.set(r.brand, e);
+    });
+    return [...m.entries()]
+      .map(([brand, v]) => ({ brand, amt: v.amt, qty: v.qty }))
+      .filter(x => x.qty > 0)
+      .sort((a, b) => b.qty - a.qty)
       .slice(0, 12);
   }, [activeCustomer, data]);
 
   const brandYearTotals = useMemo(() => {
     const m = new Map();
     BRAND_SALES.filter(r => r.year === selectedYear && (selectedSP === "All" || r.sp === selectedSP)).forEach(r => {
-      m.set(r.brand, (m.get(r.brand) || 0) + r.amt);
+      const e = m.get(r.brand) || { amt: 0, qty: 0 };
+      e.amt += r.amt; e.qty += r.qty || 0;
+      m.set(r.brand, e);
     });
     return [...m.entries()]
-      .map(([brand, amt]) => ({ brand, amt }))
+      .map(([brand, v]) => ({ brand, amt: v.amt, qty: v.qty }))
       .sort((a, b) => b.amt - a.amt);
   }, [selectedYear, selectedSP, data]);
+
+  const brandYearTotalsByQty = useMemo(() => {
+    return [...brandYearTotals].filter(x => x.qty > 0).sort((a, b) => b.qty - a.qty);
+  }, [brandYearTotals]);
 
   const brandSPBreakdown = useMemo(() => {
     const top = brandYearTotals.slice(0, 15);
@@ -350,25 +442,32 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
   }, [selectedSP, selectedYear, data]);
 
   const heatmap = useMemo(() => {
+    const scope = BRAND_SALES.filter(r => r.year === selectedYear && (selectedSP === "All" || r.sp === selectedSP));
+
+    // Top 12 customers ranked by amount
     const custMap = new Map();
-    BRAND_SALES.filter(r => r.year === selectedYear && (selectedSP === "All" || r.sp === selectedSP))
-      .forEach(r => custMap.set(r.customer, (custMap.get(r.customer) || 0) + r.amt));
+    scope.forEach(r => custMap.set(r.customer, (custMap.get(r.customer) || 0) + r.amt));
     const topCust = [...custMap.entries()].sort((a,b) => b[1]-a[1]).slice(0,12).map(([c]) => c);
+
+    // Top 12 brands ranked by amount
     const brandMap = new Map();
-    BRAND_SALES.filter(r => r.year === selectedYear && (selectedSP === "All" || r.sp === selectedSP))
-      .forEach(r => brandMap.set(r.brand, (brandMap.get(r.brand) || 0) + r.amt));
+    scope.forEach(r => brandMap.set(r.brand, (brandMap.get(r.brand) || 0) + r.amt));
     const topBrand = [...brandMap.entries()].sort((a,b) => b[1]-a[1]).slice(0,12).map(([b]) => b);
-    const grid = topCust.map(() => topBrand.map(() => 0));
-    BRAND_SALES.filter(r => r.year === selectedYear && (selectedSP === "All" || r.sp === selectedSP) &&
-                       topCust.includes(r.customer) && topBrand.includes(r.brand))
-      .forEach(r => {
-        const ci = topCust.indexOf(r.customer);
-        const bi = topBrand.indexOf(r.brand);
-        grid[ci][bi] += r.amt;
-      });
-    let max = 0;
-    grid.forEach(row => row.forEach(v => { if (v > max) max = v; }));
-    return { customers: topCust, brands: topBrand, grid, max };
+
+    const gridAmt = topCust.map(() => topBrand.map(() => 0));
+    const gridQty = topCust.map(() => topBrand.map(() => 0));
+    scope.forEach(r => {
+      const ci = topCust.indexOf(r.customer);
+      const bi = topBrand.indexOf(r.brand);
+      if (ci >= 0 && bi >= 0) {
+        gridAmt[ci][bi] += r.amt;
+        gridQty[ci][bi] += r.qty || 0;
+      }
+    });
+    let maxAmt = 0, maxQty = 0;
+    gridAmt.forEach(row => row.forEach(v => { if (v > maxAmt) maxAmt = v; }));
+    gridQty.forEach(row => row.forEach(v => { if (v > maxQty) maxQty = v; }));
+    return { customers: topCust, brands: topBrand, gridAmt, gridQty, maxAmt, maxQty };
   }, [selectedSP, selectedYear, data]);
 
   return (
@@ -442,6 +541,7 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
           <TabButton active={tab==="brands"} onClick={()=>setTab("brands")}>Brand Performance</TabButton>
           <TabButton active={tab==="cohort"} onClick={()=>setTab("cohort")}>New vs Lost</TabButton>
           <TabButton active={tab==="heatmap"} onClick={()=>setTab("heatmap")}>Customer × Brand</TabButton>
+          <TabButton active={tab==="targets"} onClick={()=>setTab("targets")}>🎯 Targets</TabButton>
           <TabButton active={tab==="data"} onClick={()=>setTab("data")} accent>Data ⤴</TabButton>
         </div>
       </div>
@@ -450,18 +550,42 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
 
         {tab === "overview" && (
           <>
+            <WeeklySalesCard
+              weeklySales={data.weeklySales || []}
+              targets={TARGETS}
+              isAdmin={!!user?.isAdmin}
+              onUploaded={onRefresh}
+            />
             <div style={{display:"flex",gap:16,marginBottom:28,flexWrap:"wrap"}}>
               <KPI label="Total Revenue" value={`RM ${fmt(currentYearTotal)}`} sub={`${selectedYear}`} trend={selectedYear>YEARS[0]?yoyChange:undefined} color="#E8633B" />
-              <KPI label="Top Performer" value={topSP?.sp || "—"} sub={`RM ${fmt(topSP?.total||0)}`} color="#3B82F6" />
+              {annualTarget > 0 ? (
+                <KPI
+                  label="YTD vs Target"
+                  value={`${ytdAchievement.toFixed(0)}%`}
+                  sub={`RM ${fmt(ytd.actual)} of RM ${fmt(ytd.target)} (Jan–${MONTH_NAMES[Math.max(ytd.lastMonth-1,0)] || "Dec"})`}
+                  color={ytdAchievement >= 100 ? "#34D399" : ytdAchievement >= 90 ? "#F59E0B" : "#F87171"}
+                />
+              ) : (
+                <KPI label="Top Performer" value={topSP?.sp || "—"} sub={`RM ${fmt(topSP?.total||0)}`} color="#3B82F6" />
+              )}
+              <KPI label="Annual Target" value={annualTarget > 0 ? `RM ${fmt(annualTarget)}` : "—"} sub={annualTarget > 0 ? `${annualAchievement.toFixed(0)}% achieved` : "no target set"} color="#3B82F6" />
               <KPI label="Active Teams" value={spPerformance.filter(s=>s.total>0).length} sub={`of ${SALESPEOPLE.length} teams`} color="#10B981" />
               <KPI label="Avg Monthly" value={`RM ${fmt(currentYearTotal / Math.max(SUMMARY.find(s => s.year === selectedYear)?.months.filter(m => m > 0).length || 12, 1))}`} sub="active months" color="#A855F7" />
             </div>
 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
               <Card>
-                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Monthly Revenue — {selectedYear}</div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+                  <div style={{fontSize:14,fontWeight:600}}>Monthly Revenue vs Target — {selectedYear}</div>
+                  {annualTarget > 0 && (
+                    <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11,color:"rgba(255,255,255,0.5)"}}>
+                      <span style={{display:"inline-block",width:14,height:2,borderTop:"2px dashed #94A3B8"}}></span>
+                      target
+                    </div>
+                  )}
+                </div>
                 <ResponsiveContainer width="100%" height={260}>
-                  <AreaChart data={monthlyData}>
+                  <ComposedChart data={monthlyData}>
                     <defs>
                       <linearGradient id="totalGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#E8633B" stopOpacity={0.3}/>
@@ -472,11 +596,35 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
                     <XAxis dataKey="month" tick={{fill:"rgba(255,255,255,0.4)",fontSize:11}} axisLine={false} />
                     <YAxis tick={{fill:"rgba(255,255,255,0.4)",fontSize:11}} axisLine={false} tickFormatter={fmt} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Area type="monotone" dataKey="total" stroke="#E8633B" fill="url(#totalGrad)" strokeWidth={2} name="Total" />
-                  </AreaChart>
+                    <Area type="monotone" dataKey="total" stroke="#E8633B" fill="url(#totalGrad)" strokeWidth={2} name="Actual" />
+                    {annualTarget > 0 && (
+                      <Line type="monotone" dataKey="target" stroke="#94A3B8" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Target" />
+                    )}
+                  </ComposedChart>
                 </ResponsiveContainer>
               </Card>
 
+              <Card>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>📦 Monthly Quantity — {selectedYear}</div>
+                <ResponsiveContainer width="100%" height={260}>
+                  <AreaChart data={monthlyQtyData}>
+                    <defs>
+                      <linearGradient id="qtyGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="month" tick={{fill:"rgba(255,255,255,0.4)",fontSize:11}} axisLine={false} />
+                    <YAxis tick={{fill:"rgba(255,255,255,0.4)",fontSize:11}} axisLine={false} tickFormatter={(v) => v.toLocaleString()} />
+                    <Tooltip formatter={(v) => `${v.toLocaleString()} units`} contentStyle={{background:"rgba(15,15,20,0.95)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,fontSize:12,color:"#e0e0e0"}} />
+                    <Area type="monotone" dataKey="total" stroke="#10B981" fill="url(#qtyGrad)" strokeWidth={2} name="Quantity" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </Card>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
               <Card>
                 <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Revenue by Team — {selectedYear}</div>
                 <ResponsiveContainer width="100%" height={260}>
@@ -485,6 +633,23 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
                       {pieData.map((_, i) => <Cell key={i} fill={COLORS[pieData[i]?.name] || PIE_COLORS[i]} />)}
                     </Pie>
                     <Tooltip formatter={(v) => fmtFull(v)} contentStyle={{background:"rgba(15,15,20,0.95)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,fontSize:12,color:"#e0e0e0"}} />
+                    <Legend formatter={(v) => <span style={{color:"rgba(255,255,255,0.7)",fontSize:11}}>{v}</span>} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Card>
+              <Card>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Quantity by Team — {selectedYear}</div>
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie
+                      data={spPerformance.filter(s => s.total > 0).map(s => {
+                        const aq = annualQtyBySpYear.get(`${s.sp}|${selectedYear}`) || 0;
+                        return { name: s.sp, value: aq };
+                      }).filter(d => d.value > 0)}
+                      cx="50%" cy="50%" innerRadius={55} outerRadius={95} dataKey="value" paddingAngle={3} stroke="none">
+                      {spPerformance.filter(s => s.total > 0).map((s, i) => <Cell key={i} fill={COLORS[s.sp] || PIE_COLORS[i]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v) => `${v.toLocaleString()} units`} contentStyle={{background:"rgba(15,15,20,0.95)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,fontSize:12,color:"#e0e0e0"}} />
                     <Legend formatter={(v) => <span style={{color:"rgba(255,255,255,0.7)",fontSize:11}}>{v}</span>} />
                   </PieChart>
                 </ResponsiveContainer>
@@ -551,7 +716,7 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
             </div>
 
             <Card style={{marginBottom:20}}>
-              <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Monthly Revenue Breakdown — {selectedYear}</div>
+              <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>💰 Monthly Revenue Breakdown — {selectedYear}</div>
               <ResponsiveContainer width="100%" height={360}>
                 <BarChart data={monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
@@ -586,6 +751,40 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
                         fontSize={11}
                         fontFamily="'Space Mono',monospace"
                       />
+                    </Bar>
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+
+            <Card style={{marginBottom:20}}>
+              <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>📦 Monthly Quantity Breakdown — {selectedYear}</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginBottom:12}}>
+                Derived per (SP, year) by apportioning annual brand-level quantity across months in proportion to monthly revenue.
+              </div>
+              <ResponsiveContainer width="100%" height={360}>
+                <BarChart data={monthlyQtyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="month" tick={{fill:"rgba(255,255,255,0.4)",fontSize:11}} axisLine={false} />
+                  <YAxis tick={{fill:"rgba(255,255,255,0.4)",fontSize:11}} axisLine={false} tickFormatter={(v) => v.toLocaleString()} />
+                  <Tooltip
+                    contentStyle={{background:"rgba(15,15,20,0.95)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,fontSize:12,color:"#e0e0e0"}}
+                    formatter={(v, name) => [`${v.toLocaleString()} units`, name]}
+                  />
+                  <Legend formatter={(v) => <span style={{color:"rgba(255,255,255,0.7)",fontSize:11}}>{v}</span>} />
+                  {selectedSP === "All" ? (
+                    <>
+                      {SALESPEOPLE.filter(sp => SUMMARY.some(s => s.sp === sp && s.year === selectedYear && s.total > 0)).map((sp, idx, arr) => (
+                        <Bar key={sp} dataKey={sp} stackId="qty" fill={COLORS[sp] || "#888"} radius={idx === arr.length - 1 ? [3,3,0,0] : [0,0,0,0]}>
+                          {idx === arr.length - 1 && (
+                            <LabelList dataKey="total" position="top" formatter={(v) => v > 0 ? v.toLocaleString() : ""} fill="rgba(255,255,255,0.85)" fontSize={11} fontFamily="'Space Mono',monospace" />
+                          )}
+                        </Bar>
+                      ))}
+                    </>
+                  ) : (
+                    <Bar dataKey={selectedSP} fill={COLORS[selectedSP] || "#888"} radius={[4,4,0,0]}>
+                      <LabelList dataKey={selectedSP} position="top" formatter={(v) => v > 0 ? v.toLocaleString() : ""} fill="rgba(255,255,255,0.85)" fontSize={11} fontFamily="'Space Mono',monospace" />
                     </Bar>
                   )}
                 </BarChart>
@@ -1034,18 +1233,38 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
                       </ResponsiveContainer>
                     </Card>
                     <Card>
-                      <div style={{fontSize:14,fontWeight:600,marginBottom:14}}>Top Brands Purchased</div>
-                      {customerTopBrands.length === 0 ? (
-                        <div style={{color:"rgba(255,255,255,0.4)",fontSize:13,padding:"40px 0",textAlign:"center"}}>No brand-level data for this customer</div>
+                      <div style={{fontSize:14,fontWeight:600,marginBottom:14}}>💰 Top Brands by Revenue</div>
+                      {customerTopBrandsByAmt.length === 0 ? (
+                        <div style={{color:"rgba(255,255,255,0.4)",fontSize:13,padding:"40px 0",textAlign:"center"}}>No brand revenue for this customer</div>
                       ) : (
-                        <ResponsiveContainer width="100%" height={Math.max(customerTopBrands.length * 22, 220)}>
-                          <BarChart data={customerTopBrands} layout="vertical" margin={{left:80, right:60}}>
+                        <ResponsiveContainer width="100%" height={Math.max(customerTopBrandsByAmt.length * 22, 220)}>
+                          <BarChart data={customerTopBrandsByAmt} layout="vertical" margin={{left:80, right:60}}>
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
                             <XAxis type="number" tick={{fill:"rgba(255,255,255,0.4)",fontSize:11}} axisLine={false} tickFormatter={fmt} />
                             <YAxis type="category" dataKey="brand" tick={{fill:"rgba(255,255,255,0.6)",fontSize:11}} axisLine={false} width={75} />
-                            <Tooltip formatter={(v) => fmtFull(v)} contentStyle={{background:"rgba(15,15,20,0.95)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,fontSize:12,color:"#e0e0e0"}} />
-                            <Bar dataKey="amt" fill="#3B82F6" radius={[0,3,3,0]}>
+                            <Tooltip formatter={(v, name, props) => [`${fmtFull(v)}  (${(props.payload.qty || 0).toLocaleString()} units)`, "Revenue"]} contentStyle={{background:"rgba(15,15,20,0.95)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,fontSize:12,color:"#e0e0e0"}} />
+                            <Bar dataKey="amt" fill="#E8633B" radius={[0,3,3,0]}>
                               <LabelList dataKey="amt" position="right" formatter={(v) => fmt(v)} fill="rgba(255,255,255,0.85)" fontSize={10} fontFamily="'Space Mono',monospace" />
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </Card>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr",gap:16,marginTop:16}}>
+                    <Card>
+                      <div style={{fontSize:14,fontWeight:600,marginBottom:14}}>📦 Top Brands by Quantity</div>
+                      {customerTopBrandsByQty.length === 0 ? (
+                        <div style={{color:"rgba(255,255,255,0.4)",fontSize:13,padding:"40px 0",textAlign:"center"}}>No quantity data for this customer</div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={Math.max(customerTopBrandsByQty.length * 22, 220)}>
+                          <BarChart data={customerTopBrandsByQty} layout="vertical" margin={{left:80, right:60}}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
+                            <XAxis type="number" tick={{fill:"rgba(255,255,255,0.4)",fontSize:11}} axisLine={false} tickFormatter={(v) => v.toLocaleString()} />
+                            <YAxis type="category" dataKey="brand" tick={{fill:"rgba(255,255,255,0.6)",fontSize:11}} axisLine={false} width={75} />
+                            <Tooltip formatter={(v, name, props) => [`${v.toLocaleString()} units  (${fmtFull(props.payload.amt || 0)})`, "Quantity"]} contentStyle={{background:"rgba(15,15,20,0.95)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,fontSize:12,color:"#e0e0e0"}} />
+                            <Bar dataKey="qty" fill="#10B981" radius={[0,3,3,0]}>
+                              <LabelList dataKey="qty" position="right" formatter={(v) => v.toLocaleString()} fill="rgba(255,255,255,0.85)" fontSize={10} fontFamily="'Space Mono',monospace" />
                             </Bar>
                           </BarChart>
                         </ResponsiveContainer>
@@ -1068,26 +1287,53 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
 
             <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
               <KPI label="Total Brands" value={brandYearTotals.length} sub={`${selectedYear} · ${selectedSP === "All" ? "all teams" : selectedSP}`} color="#E8633B" />
-              <KPI label="Top Brand" value={brandYearTotals[0]?.brand || "—"} sub={`RM ${fmt(brandYearTotals[0]?.amt || 0)}`} color="#3B82F6" />
-              <KPI label="Top 5 Concentration" value={`${((brandYearTotals.slice(0,5).reduce((a,b) => a+b.amt, 0) / Math.max(brandYearTotals.reduce((a,b) => a+b.amt, 0), 1)) * 100).toFixed(0)}%`} sub="of brand revenue" color="#10B981" />
+              <KPI label="Top Brand (Revenue)" value={brandYearTotals[0]?.brand || "—"} sub={`RM ${fmt(brandYearTotals[0]?.amt || 0)}`} color="#3B82F6" />
+              <KPI label="Top Brand (Qty)" value={brandYearTotalsByQty[0]?.brand || "—"} sub={`${(brandYearTotalsByQty[0]?.qty || 0).toLocaleString()} pcs/boxes`} color="#10B981" />
               <KPI label="Total Brand Revenue" value={`RM ${fmt(brandYearTotals.reduce((a,b) => a+b.amt, 0))}`} sub={`${selectedYear}`} color="#A855F7" />
+              <KPI label="Total Quantity" value={brandYearTotals.reduce((a,b) => a+(b.qty||0), 0).toLocaleString()} sub="units sold" color="#F59E0B" />
             </div>
 
-            <Card style={{marginBottom:20}}>
-              <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Top 20 Brands — {selectedYear}</div>
-              <ResponsiveContainer width="100%" height={520}>
-                <BarChart data={brandYearTotals.slice(0,20)} layout="vertical" margin={{left:90, right:80}}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
-                  <XAxis type="number" tick={{fill:"rgba(255,255,255,0.4)",fontSize:11}} axisLine={false} tickFormatter={fmt} />
-                  <YAxis type="category" dataKey="brand" tick={{fill:"rgba(255,255,255,0.6)",fontSize:11}} axisLine={false} width={85} />
-                  <Tooltip formatter={(v) => fmtFull(v)} contentStyle={{background:"rgba(15,15,20,0.95)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,fontSize:12,color:"#e0e0e0"}} />
-                  <Bar dataKey="amt" radius={[0,4,4,0]}>
-                    {brandYearTotals.slice(0,20).map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} opacity={1 - i * 0.025} />)}
-                    <LabelList dataKey="amt" position="right" formatter={(v) => fmt(v)} fill="rgba(255,255,255,0.85)" fontSize={11} fontFamily="'Space Mono',monospace" />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </Card>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(420px, 1fr))",gap:20,marginBottom:20}}>
+              <Card>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>💰 Top 20 Brands by Revenue — {selectedYear}</div>
+                <ResponsiveContainer width="100%" height={520}>
+                  <BarChart data={brandYearTotals.slice(0,20)} layout="vertical" margin={{left:90, right:80}}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
+                    <XAxis type="number" tick={{fill:"rgba(255,255,255,0.4)",fontSize:11}} axisLine={false} tickFormatter={fmt} />
+                    <YAxis type="category" dataKey="brand" tick={{fill:"rgba(255,255,255,0.6)",fontSize:11}} axisLine={false} width={85} />
+                    <Tooltip
+                      formatter={(v, name, props) => [`${fmtFull(v)}  (${(props.payload.qty || 0).toLocaleString()} units)`, "Revenue"]}
+                      contentStyle={{background:"rgba(15,15,20,0.95)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,fontSize:12,color:"#e0e0e0"}} />
+                    <Bar dataKey="amt" radius={[0,4,4,0]}>
+                      {brandYearTotals.slice(0,20).map((_, i) => <Cell key={i} fill="#E8633B" opacity={1 - i * 0.025} />)}
+                      <LabelList dataKey="amt" position="right" formatter={(v) => fmt(v)} fill="rgba(255,255,255,0.85)" fontSize={11} fontFamily="'Space Mono',monospace" />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </Card>
+
+              <Card>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>📦 Top 20 Brands by Quantity — {selectedYear}</div>
+                {brandYearTotalsByQty.length === 0 ? (
+                  <div style={{padding:"60px 0",textAlign:"center",color:"rgba(255,255,255,0.4)"}}>No quantity data for this scope.</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={520}>
+                    <BarChart data={brandYearTotalsByQty.slice(0,20)} layout="vertical" margin={{left:90, right:80}}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
+                      <XAxis type="number" tick={{fill:"rgba(255,255,255,0.4)",fontSize:11}} axisLine={false} tickFormatter={(v) => v.toLocaleString()} />
+                      <YAxis type="category" dataKey="brand" tick={{fill:"rgba(255,255,255,0.6)",fontSize:11}} axisLine={false} width={85} />
+                      <Tooltip
+                        formatter={(v, name, props) => [`${v.toLocaleString()} units  (${fmtFull(props.payload.amt || 0)})`, "Quantity"]}
+                        contentStyle={{background:"rgba(15,15,20,0.95)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,fontSize:12,color:"#e0e0e0"}} />
+                      <Bar dataKey="qty" radius={[0,4,4,0]}>
+                        {brandYearTotalsByQty.slice(0,20).map((_, i) => <Cell key={i} fill="#10B981" opacity={1 - i * 0.025} />)}
+                        <LabelList dataKey="qty" position="right" formatter={(v) => v.toLocaleString()} fill="rgba(255,255,255,0.85)" fontSize={11} fontFamily="'Space Mono',monospace" />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </Card>
+            </div>
 
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
               <Card>
@@ -1179,54 +1425,261 @@ export default function Dashboard({ data: incomingData, user, onLogout }) {
               {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
             </div>
 
-            <Card>
-              <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>Top 12 Customers × Top 12 Brands — {selectedYear}</div>
-              <div style={{fontSize:12,color:"rgba(255,255,255,0.4)",marginBottom:16}}>Cell intensity = revenue. Hover for exact values.</div>
-
-              {heatmap.customers.length === 0 ? (
+            {heatmap.customers.length === 0 ? (
+              <Card>
                 <div style={{padding:"40px 0",textAlign:"center",color:"rgba(255,255,255,0.4)"}}>
                   No brand-level data for this scope.
                 </div>
-              ) : (
-                <div style={{overflowX:"auto"}}>
-                  <table style={{borderCollapse:"separate",borderSpacing:2,fontSize:11}}>
-                    <thead>
-                      <tr>
-                        <th style={{padding:"6px 10px",textAlign:"left",color:"rgba(255,255,255,0.4)",fontWeight:500,minWidth:200}}>Customer ↓ / Brand →</th>
-                        {heatmap.brands.map(b => (
-                          <th key={b} style={{padding:"6px 4px",color:"rgba(255,255,255,0.6)",fontWeight:500,fontSize:10,minWidth:60,textAlign:"center"}}>
-                            <div style={{transform:"rotate(-30deg)",transformOrigin:"left bottom",whiteSpace:"nowrap",height:60,marginTop:30}}>
-                              {b}
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {heatmap.customers.map((c, ci) => (
-                        <tr key={c}>
-                          <td style={{padding:"6px 10px",color:"rgba(255,255,255,0.85)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:200}}>{c}</td>
-                          {heatmap.brands.map((b, bi) => {
-                            const v = heatmap.grid[ci][bi];
-                            const intensity = heatmap.max > 0 ? v / heatmap.max : 0;
-                            const bg = v === 0 ? "rgba(255,255,255,0.02)" : `rgba(232,99,59,${0.1 + intensity * 0.85})`;
-                            return (
-                              <td key={b} title={`${c} × ${b}: ${fmtFull(v)}`} style={{
-                                padding:"6px 4px",background:bg,borderRadius:4,
-                                textAlign:"center",fontFamily:"'Space Mono',monospace",fontSize:10,
-                                color: intensity > 0.4 ? "#fff" : "rgba(255,255,255,0.5)",cursor:"default"
-                              }}>
-                                {v > 0 ? fmt(v) : "·"}
-                              </td>
-                            );
-                          })}
+              </Card>
+            ) : (
+              <>
+                <Card style={{marginBottom:20}}>
+                  <div style={{fontSize:14,fontWeight:600,marginBottom:6,color:"#E8633B"}}>💰 Revenue heatmap — Top 12 × Top 12 — {selectedYear}</div>
+                  <div style={{fontSize:12,color:"rgba(255,255,255,0.4)",marginBottom:16}}>Cell intensity = RM revenue. Hover for exact values (revenue + quantity).</div>
+                  <div style={{overflowX:"auto"}}>
+                    <table style={{borderCollapse:"separate",borderSpacing:2,fontSize:11}}>
+                      <thead>
+                        <tr>
+                          <th style={{padding:"6px 10px",textAlign:"left",color:"rgba(255,255,255,0.4)",fontWeight:500,minWidth:200}}>Customer ↓ / Brand →</th>
+                          {heatmap.brands.map(b => (
+                            <th key={b} style={{padding:"6px 4px",color:"rgba(255,255,255,0.6)",fontWeight:500,fontSize:10,minWidth:60,textAlign:"center"}}>
+                              <div style={{transform:"rotate(-30deg)",transformOrigin:"left bottom",whiteSpace:"nowrap",height:60,marginTop:30}}>{b}</div>
+                            </th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {heatmap.customers.map((c, ci) => (
+                          <tr key={c}>
+                            <td style={{padding:"6px 10px",color:"rgba(255,255,255,0.85)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:200}}>{c}</td>
+                            {heatmap.brands.map((b, bi) => {
+                              const v = heatmap.gridAmt[ci][bi];
+                              const q = heatmap.gridQty[ci][bi];
+                              const intensity = heatmap.maxAmt > 0 ? v / heatmap.maxAmt : 0;
+                              const bg = v === 0 ? "rgba(255,255,255,0.02)" : `rgba(232,99,59,${0.1 + intensity * 0.85})`;
+                              return (
+                                <td key={b} title={`${c} × ${b}\nRevenue: ${fmtFull(v)}\nQuantity: ${q.toLocaleString()} units`} style={{
+                                  padding:"6px 4px",background:bg,borderRadius:4,textAlign:"center",
+                                  fontFamily:"'Space Mono',monospace",fontSize:10,
+                                  color: intensity > 0.4 ? "#fff" : "rgba(255,255,255,0.5)",cursor:"default"
+                                }}>
+                                  {v > 0 ? fmt(v) : "·"}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+
+                <Card>
+                  <div style={{fontSize:14,fontWeight:600,marginBottom:6,color:"#10B981"}}>📦 Quantity heatmap — same Top 12 × Top 12 — {selectedYear}</div>
+                  <div style={{fontSize:12,color:"rgba(255,255,255,0.4)",marginBottom:16}}>Cell intensity = units sold. Same axes as the revenue grid above for direct comparison.</div>
+                  <div style={{overflowX:"auto"}}>
+                    <table style={{borderCollapse:"separate",borderSpacing:2,fontSize:11}}>
+                      <thead>
+                        <tr>
+                          <th style={{padding:"6px 10px",textAlign:"left",color:"rgba(255,255,255,0.4)",fontWeight:500,minWidth:200}}>Customer ↓ / Brand →</th>
+                          {heatmap.brands.map(b => (
+                            <th key={b} style={{padding:"6px 4px",color:"rgba(255,255,255,0.6)",fontWeight:500,fontSize:10,minWidth:60,textAlign:"center"}}>
+                              <div style={{transform:"rotate(-30deg)",transformOrigin:"left bottom",whiteSpace:"nowrap",height:60,marginTop:30}}>{b}</div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {heatmap.customers.map((c, ci) => (
+                          <tr key={c}>
+                            <td style={{padding:"6px 10px",color:"rgba(255,255,255,0.85)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:200}}>{c}</td>
+                            {heatmap.brands.map((b, bi) => {
+                              const q = heatmap.gridQty[ci][bi];
+                              const v = heatmap.gridAmt[ci][bi];
+                              const intensity = heatmap.maxQty > 0 ? q / heatmap.maxQty : 0;
+                              const bg = q === 0 ? "rgba(255,255,255,0.02)" : `rgba(16,185,129,${0.1 + intensity * 0.85})`;
+                              return (
+                                <td key={b} title={`${c} × ${b}\nQuantity: ${q.toLocaleString()} units\nRevenue: ${fmtFull(v)}`} style={{
+                                  padding:"6px 4px",background:bg,borderRadius:4,textAlign:"center",
+                                  fontFamily:"'Space Mono',monospace",fontSize:10,
+                                  color: intensity > 0.4 ? "#fff" : "rgba(255,255,255,0.5)",cursor:"default"
+                                }}>
+                                  {q > 0 ? q.toLocaleString() : "·"}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              </>
+            )}
+          </>
+        )}
+
+        {tab === "targets" && (
+          <>
+            <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
+              <span style={{fontSize:12,color:"rgba(255,255,255,0.4)",marginRight:8}}>Scope:</span>
+              <Pill label="Team total" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
+              {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
+            </div>
+
+            {annualTarget === 0 ? (
+              <Card>
+                <div style={{padding:"40px 0",textAlign:"center",color:"rgba(255,255,255,0.5)"}}>
+                  No target set for {selectedSP === "All" ? "team" : selectedSP} in {selectedYear}.
                 </div>
-              )}
-            </Card>
+              </Card>
+            ) : (
+              <>
+                <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
+                  <KPI label="Annual Target" value={`RM ${fmt(annualTarget)}`} sub={`${selectedSP === "All" ? "team" : selectedSP} · ${selectedYear}`} color="#3B82F6" />
+                  <KPI label="YTD Actual" value={`RM ${fmt(ytd.actual)}`} sub={ytd.lastMonth ? `Jan–${MONTH_NAMES[ytd.lastMonth-1]}` : "no data"} color="#E8633B" />
+                  <KPI label="YTD Target" value={`RM ${fmt(ytd.target)}`} sub={ytd.lastMonth ? `Jan–${MONTH_NAMES[ytd.lastMonth-1]}` : "—"} color="#94A3B8" />
+                  <KPI
+                    label="YTD Achievement"
+                    value={`${ytdAchievement.toFixed(1)}%`}
+                    sub={ytd.actual >= ytd.target ? `▲ RM ${fmt(ytd.actual - ytd.target)} above target` : `▼ RM ${fmt(ytd.target - ytd.actual)} below target`}
+                    color={ytdAchievement >= 100 ? "#34D399" : ytdAchievement >= 90 ? "#F59E0B" : "#F87171"}
+                  />
+                </div>
+
+                <Card style={{marginBottom:20}}>
+                  <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>
+                    Monthly Actual vs Target — {selectedYear}
+                  </div>
+                  <ResponsiveContainer width="100%" height={360}>
+                    <ComposedChart data={MONTH_NAMES.map((m, i) => {
+                      const targetSp = selectedSP === "All" ? "_TEAM" : selectedSP;
+                      const t = TARGETS.find(x => x.year === selectedYear && x.month === i + 1 && x.sp === targetSp);
+                      const target = t ? t.target : 0;
+                      let actual = 0;
+                      const summary = SUMMARY.filter(s => s.year === selectedYear);
+                      if (selectedSP === "All") summary.forEach(s => actual += s.months[i]);
+                      else { const s = summary.find(d => d.sp === selectedSP); if (s) actual = s.months[i]; }
+                      return { month: m, actual, target, gap: actual - target };
+                    })}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="month" tick={{fill:"rgba(255,255,255,0.4)",fontSize:11}} axisLine={false} />
+                      <YAxis tick={{fill:"rgba(255,255,255,0.4)",fontSize:11}} axisLine={false} tickFormatter={fmt} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend formatter={(v) => <span style={{color:"rgba(255,255,255,0.7)",fontSize:11}}>{v}</span>} />
+                      <Bar dataKey="actual" fill="#E8633B" radius={[3,3,0,0]} name="Actual">
+                        <LabelList dataKey="actual" position="top" formatter={(v) => v > 0 ? fmt(v) : ""} fill="rgba(255,255,255,0.85)" fontSize={10} fontFamily="'Space Mono',monospace" />
+                      </Bar>
+                      <Line type="monotone" dataKey="target" stroke="#94A3B8" strokeWidth={2} strokeDasharray="5 5" dot={{r:4,fill:"#94A3B8"}} name="Target" />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </Card>
+
+                <Card>
+                  <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Monthly Achievement Breakdown</div>
+                  <div style={{overflowX:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                      <thead>
+                        <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                          {["Month","Target","Actual","Gap","Achievement"].map(h => (
+                            <th key={h} style={{padding:"10px 14px",textAlign:"left",color:"rgba(255,255,255,0.4)",fontWeight:500,fontSize:11,textTransform:"uppercase",letterSpacing:1}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {MONTH_NAMES.map((m, i) => {
+                          const targetSp = selectedSP === "All" ? "_TEAM" : selectedSP;
+                          const t = TARGETS.find(x => x.year === selectedYear && x.month === i + 1 && x.sp === targetSp);
+                          const target = t ? t.target : 0;
+                          let actual = 0;
+                          const summary = SUMMARY.filter(s => s.year === selectedYear);
+                          if (selectedSP === "All") summary.forEach(s => actual += s.months[i]);
+                          else { const s = summary.find(d => d.sp === selectedSP); if (s) actual = s.months[i]; }
+                          if (target === 0 && actual === 0) return null;
+                          const gap = actual - target;
+                          const pct = target > 0 ? (actual / target) * 100 : 0;
+                          const color = pct >= 100 ? "#34D399" : pct >= 90 ? "#F59E0B" : pct > 0 ? "#F87171" : "rgba(255,255,255,0.3)";
+                          return (
+                            <tr key={m} style={{borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+                              <td style={{padding:"10px 14px",fontWeight:600}}>{m}</td>
+                              <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",color:"rgba(255,255,255,0.6)"}}>{fmtFull(target)}</td>
+                              <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",fontWeight:600}}>{actual > 0 ? fmtFull(actual) : "—"}</td>
+                              <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",color:gap >= 0 ? "#34D399" : "#F87171"}}>
+                                {actual > 0 ? `${gap >= 0 ? "+" : ""}${fmtFull(gap)}` : "—"}
+                              </td>
+                              <td style={{padding:"10px 14px"}}>
+                                {actual > 0 && target > 0 ? (
+                                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                    <div style={{width:120,height:6,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden"}}>
+                                      <div style={{width:`${Math.min(pct,150)}%`,height:"100%",background:color,transition:"width 0.3s"}} />
+                                    </div>
+                                    <span style={{fontFamily:"'Space Mono',monospace",fontWeight:600,color,fontSize:12}}>{pct.toFixed(0)}%</span>
+                                  </div>
+                                ) : <span style={{color:"rgba(255,255,255,0.3)",fontSize:11}}>—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+
+                {selectedSP === "All" && user?.isAdmin && (
+                  <Card style={{marginTop:20}}>
+                    <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Per-Rep Achievement — {selectedYear} (admin view)</div>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                      <thead>
+                        <tr style={{borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                          {["Rep","Annual Target","YTD Actual","YTD Target","Achievement"].map(h => (
+                            <th key={h} style={{padding:"10px 14px",textAlign:"left",color:"rgba(255,255,255,0.4)",fontWeight:500,fontSize:11,textTransform:"uppercase",letterSpacing:1}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {SALESPEOPLE.map(sp => {
+                          const repTargets = TARGETS.filter(t => t.year === selectedYear && t.sp === sp);
+                          const annT = repTargets.reduce((a, t) => a + t.target, 0);
+                          if (annT === 0) return null;
+                          const summary = SUMMARY.find(s => s.sp === sp && s.year === selectedYear);
+                          let ytdA = 0, ytdT = 0;
+                          if (summary) {
+                            for (let i = 0; i < ytd.lastMonth; i++) ytdA += summary.months[i];
+                          }
+                          repTargets.filter(t => t.month <= ytd.lastMonth).forEach(t => { ytdT += t.target; });
+                          const pct = ytdT > 0 ? (ytdA / ytdT) * 100 : 0;
+                          const color = pct >= 100 ? "#34D399" : pct >= 90 ? "#F59E0B" : pct > 0 ? "#F87171" : "rgba(255,255,255,0.3)";
+                          return (
+                            <tr key={sp} style={{borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+                              <td style={{padding:"10px 14px",fontWeight:600}}>
+                                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                  <div style={{width:10,height:10,borderRadius:3,background:COLORS[sp] || "#888"}} />
+                                  {sp}
+                                </div>
+                              </td>
+                              <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace"}}>{fmtFull(annT)}</td>
+                              <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",fontWeight:600}}>{fmtFull(ytdA)}</td>
+                              <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",color:"rgba(255,255,255,0.6)"}}>{fmtFull(ytdT)}</td>
+                              <td style={{padding:"10px 14px"}}>
+                                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                  <div style={{width:120,height:6,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden"}}>
+                                    <div style={{width:`${Math.min(pct,150)}%`,height:"100%",background:color}} />
+                                  </div>
+                                  <span style={{fontFamily:"'Space Mono',monospace",fontWeight:600,color,fontSize:12}}>{pct.toFixed(0)}%</span>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <div style={{marginTop:14,fontSize:11,color:"rgba(255,255,255,0.4)",textAlign:"center"}}>
+                      * Per-rep targets are derived from each rep's prior-year contribution share applied to the team monthly target.
+                    </div>
+                  </Card>
+                )}
+              </>
+            )}
           </>
         )}
 

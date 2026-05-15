@@ -125,24 +125,38 @@ def parse_brand_file(path: Path):
     if amt_col is None:
         return []
 
+    # Build a list of (customer, amt_row, qty_row) tuples by scanning sequentially.
+    blocks = []
+    pending_amt = None  # (customer, row_idx)
+    for r in range(9, ws.max_row + 1):
+        label = ws.cell(r, amt_col).value
+        cust = ws.cell(r, 2).value
+        if label == "Amt":
+            if cust:
+                cust_str = str(cust).strip()
+                if cust_str.lower() == "total":
+                    break
+                pending_amt = (cust_str, r)
+        elif label == "Qty" and pending_amt is not None:
+            blocks.append((pending_amt[0], pending_amt[1], r))
+            pending_amt = None
+    if pending_amt is not None:
+        # Customer with Amt row but no matching Qty row in sheet
+        blocks.append((pending_amt[0], pending_amt[1], None))
+
     out = []
     skipped_brands = set()
-    for r in range(9, ws.max_row + 1):
-        if ws.cell(r, amt_col).value != "Amt":
-            continue
-        cust = ws.cell(r, 2).value
-        if not cust:
-            continue
-        cust = str(cust).strip()
-        if cust.lower() == "total":
-            break
+    for customer, amt_row, qty_row in blocks:
         for c, brand in brand_cols.items():
             if not is_sales_brand(brand):
                 skipped_brands.add(brand)
                 continue
-            v = ws.cell(r, c).value
-            if isinstance(v, (int, float)) and v != 0:
-                out.append({"customer": cust, "brand": brand, "amt": float(v)})
+            amt_v = ws.cell(amt_row, c).value
+            qty_v = ws.cell(qty_row, c).value if qty_row else None
+            amt = float(amt_v) if isinstance(amt_v, (int, float)) and amt_v != 0 else 0.0
+            qty = float(qty_v) if isinstance(qty_v, (int, float)) and qty_v != 0 else 0.0
+            if amt != 0 or qty != 0:
+                out.append({"customer": customer, "brand": brand, "amt": amt, "qty": qty})
     wb.close()
     return out, skipped_brands
 

@@ -26,9 +26,12 @@ venv/
 
 # Raw source workbooks — stay local. Aggregated data.json is committed.
 Sales & Forecast/
+Sales Target/
 
 # Local plan files
 plans/
 
 # Claude Code session files
 .claude/
+
+.vercel
