@@ -24,14 +24,16 @@ function FullScreenMessage({ title, detail, accent = "#E8633B" }) {
 
 export default function App() {
   const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
+  const [backendDown, setBackendDown] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
-    if (!supabaseConfigured) return;
+    if (!supabaseConfigured) {
+      setData(bakedData);
+      return;
+    }
     (async () => {
       try {
-        setError(null);
         const [customers, brandSales, targets, weekly] = await Promise.all([
           fetchAll("customers_data", "sp,year,customer,months,total"),
           fetchAll("brand_sales_data", "sp,year,customer,brand,amt,qty"),
@@ -53,32 +55,34 @@ export default function App() {
           uploadedAt: w.uploaded_at,
         }));
         setData(aggregated);
+        setBackendDown(false);
       } catch (e) {
-        setError(e.message || String(e));
+        console.warn("Live backend unreachable, falling back to baked-in snapshot:", e);
+        setData(bakedData);
+        setBackendDown(true);
       }
     })();
   }, [refreshTick]);
 
-  if (!supabaseConfigured) {
-    return <Dashboard data={bakedData} onRefresh={() => setRefreshTick(t => t + 1)} />;
-  }
-
-  if (error) {
-    return (
-      <FullScreenMessage
-        title="Couldn't load data"
-        detail={error}
-        accent="#F87171"
-      />
-    );
-  }
-
   if (!data) return <FullScreenMessage title="Loading your dashboard…" />;
 
   return (
-    <Dashboard
-      data={data}
-      onRefresh={() => setRefreshTick(t => t + 1)}
-    />
+    <>
+      {backendDown && (
+        <div style={{
+          position:"sticky",top:0,zIndex:50,
+          background:"rgba(245,158,11,0.12)",borderBottom:"1px solid rgba(245,158,11,0.3)",
+          color:"#F59E0B",padding:"8px 20px",fontSize:12,fontFamily:"'DM Sans',sans-serif",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:10,flexWrap:"wrap",textAlign:"center"
+        }}>
+          <span>⚠ Live data backend is unreachable — showing baked-in snapshot. Upload your own xlsx files from the <strong>Data ⤴</strong> tab to override.</span>
+          <button onClick={() => setRefreshTick(t => t + 1)} style={{
+            background:"transparent",border:"1px solid rgba(245,158,11,0.4)",color:"#F59E0B",
+            borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer"
+          }}>Retry</button>
+        </div>
+      )}
+      <Dashboard data={data} onRefresh={() => setRefreshTick(t => t + 1)} />
+    </>
   );
 }
