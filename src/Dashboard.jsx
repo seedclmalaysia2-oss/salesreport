@@ -268,7 +268,7 @@ function migrateThemeKey(stored) {
   return "slate";
 }
 
-export default function Dashboard({ data: incomingData, user, onLogout, onRefresh }) {
+export default function Dashboard({ data: incomingData, onRefresh }) {
   const [tab, setTab] = useState("overview");
   const [selectedYear, setSelectedYear] = useState(2026);
   const [selectedSP, setSelectedSP] = useState("All");
@@ -775,27 +775,6 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
                 </>
               )}
             </div>
-            {user && (
-              <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 12px 6px 8px",background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.08)",borderRadius:20}}>
-                <div style={{
-                  width:26,height:26,borderRadius:"50%",
-                  background: user.isAdmin ? "linear-gradient(135deg,#E8633B,#F59E0B)" : (COLORS[user.sp] || "#3B82F6"),
-                  color:"var(--text)",display:"flex",alignItems:"center",justifyContent:"center",
-                  fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace"
-                }}>{(user.sp || "?")[0]?.toUpperCase()}</div>
-                <div style={{display:"flex",flexDirection:"column",gap:0,lineHeight:1.1}}>
-                  <div style={{fontSize:12,fontWeight:600}}>{user.isAdmin ? "Admin" : user.sp}</div>
-                  <div style={{fontSize:10,color:"rgba(var(--tint),0.4)"}}>{user.email}</div>
-                </div>
-                {onLogout && (
-                  <button onClick={onLogout} style={{
-                    marginLeft:4,padding:"4px 10px",fontSize:11,fontWeight:600,
-                    background:"transparent",border:"1px solid rgba(var(--tint),0.1)",
-                    color:"rgba(var(--tint),0.6)",borderRadius:14,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"
-                  }}>Sign out</button>
-                )}
-              </div>
-            )}
           </div>
         </div>
 
@@ -821,7 +800,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
             <WeeklySalesCard
               weeklySales={data.weeklySales || []}
               targets={TARGETS}
-              isAdmin={!!user?.isAdmin}
+              isAdmin={true}
               onUploaded={onRefresh}
             />
             <div style={{display:"flex",gap:16,marginBottom:28,flexWrap:"wrap"}}>
@@ -1893,7 +1872,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
                   </div>
                 </Card>
 
-                {selectedSP === "All" && user?.isAdmin && (
+                {selectedSP === "All" && (
                   <Card style={{marginTop:20}}>
                     <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Per-Rep Achievement — {selectedYear} (admin view)</div>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>

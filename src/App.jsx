@@ -1,16 +1,11 @@
 import { useEffect, useState } from "react";
 import { supabase, fetchAll, aggregateFromRaw } from "./lib/supabase.js";
-import LoginScreen from "./LoginScreen.jsx";
 import Dashboard from "./Dashboard.jsx";
 import bakedData from "./data.json";
 
 const supabaseConfigured = !!(
   import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
 );
-
-// TEMPORARY: when false, the dashboard runs without auth. Re-enable when
-// the mid-update period is over (and re-enable RLS via 0006_reenable_auth.sql).
-const AUTH_ENABLED = false;
 
 function FullScreenMessage({ title, detail, accent = "#E8633B" }) {
   return (
@@ -28,59 +23,21 @@ function FullScreenMessage({ title, detail, accent = "#E8633B" }) {
 }
 
 export default function App() {
-  const [session, setSession] = useState(null);
-  const [sessionLoaded, setSessionLoaded] = useState(false);
   const [data, setData] = useState(null);
-  const [user, setUser] = useState(null);
   const [error, setError] = useState(null);
-
-  useEffect(() => {
-    if (!supabaseConfigured) {
-      setSessionLoaded(true);
-      return;
-    }
-    if (!AUTH_ENABLED) {
-      // Login disabled — mark loaded so the fetch effect runs without a session.
-      setSessionLoaded(true);
-      return;
-    }
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setSessionLoaded(true);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
-      setSession(sess);
-    });
-    return () => sub.subscription?.unsubscribe();
-  }, []);
-
   const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
     if (!supabaseConfigured) return;
-    if (AUTH_ENABLED && !session) {
-      setData(null);
-      setUser(null);
-      setError(null);
-      return;
-    }
     (async () => {
       try {
         setError(null);
-        const fetches = [
+        const [customers, brandSales, targets, weekly] = await Promise.all([
           fetchAll("customers_data", "sp,year,customer,months,total"),
           fetchAll("brand_sales_data", "sp,year,customer,brand,amt,qty"),
           fetchAll("sales_targets", "year,month,sp,target_amt"),
           fetchAll("weekly_sales", "period_start,period_end,sp,amount,uploaded_at"),
-        ];
-        if (AUTH_ENABLED) {
-          fetches.push(
-            supabase.from("sp_user_map").select("*")
-              .eq("user_id", session.user.id).maybeSingle()
-          );
-        }
-        const results = await Promise.all(fetches);
-        const [customers, brandSales, targets, weekly, mapRow] = results;
+        ]);
         const aggregated = aggregateFromRaw(customers, brandSales);
         aggregated.targets = targets.map(t => ({
           year: t.year,
@@ -96,39 +53,21 @@ export default function App() {
           uploadedAt: w.uploaded_at,
         }));
         setData(aggregated);
-
-        if (AUTH_ENABLED) {
-          setUser({
-            email: session.user.email,
-            sp: mapRow.data?.sp || "(unmapped)",
-            isAdmin: !!mapRow.data?.is_admin,
-          });
-        } else {
-          // Open access — show everything as admin would. No logout button.
-          setUser({ email: "", sp: "Open access", isAdmin: true });
-        }
       } catch (e) {
         setError(e.message || String(e));
       }
     })();
-  }, [session, refreshTick]);
-
-  if (!sessionLoaded) {
-    return <FullScreenMessage title="Loading…" />;
-  }
+  }, [refreshTick]);
 
   if (!supabaseConfigured) {
-    // No env vars — fallback to baked-in data without auth (local dev).
-    return <Dashboard data={bakedData} user={null} onLogout={null} />;
+    return <Dashboard data={bakedData} onRefresh={() => setRefreshTick(t => t + 1)} />;
   }
-
-  if (AUTH_ENABLED && !session) return <LoginScreen />;
 
   if (error) {
     return (
       <FullScreenMessage
         title="Couldn't load data"
-        detail={error + " — sign out and try again, or check that your account has been mapped to a salesperson in sp_user_map."}
+        detail={error}
         accent="#F87171"
       />
     );
@@ -139,8 +78,6 @@ export default function App() {
   return (
     <Dashboard
       data={data}
-      user={user}
-      onLogout={AUTH_ENABLED ? () => supabase.auth.signOut() : null}
       onRefresh={() => setRefreshTick(t => t + 1)}
     />
   );
