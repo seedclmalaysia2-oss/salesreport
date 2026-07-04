@@ -268,7 +268,7 @@ function migrateThemeKey(stored) {
   return "slate";
 }
 
-export default function Dashboard({ data: incomingData, onRefresh }) {
+export default function Dashboard({ data: incomingData, user, onLogout, onRefresh }) {
   const [tab, setTab] = useState("overview");
   const [selectedYear, setSelectedYear] = useState(2026);
   const [selectedSP, setSelectedSP] = useState("All");
@@ -775,6 +775,27 @@ export default function Dashboard({ data: incomingData, onRefresh }) {
                 </>
               )}
             </div>
+            {user && (
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 12px 6px 8px",background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.08)",borderRadius:20}}>
+                <div style={{
+                  width:26,height:26,borderRadius:"50%",
+                  background: user.isAdmin ? "linear-gradient(135deg,#E8633B,#F59E0B)" : (COLORS[user.sp] || "#3B82F6"),
+                  color:"var(--text)",display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace"
+                }}>{(user.sp || "?")[0]?.toUpperCase()}</div>
+                <div style={{display:"flex",flexDirection:"column",gap:0,lineHeight:1.1}}>
+                  <div style={{fontSize:12,fontWeight:600}}>{user.isAdmin ? "Admin" : user.sp}</div>
+                  {user.email && <div style={{fontSize:10,color:"rgba(var(--tint),0.4)"}}>{user.email}</div>}
+                </div>
+                {onLogout && (
+                  <button onClick={onLogout} style={{
+                    marginLeft:4,padding:"4px 10px",fontSize:11,fontWeight:600,
+                    background:"transparent",border:"1px solid rgba(var(--tint),0.1)",
+                    color:"rgba(var(--tint),0.6)",borderRadius:14,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"
+                  }}>Sign out</button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -800,7 +821,7 @@ export default function Dashboard({ data: incomingData, onRefresh }) {
             <WeeklySalesCard
               weeklySales={data.weeklySales || []}
               targets={TARGETS}
-              isAdmin={true}
+              isAdmin={!!user?.isAdmin}
               onUploaded={onRefresh}
             />
             <div style={{display:"flex",gap:16,marginBottom:28,flexWrap:"wrap"}}>
@@ -1872,7 +1893,7 @@ export default function Dashboard({ data: incomingData, onRefresh }) {
                   </div>
                 </Card>
 
-                {selectedSP === "All" && (
+                {selectedSP === "All" && user?.isAdmin && (
                   <Card style={{marginTop:20}}>
                     <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Per-Rep Achievement — {selectedYear} (admin view)</div>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
@@ -2214,6 +2235,22 @@ function DataTab({ currentSource, currentMeta, onApply, onReset, data }) {
         <KPI label="Years covered" value={(data.years || []).join(", ")} sub={`${(data.salespeople || []).length} salespeople`} color="#10B981" />
       </div>
 
+      <UploadedFilesPanel
+        registry={registry}
+        onView={onViewFile}
+        onUpdate={onUpdateFile}
+        onSave={downloadEntry}
+        onDelete={onDeleteFile}
+        onRestore={onRestoreFile}
+        onPurge={onPurgeFile}
+        onEmptyTrash={onEmptyTrash}
+        showTrash={showTrash}
+        setShowTrash={setShowTrash}
+        onScrollToUpload={() => dropRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
+      />
+
+      <DataSourceStatus data={data} />
+
       <Card style={{marginBottom:20}}>
         <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>Upload new workbooks</div>
         <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:16,lineHeight:1.5}}>
@@ -2360,20 +2397,6 @@ function DataTab({ currentSource, currentMeta, onApply, onReset, data }) {
         </Card>
       )}
 
-      <UploadedFilesPanel
-        registry={registry}
-        onView={onViewFile}
-        onUpdate={onUpdateFile}
-        onSave={downloadEntry}
-        onDelete={onDeleteFile}
-        onRestore={onRestoreFile}
-        onPurge={onPurgeFile}
-        onEmptyTrash={onEmptyTrash}
-        showTrash={showTrash}
-        setShowTrash={setShowTrash}
-        onScrollToUpload={() => dropRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
-      />
-
       <input
         ref={updateInputRef}
         type="file"
@@ -2387,10 +2410,110 @@ function DataTab({ currentSource, currentMeta, onApply, onReset, data }) {
   );
 }
 
+// ============================================================
+// Persistent "what's currently loaded" view. Renders the SP × year matrix
+// so users can see coverage of the shared Supabase dataset at a glance.
+// ============================================================
+function DataSourceStatus({ data }) {
+  const rows = data.customers || [];
+  const brandRows = data.brandSales || [];
+  if (!rows.length) return null;
+  const sps = [...new Set(rows.map(r => r.sp))].sort();
+  const years = [...new Set(rows.map(r => r.year))].sort();
+  const custByKey = new Map();
+  rows.forEach(r => custByKey.set(`${r.sp}|${r.year}`, (custByKey.get(`${r.sp}|${r.year}`) || 0) + 1));
+  const brandByKey = new Map();
+  brandRows.forEach(r => brandByKey.set(`${r.sp}|${r.year}`, (brandByKey.get(`${r.sp}|${r.year}`) || 0) + 1));
+
+  return (
+    <Card style={{marginBottom:20}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
+        <div style={{fontSize:14,fontWeight:600}}>
+          🗂️ Shared dataset coverage <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:12}}>· {sps.length} salespeople × {years.length} years</span>
+        </div>
+        <div style={{fontSize:11,color:"rgba(var(--tint),0.5)"}}>
+          each cell shows customer / brand-sale row count
+        </div>
+      </div>
+      <div style={{overflow:"auto",border:"1px solid rgba(var(--tint),0.06)",borderRadius:10}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead>
+            <tr style={{background:"rgba(var(--tint),0.03)"}}>
+              <th style={{padding:"10px 12px",textAlign:"left",color:"rgba(var(--tint),0.5)",fontWeight:500,textTransform:"uppercase",letterSpacing:1,fontSize:10}}>Salesperson</th>
+              {years.map(y => (
+                <th key={y} style={{padding:"10px 12px",textAlign:"center",color:"rgba(var(--tint),0.5)",fontWeight:500,textTransform:"uppercase",letterSpacing:1,fontSize:10,fontFamily:"'Space Mono',monospace"}}>{y}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sps.map(sp => (
+              <tr key={sp} style={{borderTop:"1px solid rgba(var(--tint),0.05)"}}>
+                <td style={{padding:"8px 12px",fontWeight:600}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{width:8,height:8,borderRadius:2,background:"#E8633B"}} />
+                    {sp}
+                  </div>
+                </td>
+                {years.map(y => {
+                  const c = custByKey.get(`${sp}|${y}`) || 0;
+                  const b = brandByKey.get(`${sp}|${y}`) || 0;
+                  const has = c > 0 || b > 0;
+                  return (
+                    <td key={y} style={{padding:"8px 12px",textAlign:"center",color: has ? "var(--text)" : "rgba(var(--tint),0.25)"}}>
+                      {has ? (
+                        <div style={{fontFamily:"'Space Mono',monospace",fontSize:11,lineHeight:1.3}}>
+                          <div>{c.toLocaleString()}c</div>
+                          <div style={{color:"rgba(var(--tint),0.55)"}}>{b.toLocaleString()}b</div>
+                        </div>
+                      ) : "—"}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{marginTop:10,fontSize:10,color:"rgba(var(--tint),0.45)",display:"flex",gap:14}}>
+        <span>c = customer-year rows (monthly sales)</span>
+        <span>b = brand-sale rows (per-customer × brand)</span>
+      </div>
+    </Card>
+  );
+}
+
 function UploadedFilesPanel({ registry, onView, onUpdate, onSave, onDelete, onRestore, onPurge, onEmptyTrash, showTrash, setShowTrash, onScrollToUpload }) {
   const active = registry.filter(e => !e.deletedAt).sort((a,b) => (b.parsedAt||0) - (a.parsedAt||0));
   const trash = registry.filter(e => e.deletedAt).sort((a,b) => (b.deletedAt||0) - (a.deletedAt||0));
-  if (!registry.length) return null;
+
+  // Empty-state view — always render so users know there's a place for files
+  if (!registry.length) {
+    return (
+      <Card style={{marginBottom:20}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
+          <div style={{fontSize:14,fontWeight:600}}>
+            📁 Uploaded files <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:12}}>· 0 in this browser</span>
+          </div>
+        </div>
+        <div style={{
+          border:"1px dashed rgba(var(--tint),0.15)",
+          borderRadius:12,padding:"32px 20px",textAlign:"center",
+          background:"rgba(var(--tint),0.02)",
+        }}>
+          <div style={{fontSize:32,marginBottom:8,opacity:0.4}}>📂</div>
+          <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>No local uploads yet</div>
+          <div style={{fontSize:12,color:"rgba(var(--tint),0.55)",maxWidth:480,margin:"0 auto",lineHeight:1.6}}>
+            The dashboard is showing the shared dataset from Supabase.
+            Drop <strong>.xlsx</strong> workbooks in the upload area below to preview an alternate dataset in this browser — your uploads stay local and don't affect other users.
+          </div>
+          <button onClick={onScrollToUpload} style={{
+            marginTop:16,background:"#E8633B",color:"#fff",border:"none",borderRadius:8,
+            padding:"8px 18px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Inter','DM Sans',sans-serif"
+          }}>↓ Go to upload</button>
+        </div>
+      </Card>
+    );
+  }
 
   // Coverage matrix: (SP, year) cells with customer + brand availability
   const sps = [...new Set(active.map(e => e.sp))].sort();
