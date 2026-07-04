@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "(?<hostname>.*\\.vercel\\.app)"
+        }
+      ],
+      "destination": "https://sales.seedclmalaysiastore.com/$1",
+      "permanent": true
+    }
+  ]
+}
