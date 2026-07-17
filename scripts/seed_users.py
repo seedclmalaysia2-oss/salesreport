@@ -26,12 +26,17 @@ except ImportError:
     sys.exit(1)
 
 # Salesperson roster + email convention. Edit emails to match real addresses.
+#
+# is_admin here must match the roster in 0007_file_acl_and_admin.sql. This
+# script upserts sp_user_map with the service_role key, which bypasses RLS *and*
+# the last-admin trigger, so a stale value here would silently hand out admin
+# (and with it, every private file) the next time someone re-runs the seed.
 USERS = [
     {"sp": "Alan",          "email": "alan@seed-malaysia.com",       "is_admin": False},
     {"sp": "Dino",          "email": "dino@seed-malaysia.com",       "is_admin": False},
     {"sp": "Khen",          "email": "khen@seed-malaysia.com",       "is_admin": False},
-    {"sp": "Sakinah",       "email": "seedclmalaysia2@gmail.com",    "is_admin": False},
-    {"sp": "Simon",         "email": "simon@seed-malaysia.com",      "is_admin": True},   # Simon doubles as admin
+    {"sp": "Sakinah",       "email": "seedclmalaysia2@gmail.com",    "is_admin": True},   # sole admin
+    {"sp": "Simon",         "email": "simon@seed-malaysia.com",      "is_admin": False},
     {"sp": "Seed Malaysia", "email": "ac@seed-malaysia.com",         "is_admin": False},
 ]
 
