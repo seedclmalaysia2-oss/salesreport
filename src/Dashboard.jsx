@@ -610,9 +610,9 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
             </h1>
             <div style={{fontSize:13,color:"rgba(var(--tint),0.4)",marginTop:4}}>
               {YEARS[0]} – {YEARS[YEARS.length-1]} ·{" "}
-              {user?.isAdmin
+              {user?.canViewAll
                 ? `All teams · ${(data.salespeople || []).length} salespeople`
-                : `Your data — ${user?.sp ?? ""}`}
+                : `Restricted to ${user?.sp ?? "your data"}`}
             </div>
           </div>
           <div style={{display:"flex",alignItems:"flex-start",gap:14,flexWrap:"wrap"}}>
@@ -728,9 +728,9 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
           <TabButton active={tab==="cohort"} onClick={()=>setTab("cohort")}>New vs Lost</TabButton>
           <TabButton active={tab==="heatmap"} onClick={()=>setTab("heatmap")}>Customer × Brand</TabButton>
           <TabButton active={tab==="targets"} onClick={()=>setTab("targets")}>🎯 Targets</TabButton>
-          <TabButton active={tab==="data"} onClick={()=>setTab("data")} accent>
-            {user?.isAdmin ? "Data ⤴" : "📁 Files"}
-          </TabButton>
+          {user?.isAdmin && (
+            <TabButton active={tab==="data"} onClick={()=>setTab("data")} accent>Data ⤴</TabButton>
+          )}
           {user?.isAdmin && (
             <TabButton active={tab==="users"} onClick={()=>setTab("users")}>👤 Users</TabButton>
           )}
@@ -1816,9 +1816,9 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
                   </div>
                 </Card>
 
-                {selectedSP === "All" && user?.isAdmin && (
+                {selectedSP === "All" && user?.canViewAll && (
                   <Card style={{marginTop:20}}>
-                    <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Per-Rep Achievement — {selectedYear} (admin view)</div>
+                    <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Per-Rep Achievement — {selectedYear}</div>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                       <thead>
                         <tr style={{borderBottom:"1px solid rgba(var(--tint),0.08)"}}>
@@ -1874,11 +1874,14 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
           </>
         )}
 
-        {tab === "data" && <DataTab user={user} data={data} />}
-
         {/* Guarded here as well as in the tab bar: hiding a button is not a
-            control. The Users panel itself reads through an admin-only
-            function, so a non-admin reaching this state still sees nothing. */}
+            control. Both panels also read through RLS / an admin-only function,
+            so a non-admin who forced this state client-side still sees nothing. */}
+        {tab === "data" && (user?.isAdmin
+          ? <DataTab user={user} data={data} />
+          : <Card><div style={{fontSize:13,color:"rgba(var(--tint),0.5)"}}>Admins only.</div></Card>
+        )}
+
         {tab === "users" && (user?.isAdmin
           ? <AdminUsers user={user} />
           : <Card><div style={{fontSize:13,color:"rgba(var(--tint),0.5)"}}>Admins only.</div></Card>

@@ -80,15 +80,30 @@ export default function AdminUsers({ user }) {
 
   const onToggleAdmin = (row) => {
     const next = !row.is_admin;
-    if (!next && row.user_id === user?.userId) {
-      if (!confirm("Remove admin from your OWN account? You will lose access to file controls and this panel immediately.")) return;
+    const isSelf = row.email?.toLowerCase() === user?.email?.toLowerCase();
+    if (!next && isSelf) {
+      if (!confirm("Remove admin from your OWN account? You will lose file management and this panel immediately.")) return;
     }
     patch(
       row,
       { is_admin: next },
       next
-        ? `${row.email} is now an admin — they can see every file, including private ones.`
-        : `${row.email} is now a regular user — they can only see files shared with them.`
+        ? `${row.email} is now an admin — they can manage uploaded files and users.`
+        : `${row.email} is now a regular user — no file management or user admin.`
+    );
+  };
+
+  // The correction: everyone sees all data by default; this is how an admin
+  // restricts one person to their own rep's rows.
+  const onToggleViewAll = (row) => {
+    if (row.is_admin) return; // admins always see everything
+    const next = !row.can_view_all;
+    patch(
+      row,
+      { can_view_all: next },
+      next
+        ? `${row.email} can now see every salesperson's data.`
+        : `${row.email} is now restricted to their own data (${row.sp}).`
     );
   };
 
@@ -110,9 +125,10 @@ export default function AdminUsers({ user }) {
       </div>
 
       <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:14,lineHeight:1.6}}>
-        A user's <strong>SP</strong> decides which sales rows they see — the database filters every query by it.
-        <strong> Admin</strong> grants cross-team visibility plus access to private files and this panel.
-        New accounts are created with <code style={{fontFamily:"'Space Mono',monospace",fontSize:11}}>scripts/seed_users.py</code>; they appear here once seeded.
+        Everyone signed in sees <strong>all</strong> sales data by default. Set <strong>Data access</strong> to
+        <span style={{color:"#F59E0B"}}> Own only</span> to restrict a user to just their own salesperson's rows.
+        <strong> Admin</strong> adds management of uploaded files (the Data tab) and this panel — uploaded files are never visible to regular users.
+        New accounts come from <code style={{fontFamily:"'Space Mono',monospace",fontSize:11}}>scripts/seed_users.py</code>; they appear here once seeded.
       </div>
 
       {error && (
@@ -139,7 +155,8 @@ export default function AdminUsers({ user }) {
             <thead>
               <tr style={{background:"rgba(var(--tint),0.03)"}}>
                 <th style={thStyle}>Account</th>
-                <th style={thStyle}>Sees data for</th>
+                <th style={thStyle}>Salesperson</th>
+                <th style={thStyle}>Data access</th>
                 <th style={thStyle}>Role</th>
                 <th style={thStyle}>Last sign-in</th>
               </tr>
@@ -174,8 +191,25 @@ export default function AdminUsers({ user }) {
                         {!SP_OPTIONS.includes(row.sp) && row.sp && <option value={row.sp}>{row.sp}</option>}
                         {SP_OPTIONS.map(sp => <option key={sp} value={sp}>{sp}</option>)}
                       </select>
-                      {row.is_admin && (
-                        <div style={{fontSize:10,color:"rgba(var(--tint),0.4)",marginTop:4}}>admin — sees all teams</div>
+                    </td>
+                    <td style={tdStyle}>
+                      {row.is_admin ? (
+                        <span style={{fontSize:11,color:"rgba(var(--tint),0.5)"}}>All teams (admin)</span>
+                      ) : (
+                        <button
+                          onClick={() => onToggleViewAll(row)}
+                          disabled={busyId === row.user_id}
+                          title={row.can_view_all ? "Restrict this user to their own data" : "Let this user see all teams"}
+                          style={{
+                            background: row.can_view_all ? "rgba(52,211,153,0.12)" : "rgba(245,158,11,0.12)",
+                            border: `1px solid ${row.can_view_all ? "#34D39955" : "#F59E0B55"}`,
+                            color: row.can_view_all ? "#34D399" : "#F59E0B",
+                            borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:600,
+                            cursor: busyId === row.user_id ? "wait" : "pointer",
+                            fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
+                          }}>
+                          {row.can_view_all ? "🌐 All teams" : "🔒 Own only"}
+                        </button>
                       )}
                     </td>
                     <td style={tdStyle}>

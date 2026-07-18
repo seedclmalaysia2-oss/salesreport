@@ -69,7 +69,7 @@ export default function App() {
       try {
         const { data: row, error } = await supabase
           .from("sp_user_map")
-          .select("sp,is_admin,managed_sps")
+          .select("sp,is_admin,managed_sps,can_view_all")
           .eq("user_id", session.user.id)
           .maybeSingle();
         if (error) throw error;
@@ -94,6 +94,9 @@ export default function App() {
         email: session.user.email,
         sp: profile.sp,
         isAdmin: !!profile.is_admin,
+        // Admins always see all; everyone else sees all unless an admin has
+        // restricted them (can_view_all = false).
+        canViewAll: !!profile.is_admin || !!profile.can_view_all,
         managedSps: profile.managed_sps || [],
       });
 

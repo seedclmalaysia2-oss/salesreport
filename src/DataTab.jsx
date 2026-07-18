@@ -1,21 +1,20 @@
-// Data tab — backend file library with admin-controlled visibility.
+// Data tab — admin-only file library.
 //
-// Admins upload workbooks and choose who may see each one. Everyone else sees
-// only the files an admin has opened up to them; the list is filtered by RLS,
-// not by this component, so a user cannot reach a private file by tampering
-// with the client.
+// Uploaded workbooks live in the private 'data-files' bucket with a row in
+// public.data_files. They are for admins only; regular users never see this
+// tab and RLS returns them nothing from data_files or the bucket even if they
+// call the API directly. This component is only ever rendered for an admin
+// (Dashboard gates it), but nothing here is load-bearing for security — the
+// database is.
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { parseFile, parseFilename } from "./lib/parseXlsx.js";
 import {
-  listFiles, uploadFile, replaceFile, setVisibility,
+  listFiles, uploadFile, replaceFile,
   softDeleteFile, restoreFile, purgeFile, downloadUrl,
-  VISIBILITY, VISIBILITY_LABELS, VISIBILITY_HELP,
 } from "./lib/files.js";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
-const VIS_COLORS = { private: "#F87171", sp: "#F59E0B", shared: "#34D399" };
 
 function fmtSize(n) {
   if (!Number.isFinite(n) || n <= 0) return "—";
@@ -71,48 +70,7 @@ function actionBtn(color, disabled = false) {
   };
 }
 
-function VisibilityBadge({ visibility, allowedSps }) {
-  const color = VIS_COLORS[visibility] || "#94A3B8";
-  const label = VISIBILITY_LABELS[visibility] || visibility;
-  return (
-    <span
-      title={VISIBILITY_HELP[visibility]}
-      style={{
-        display:"inline-block",padding:"3px 10px",borderRadius:6,
-        background:`${color}15`,color,fontSize:11,fontWeight:600,whiteSpace:"nowrap",
-      }}>
-      {visibility === "private" ? "🔒 " : visibility === "sp" ? "👥 " : "🌐 "}
-      {label}
-      {visibility === "sp" && allowedSps?.length ? ` · ${allowedSps.join(", ")}` : ""}
-    </span>
-  );
-}
-
-function VisibilityPicker({ entry, onChange, busy }) {
-  return (
-    <select
-      value={entry.visibility}
-      disabled={busy}
-      onChange={(e) => onChange(entry, e.target.value)}
-      title={VISIBILITY_HELP[entry.visibility]}
-      style={{
-        background:"rgba(var(--tint),0.04)",
-        border:`1px solid ${(VIS_COLORS[entry.visibility] || "#94A3B8")}55`,
-        color: VIS_COLORS[entry.visibility] || "var(--text)",
-        borderRadius:6,padding:"5px 8px",fontSize:11,fontWeight:600,
-        fontFamily:"'DM Sans',sans-serif",cursor: busy ? "wait" : "pointer",
-      }}>
-      <option value={VISIBILITY.PRIVATE}>🔒 Private — admins only</option>
-      <option value={VISIBILITY.SP} disabled={!entry.sp}>
-        👥 Team only{entry.sp ? ` — ${entry.sp}` : " — needs an SP"}
-      </option>
-      <option value={VISIBILITY.SHARED}>🌐 Everyone signed in</option>
-    </select>
-  );
-}
-
-export default function DataTab({ user, data }) {
-  const isAdmin = !!user?.isAdmin;
+export default function DataTab({ data }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -170,30 +128,6 @@ export default function DataTab({ user, data }) {
     }
   };
 
-  const onVisibilityChange = async (entry, visibility) => {
-    setBusyId(entry.id);
-    setError(null);
-    try {
-      const updated = await setVisibility(
-        entry,
-        visibility,
-        visibility === VISIBILITY.SP && entry.sp ? [entry.sp] : entry.allowedSps
-      );
-      setFiles(prev => prev.map(f => (f.id === updated.id ? updated : f)));
-      setNotice(
-        visibility === VISIBILITY.PRIVATE
-          ? `"${entry.name}" is now hidden from everyone except admins.`
-          : visibility === VISIBILITY.SP
-            ? `"${entry.name}" is now visible to ${entry.sp} and admins.`
-            : `"${entry.name}" is now visible to every signed-in user.`
-      );
-    } catch (e) {
-      setError(e.message || String(e));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   const addFiles = (picked) => {
     setSelectedFiles(prev => {
       const seen = new Set(prev.map(f => f.name));
@@ -209,8 +143,6 @@ export default function DataTab({ user, data }) {
     addFiles([...e.dataTransfer.files].filter(f => f.name.endsWith(".xlsx")));
   };
 
-  // Parse then upload one file at a time. New files land as 'private' so a
-  // fresh upload is never exposed before the admin has decided who sees it.
   const onUploadClick = async () => {
     const valid = selectedFiles.filter(f => parseFilename(f.name));
     if (!valid.length) return;
@@ -223,11 +155,8 @@ export default function DataTab({ user, data }) {
       setProgress({ index: done, total: valid.length, file: file.name });
       try {
         const parsed = await parseFile(file);
-        if (!parsed.ok) {
-          failures.push(`${file.name}: ${parsed.error}`);
-        } else {
-          await uploadFile(file, parsed, { visibility: VISIBILITY.PRIVATE });
-        }
+        if (!parsed.ok) failures.push(`${file.name}: ${parsed.error}`);
+        else await uploadFile(file, parsed);
       } catch (e) {
         failures.push(`${file.name}: ${e.message || e}`);
       }
@@ -238,9 +167,7 @@ export default function DataTab({ user, data }) {
     setSelectedFiles([]);
     if (failures.length) setError(`${failures.length} file(s) failed:\n${failures.join("\n")}`);
     const okCount = valid.length - failures.length;
-    if (okCount > 0) {
-      setNotice(`Uploaded ${okCount} file${okCount === 1 ? "" : "s"} as 🔒 Private. Set visibility below to share.`);
-    }
+    if (okCount > 0) setNotice(`Uploaded ${okCount} file${okCount === 1 ? "" : "s"}.`);
     await refresh();
   };
 
@@ -267,7 +194,7 @@ export default function DataTab({ user, data }) {
       }
       const updated = await replaceFile(target, file, parsed);
       setFiles(prev => prev.map(f => (f.id === updated.id ? updated : f)));
-      setNotice(`"${updated.name}" replaced. Visibility unchanged (${VISIBILITY_LABELS[updated.visibility]}).`);
+      setNotice(`"${updated.name}" replaced.`);
     } catch (err) {
       setError(err.message || String(err));
     } finally {
@@ -276,7 +203,7 @@ export default function DataTab({ user, data }) {
   };
 
   const onDelete = async (entry) => {
-    if (!confirm(`Move "${entry.name}" to trash? Users will lose access immediately. You can restore it later.`)) return;
+    if (!confirm(`Move "${entry.name}" to trash? You can restore it later.`)) return;
     setBusyId(entry.id);
     try {
       const updated = await softDeleteFile(entry);
@@ -319,7 +246,7 @@ export default function DataTab({ user, data }) {
   return (
     <>
       <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
-        <KPI label="Files you can see" value={active.length} sub={isAdmin ? "you are an admin — all files" : "shared with you by an admin"} color="#E8633B" />
+        <KPI label="Uploaded files" value={active.length} sub="admin-only · not visible to users" color="#E8633B" />
         <KPI label="Customer-year rows" value={data.customers?.length.toLocaleString() ?? "0"} sub="loaded into the dashboard" color="#34D399" />
         <KPI label="Brand-sale rows" value={data.brandSales?.length.toLocaleString() ?? "0"} sub={`across ${(data.brands || []).length} brands`} color="#A855F7" />
         <KPI label="Years covered" value={(data.years || []).join(", ") || "—"} sub={`${(data.salespeople || []).length} salespeople`} color="#3B82F6" />
@@ -340,31 +267,25 @@ export default function DataTab({ user, data }) {
       <Card>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
           <div style={{fontSize:14,fontWeight:600}}>
-            📁 {isAdmin ? "Uploaded files" : "Files shared with you"}
-            <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:12}}> · {active.length} file{active.length===1?"":"s"}</span>
+            📁 Uploaded files
+            <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:12}}> · {active.length} file{active.length===1?"":"s"} · admin-only</span>
           </div>
           <button onClick={refresh} style={actionBtn("#3B82F6")}>↻ Refresh</button>
         </div>
 
-        {isAdmin && (
-          <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:14,lineHeight:1.6}}>
-            Every upload starts <strong style={{color:VIS_COLORS.private}}>🔒 Private</strong> — only admins can see or download it.
-            Change a file's visibility to share it. Enforced by the database, so a user cannot reach a file you have not shared.
-          </div>
-        )}
+        <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:14,lineHeight:1.6}}>
+          These workbooks live in a private bucket that only admins can read. Regular users never see this tab, and the
+          database blocks them from the files even if they call the API directly. Downloads are short-lived signed links.
+        </div>
 
         {loading ? (
           <div style={{fontSize:12,color:"rgba(var(--tint),0.4)",padding:"20px 0",textAlign:"center"}}>Loading files…</div>
         ) : !active.length ? (
           <div style={{padding:"32px 20px",textAlign:"center",border:"1px dashed rgba(var(--tint),0.1)",borderRadius:10}}>
             <div style={{fontSize:26,opacity:0.35,marginBottom:8}}>📂</div>
-            <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>
-              {isAdmin ? "No files uploaded yet" : "Nothing shared with you"}
-            </div>
+            <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>No files uploaded yet</div>
             <div style={{fontSize:12,color:"rgba(var(--tint),0.45)",maxWidth:460,margin:"0 auto",lineHeight:1.6}}>
-              {isAdmin
-                ? "Upload .xlsx workbooks below. They stay private to admins until you share them."
-                : "Your admin has not shared any workbooks with you. The dashboard above still shows your own sales data."}
+              Upload .xlsx workbooks below. They are stored privately and used to refresh the dashboard numbers.
             </div>
           </div>
         ) : (
@@ -374,7 +295,6 @@ export default function DataTab({ user, data }) {
                 <tr style={{background:"rgba(var(--tint),0.03)"}}>
                   <th style={thStyle}>File</th>
                   <th style={thStyle}>Type</th>
-                  <th style={thStyle}>{isAdmin ? "Who can see it" : "Shared as"}</th>
                   <th style={thStyle}>Size</th>
                   <th style={thStyle}>Uploaded</th>
                   <th style={thStyle}>Actions</th>
@@ -383,11 +303,11 @@ export default function DataTab({ user, data }) {
               <tbody>
                 {active.map(entry => (
                   <tr key={entry.id}>
-                    <td style={{...tdStyle,maxWidth:260}}>
+                    <td style={{...tdStyle,maxWidth:280}}>
                       <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
                         <span style={{color: entry.kind === "customer" ? "#34D399" : "#A855F7",fontSize:14,marginTop:1,flexShrink:0}}>📄</span>
                         <div style={{minWidth:0}}>
-                          <div style={{fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240}}>{entry.name}</div>
+                          <div style={{fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:260}}>{entry.name}</div>
                           <div style={{fontSize:10,color:"rgba(var(--tint),0.45)",fontFamily:"'Space Mono',monospace",marginTop:2}}>
                             {entry.sp || "—"} · {entry.year || "—"} · {entry.rowCount} rows
                           </div>
@@ -399,23 +319,14 @@ export default function DataTab({ user, data }) {
                         {detectedLabel(entry.kind)}
                       </span>
                     </td>
-                    <td style={tdStyle}>
-                      {isAdmin
-                        ? <VisibilityPicker entry={entry} onChange={onVisibilityChange} busy={busyId === entry.id} />
-                        : <VisibilityBadge visibility={entry.visibility} allowedSps={entry.allowedSps} />}
-                    </td>
                     <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",whiteSpace:"nowrap"}}>{fmtSize(entry.sizeBytes)}</td>
                     <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.6)",whiteSpace:"nowrap",fontSize:11}}>{fmtDate(entry.uploadedAt)}</td>
                     <td style={tdStyle}>
                       <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                         <button onClick={() => setViewing(entry)} style={actionBtn("#3B82F6")}>👁 View</button>
                         <button onClick={() => onDownload(entry)} disabled={busyId === entry.id} style={actionBtn("#34D399", busyId === entry.id)}>⬇ Save</button>
-                        {isAdmin && (
-                          <>
-                            <button onClick={() => onUpdateFile(entry)} disabled={busyId === entry.id} style={actionBtn("#E8633B", busyId === entry.id)}>↻ Update</button>
-                            <button onClick={() => onDelete(entry)} disabled={busyId === entry.id} style={actionBtn("#F87171", busyId === entry.id)}>🗑 Remove</button>
-                          </>
-                        )}
+                        <button onClick={() => onUpdateFile(entry)} disabled={busyId === entry.id} style={actionBtn("#E8633B", busyId === entry.id)}>↻ Update</button>
+                        <button onClick={() => onDelete(entry)} disabled={busyId === entry.id} style={actionBtn("#F87171", busyId === entry.id)}>🗑 Remove</button>
                       </div>
                     </td>
                   </tr>
@@ -425,7 +336,7 @@ export default function DataTab({ user, data }) {
           </div>
         )}
 
-        {isAdmin && trashed.length > 0 && (
+        {trashed.length > 0 && (
           <div style={{marginTop:16}}>
             <button onClick={() => setShowTrash(s => !s)} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.5)",fontSize:12,cursor:"pointer",padding:0}}>
               {showTrash ? "▾" : "▸"} 🗑 Trash ({trashed.length})
@@ -465,81 +376,79 @@ export default function DataTab({ user, data }) {
         )}
       </Card>
 
-      {isAdmin && (
-        <Card>
-          <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>Upload workbooks</div>
-          <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:16,lineHeight:1.5}}>
-            Drag <strong>.xlsx</strong> files matching the naming pattern:<br/>
-            <code style={{fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",fontSize:11}}>{"<SP> <YYYY> Sales Analysis by customer.xlsx"}</code> &nbsp;or&nbsp;
-            <code style={{fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",fontSize:11}}>{"<SP> <YYYY> Stock Sales Analysis - Summary by Brand.xlsx"}</code>
-          </div>
+      <Card>
+        <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>Upload workbooks</div>
+        <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:16,lineHeight:1.5}}>
+          Drag <strong>.xlsx</strong> files matching the naming pattern:<br/>
+          <code style={{fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",fontSize:11}}>{"<SP> <YYYY> Sales Analysis by customer.xlsx"}</code> &nbsp;or&nbsp;
+          <code style={{fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",fontSize:11}}>{"<SP> <YYYY> Stock Sales Analysis - Summary by Brand.xlsx"}</code>
+        </div>
 
-          <div
-            ref={dropRef}
-            onClick={() => inputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); if (dropRef.current) dropRef.current.style.borderColor = "rgba(232,99,59,0.6)"; }}
-            onDragLeave={() => { if (dropRef.current) dropRef.current.style.borderColor = "rgba(var(--tint),0.1)"; }}
-            onDrop={onDrop}
-            style={{
-              border:"2px dashed rgba(var(--tint),0.1)",borderRadius:12,padding:"40px 20px",
-              textAlign:"center",cursor:"pointer",transition:"all 0.2s",background:"rgba(var(--tint),0.01)"
-            }}>
-            <div style={{fontSize:28,marginBottom:8,opacity:0.4}}>⤴</div>
-            <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>Drop xlsx files here</div>
-            <div style={{fontSize:12,color:"rgba(var(--tint),0.4)"}}>or click to browse</div>
-            <input ref={inputRef} type="file" accept=".xlsx" multiple style={{display:"none"}}
-              onChange={(e) => addFiles([...e.target.files])} />
-          </div>
+        <div
+          ref={dropRef}
+          onClick={() => inputRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); if (dropRef.current) dropRef.current.style.borderColor = "rgba(232,99,59,0.6)"; }}
+          onDragLeave={() => { if (dropRef.current) dropRef.current.style.borderColor = "rgba(var(--tint),0.1)"; }}
+          onDrop={onDrop}
+          style={{
+            border:"2px dashed rgba(var(--tint),0.1)",borderRadius:12,padding:"40px 20px",
+            textAlign:"center",cursor:"pointer",transition:"all 0.2s",background:"rgba(var(--tint),0.01)"
+          }}>
+          <div style={{fontSize:28,marginBottom:8,opacity:0.4}}>⤴</div>
+          <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>Drop xlsx files here</div>
+          <div style={{fontSize:12,color:"rgba(var(--tint),0.4)"}}>or click to browse</div>
+          <input ref={inputRef} type="file" accept=".xlsx" multiple style={{display:"none"}}
+            onChange={(e) => addFiles([...e.target.files])} />
+        </div>
 
-          {selectedFiles.length > 0 && (
-            <>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:16,marginBottom:8}}>
-                <div style={{fontSize:12,color:"rgba(var(--tint),0.6)"}}>
-                  <strong style={{color:"var(--text)"}}>{selectedFiles.length}</strong> file{selectedFiles.length===1?"":"s"} selected
-                  {invalidNames.length > 0 && <span style={{color:"#F87171"}}> · {invalidNames.length} invalid name{invalidNames.length===1?"":"s"}</span>}
-                </div>
-                <button onClick={() => setSelectedFiles([])} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.4)",fontSize:11,cursor:"pointer",textDecoration:"underline"}}>clear</button>
+        {selectedFiles.length > 0 && (
+          <>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:16,marginBottom:8}}>
+              <div style={{fontSize:12,color:"rgba(var(--tint),0.6)"}}>
+                <strong style={{color:"var(--text)"}}>{selectedFiles.length}</strong> file{selectedFiles.length===1?"":"s"} selected
+                {invalidNames.length > 0 && <span style={{color:"#F87171"}}> · {invalidNames.length} invalid name{invalidNames.length===1?"":"s"}</span>}
               </div>
-              <div style={{maxHeight:240,overflowY:"auto",border:"1px solid rgba(var(--tint),0.04)",borderRadius:8}}>
-                {selectedFiles.map(f => {
-                  const info = parseFilename(f.name);
-                  return (
-                    <div key={f.name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",borderBottom:"1px solid rgba(var(--tint),0.03)",fontSize:12}}>
-                      <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0}}>
-                        <span style={{color: info ? "#34D399" : "#F87171",fontWeight:600,flexShrink:0}}>{info ? "✓" : "✗"}</span>
-                        <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{f.name}</span>
-                        {info && <span style={{color:"rgba(var(--tint),0.4)",fontSize:10,fontFamily:"'Space Mono',monospace",flexShrink:0}}>{info.sp} · {info.year}</span>}
-                      </div>
-                      <button onClick={() => setSelectedFiles(prev => prev.filter(x => x.name !== f.name))} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.3)",cursor:"pointer",fontSize:14,padding:"0 0 0 8px"}}>✕</button>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-
-          <div style={{display:"flex",gap:10,marginTop:16,flexWrap:"wrap"}}>
-            <button
-              onClick={onUploadClick}
-              disabled={uploading || !validNames.length}
-              style={{
-                background: uploading || !validNames.length ? "rgba(var(--tint),0.05)" : "#E8633B",
-                color: uploading || !validNames.length ? "rgba(var(--tint),0.3)" : "#fff",
-                border:"none",borderRadius:8,padding:"10px 22px",fontSize:13,fontWeight:600,
-                cursor: uploading || !validNames.length ? "not-allowed" : "pointer",
-                fontFamily:"'DM Sans',sans-serif"
-              }}>
-              {uploading ? "Uploading…" : `Upload ${validNames.length} file${validNames.length===1?"":"s"} as 🔒 Private`}
-            </button>
-          </div>
-
-          {progress && (
-            <div style={{marginTop:14,fontSize:12,color:"rgba(var(--tint),0.6)",fontFamily:"'Space Mono',monospace"}}>
-              [{progress.index + 1}/{progress.total}] uploading {progress.file}
+              <button onClick={() => setSelectedFiles([])} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.4)",fontSize:11,cursor:"pointer",textDecoration:"underline"}}>clear</button>
             </div>
-          )}
-        </Card>
-      )}
+            <div style={{maxHeight:240,overflowY:"auto",border:"1px solid rgba(var(--tint),0.04)",borderRadius:8}}>
+              {selectedFiles.map(f => {
+                const info = parseFilename(f.name);
+                return (
+                  <div key={f.name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",borderBottom:"1px solid rgba(var(--tint),0.03)",fontSize:12}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0}}>
+                      <span style={{color: info ? "#34D399" : "#F87171",fontWeight:600,flexShrink:0}}>{info ? "✓" : "✗"}</span>
+                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{f.name}</span>
+                      {info && <span style={{color:"rgba(var(--tint),0.4)",fontSize:10,fontFamily:"'Space Mono',monospace",flexShrink:0}}>{info.sp} · {info.year}</span>}
+                    </div>
+                    <button onClick={() => setSelectedFiles(prev => prev.filter(x => x.name !== f.name))} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.3)",cursor:"pointer",fontSize:14,padding:"0 0 0 8px"}}>✕</button>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        <div style={{display:"flex",gap:10,marginTop:16,flexWrap:"wrap"}}>
+          <button
+            onClick={onUploadClick}
+            disabled={uploading || !validNames.length}
+            style={{
+              background: uploading || !validNames.length ? "rgba(var(--tint),0.05)" : "#E8633B",
+              color: uploading || !validNames.length ? "rgba(var(--tint),0.3)" : "#fff",
+              border:"none",borderRadius:8,padding:"10px 22px",fontSize:13,fontWeight:600,
+              cursor: uploading || !validNames.length ? "not-allowed" : "pointer",
+              fontFamily:"'DM Sans',sans-serif"
+            }}>
+            {uploading ? "Uploading…" : `Upload ${validNames.length} file${validNames.length===1?"":"s"}`}
+          </button>
+        </div>
+
+        {progress && (
+          <div style={{marginTop:14,fontSize:12,color:"rgba(var(--tint),0.6)",fontFamily:"'Space Mono',monospace"}}>
+            [{progress.index + 1}/{progress.total}] uploading {progress.file}
+          </div>
+        )}
+      </Card>
 
       <DataSourceStatus data={data} />
 
@@ -549,9 +458,7 @@ export default function DataTab({ user, data }) {
   );
 }
 
-// Coverage of the data actually loaded for this user: SP x year, with the row
-// counts behind each cell. For a rep this shows only their own row, because
-// that is all RLS returned.
+// Coverage of the data loaded for this admin: SP x year with row counts.
 function DataSourceStatus({ data }) {
   const rows = data.customers || [];
   const brandRows = data.brandSales || [];
@@ -633,9 +540,8 @@ function FilePreviewModal({ entry, onClose }) {
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid rgba(var(--tint),0.06)"}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:14,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.name}</div>
-            <div style={{fontSize:11,color:"rgba(var(--tint),0.5)",marginTop:3,fontFamily:"'Space Mono',monospace",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-              <span>{entry.sp || "—"} · {entry.year || "—"} · {entry.kind} · {rows.length} rows</span>
-              <VisibilityBadge visibility={entry.visibility} allowedSps={entry.allowedSps} />
+            <div style={{fontSize:11,color:"rgba(var(--tint),0.5)",marginTop:3,fontFamily:"'Space Mono',monospace"}}>
+              {entry.sp || "—"} · {entry.year || "—"} · {entry.kind} · {rows.length} rows
             </div>
           </div>
           <button onClick={onClose} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.6)",fontSize:20,cursor:"pointer",padding:"4px 10px"}}>✕</button>

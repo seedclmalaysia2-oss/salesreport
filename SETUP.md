@@ -22,7 +22,7 @@ Open Supabase Studio → SQL Editor → New query. Paste the contents of [supaba
 
 Creates: `sp_user_map`, `customers_data`, `brand_sales_data`, helper functions (`current_user_sp`, `current_user_is_admin`), and RLS policies.
 
-Then run the rest in order: `0002` … `0004`, then **`0007_file_acl_and_admin.sql`**, then **`0008_targets_require_login.sql`**.
+Then run the rest in order: `0002` … `0004`, then **`0007_file_acl_and_admin.sql`**, then **`0008_viewer_permissions.sql`**.
 
 > **Do not run `0005_disable_auth_temporary.sql`.** It turns RLS off, which makes every
 > table readable *and writable* by anyone holding the anon key — and the anon key ships
@@ -34,10 +34,12 @@ Then run the rest in order: `0002` … `0004`, then **`0007_file_acl_and_admin.s
 and sets the admin roster. It is idempotent and ends with a check that exactly one
 admin exists — if that check fails, the whole migration rolls back and nothing changes.
 
-`0008` closes one hole `0007` left open: the team-total sales targets (`sp = '_TEAM'`)
-were readable without logging in, because `0003` shared them unconditionally. `0008`
-adds the missing `auth.uid() is not null` gate — same visibility for real users, no
-anonymous access.
+`0008` sets the real visibility model: **once signed in, a user sees every
+salesperson's data by default.** An admin can restrict any individual to their own
+data (the `can_view_all` flag). It also makes uploaded files strictly admin-only and
+adds the `auth.uid() is not null` gate on the team targets. Applying `0008` alone
+covers everything the earlier `0008_targets_require_login.sql` did, so ignore that
+name if you see it referenced anywhere.
 
 Verify both landed with `python scripts/verify_access.py` — it should print `PASSED`.
 
@@ -95,16 +97,20 @@ These are the only two needed by the production build. The service_role key stay
 
 ## How access control works
 
-- Each rep's auth user has a row in `sp_user_map` linking them to a salesperson name (Alan, Dino, etc.) plus an `is_admin` flag
-- RLS policies on `customers_data` and `brand_sales_data` use `auth.uid()` to look up that mapping
-- A non-admin user sending `select * from customers_data` only gets back rows where `sp = (their sp)`
-- Admin users see everything
-- The dashboard UI doesn't enforce any of this — the database does. Even if someone modified the React app to ignore filters, they'd still only get their scoped slice from the API
+The portal blocks the public; once you are in, it is open. Precisely:
+
+- **Not signed in** → nothing. RLS returns zero rows to the anon key, and every write is refused.
+- **Signed in (default)** → sees **every** salesperson's data. This is the intended behaviour: the login is the gate, not per-rep scoping.
+- **Signed in but restricted** → an admin has set that user's `can_view_all = false`, so RLS narrows them to their own `sp` (plus any `managed_sps`).
+- **Admin** (`is_admin = true`) → sees everything, plus the **Data** tab (uploaded files) and the **Users** tab. Uploaded files are admin-only and never returned to a regular user.
+
+Each auth user has a row in `sp_user_map` with `sp`, `is_admin`, and `can_view_all`. The RLS policies call `current_user_can_view_all()` and `current_user_is_admin()` to decide what each query returns. None of this is enforced in React — the database decides. Editing the app to unhide a tab changes nothing, because the API still hands back only what the policies allow.
 
 ### Who is admin
 
-`seedclmalaysia2@gmail.com` (Sakinah) is the sole admin. Admin grants cross-team
-visibility, the `Data ⤴` tab, and the `👤 Users` tab.
+`seedclmalaysia2@gmail.com` (Sakinah) is the sole admin. Admin grants the `Data ⤴`
+tab (uploaded files), the `👤 Users` tab, and cross-team data (which everyone has by
+default anyway).
 
 Change it from the **Users** tab in the dashboard, not by hand. The roster in
 [scripts/seed_users.py](scripts/seed_users.py) must be kept in step — it upserts with the
@@ -114,21 +120,20 @@ service_role key, which bypasses both RLS and the last-admin trigger, so a stale
 A database trigger refuses to demote or delete the last remaining admin, so the
 dashboard cannot be locked out of its own controls.
 
-### Uploaded file visibility
+### Restricting a user to their own data
+
+By default every signed-in user sees all teams. To narrow one person to just their
+own rep's rows, open the **Users** tab and set their **Data access** to *Own only*
+(this sets `can_view_all = false`). Their `sp` — and any `managed_sps` — defines what
+"own" means. Admins are always unrestricted.
+
+### Uploaded files
 
 Workbooks uploaded from the `Data ⤴` tab go to the **private** `data-files` bucket
-with a row in `data_files`. Every upload starts `private`. The admin sets each file to:
-
-| Visibility | Who can see and download it |
-| --- | --- |
-| `private` *(default)* | Admins only |
-| `sp` | The reps named in `allowed_sps`, plus admins |
-| `shared` | Every signed-in user |
-
-Both the metadata row and the raw `.xlsx` are gated. The storage policy requires a
-matching visible `data_files` row, so the bucket can't be used to go around the table,
-and downloads are short-lived signed URLs rather than public links. Hiding the tab in
-the UI is *not* what protects a private file — the policies are.
+with a row in `data_files`. They are **admin-only**: regular users have no Data tab,
+and RLS returns them nothing from `data_files` or the bucket even via a direct API
+call. Downloads are short-lived signed URLs, never public links. Hiding the tab in the
+UI is *not* what protects the files — the policies are.
 
 ## Troubleshooting
 
