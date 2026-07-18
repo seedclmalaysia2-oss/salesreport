@@ -35,9 +35,9 @@ USERS = [
     {"sp": "Alan",          "email": "alan@seed-malaysia.com",       "is_admin": False},
     {"sp": "Dino",          "email": "dino@seed-malaysia.com",       "is_admin": False},
     {"sp": "Khen",          "email": "khen@seed-malaysia.com",       "is_admin": False},
-    {"sp": "Sakinah",       "email": "seedclmalaysia2@gmail.com",    "is_admin": True},   # sole admin
+    {"sp": "Sakinah",       "email": "seedclmalaysia2@gmail.com",    "is_admin": False},
     {"sp": "Simon",         "email": "simon@seed-malaysia.com",      "is_admin": False},
-    {"sp": "Seed Malaysia", "email": "ac@seed-malaysia.com",         "is_admin": False},
+    {"sp": "Seed Malaysia", "email": "ac@seed-malaysia.com",         "is_admin": True},   # sole admin
 ]
 
 

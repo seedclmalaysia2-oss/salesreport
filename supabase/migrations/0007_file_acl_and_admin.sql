@@ -12,7 +12,7 @@
 --      the data_files visibility rules, so a user cannot fetch the raw .xlsx
 --      of a file they are not allowed to see.
 --   4. Lets admins manage the user roster (sp, managed_sps, is_admin).
---   5. Sets seedclmalaysia2@gmail.com as the sole admin.
+--   5. Sets ac@seed-malaysia.com (Seed Malaysia) as the sole admin.
 
 -- ============================================================
 -- 1. Close the hole: RLS back on everywhere
@@ -222,20 +222,20 @@ revoke all on function public.admin_list_users() from public, anon;
 grant execute on function public.admin_list_users() to authenticated;
 
 -- ============================================================
--- 6. Admin roster: seedclmalaysia2@gmail.com is the sole admin
+-- 6. Admin roster: ac@seed-malaysia.com (Seed Malaysia) is the sole admin
 -- ============================================================
 -- Promote first, then demote, so the guard above always sees a live admin.
 update public.sp_user_map m
    set is_admin = true
   from auth.users u
  where u.id = m.user_id
-   and lower(u.email) = 'seedclmalaysia2@gmail.com';
+   and lower(u.email) = 'ac@seed-malaysia.com';
 
 update public.sp_user_map m
    set is_admin = false
   from auth.users u
  where u.id = m.user_id
-   and lower(u.email) <> 'seedclmalaysia2@gmail.com'
+   and lower(u.email) <> 'ac@seed-malaysia.com'
    and m.is_admin;
 
 -- Sanity check: fail loudly rather than leaving the dashboard unadministrable.
@@ -245,6 +245,6 @@ declare
 begin
   select count(*) into n from public.sp_user_map where is_admin;
   if n <> 1 then
-    raise exception 'Expected exactly 1 admin after migration, found %. Is seedclmalaysia2@gmail.com seeded in sp_user_map?', n;
+    raise exception 'Expected exactly 1 admin after migration, found %. Is ac@seed-malaysia.com seeded in sp_user_map?', n;
   end if;
 end $$;

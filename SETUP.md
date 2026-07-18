@@ -108,7 +108,7 @@ Each auth user has a row in `sp_user_map` with `sp`, `is_admin`, and `can_view_a
 
 ### Who is admin
 
-`seedclmalaysia2@gmail.com` (Sakinah) is the sole admin. Admin grants the `Data ⤴`
+`ac@seed-malaysia.com` (Seed Malaysia) is the sole admin. Admin grants the `Data ⤴`
 tab (uploaded files), the `👤 Users` tab, and cross-team data (which everyone has by
 default anyway).
 
