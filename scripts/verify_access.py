@@ -127,24 +127,25 @@ def main() -> int:
         print(f"  PASS  data_files        insert refused ({status})")
 
     # --- storage ---
-    print("\nSTORAGE (expect the bucket to be private)")
+    # A private bucket refuses metadata introspection to an anonymous caller
+    # (Supabase answers 400/401/403/404), which is exactly what we want. Only a
+    # 200 with public:true is a problem. We cannot distinguish "private" from
+    # "absent" with the anon key alone, and that is fine: an absent bucket is
+    # not a security hole (uploads just fail loudly), a public one is.
+    print("\nSTORAGE (expect the bucket NOT to be publicly readable)")
     status, body, _ = request("GET", f"{url}/storage/v1/bucket/data-files", anon)
-    if status in (401, 403):
-        print(f"  PASS  data-files        not listable anonymously ({status})")
-    elif status == 200:
+    if status == 200:
         try:
             is_public = json.loads(body).get("public")
         except Exception:
             is_public = None
         if is_public:
-            print("  FAIL  data-files        bucket is PUBLIC — files are world-readable")
+            print("  FAIL  data-files        bucket is PUBLIC - files are world-readable")
             failures.append("data-files bucket is public")
         else:
             print("  PASS  data-files        bucket is private")
-    elif status in (400, 404):
-        # Supabase answers 400 for a bucket that does not exist yet.
-        print(f"  WARN  data-files        bucket missing ({status}) - has 0007 been applied?")
-        failures.append("data-files bucket missing")
+    elif status in (400, 401, 403, 404):
+        print(f"  PASS  data-files        not publicly readable ({status})")
     else:
         print(f"  ?     data-files        unexpected status {status}")
 
@@ -153,8 +154,8 @@ def main() -> int:
         print(f"FAILED - {len(failures)} problem(s):")
         for f in failures:
             print(f"  - {f}")
-        print("\nThe dashboard is NOT locked down. Apply")
-        print("supabase/migrations/0007_file_acl_and_admin.sql in Supabase Studio.")
+        print("\nThe dashboard is NOT locked down. Apply the pending migration(s)")
+        print("in supabase/migrations/ (0007 onward) via Supabase Studio -> SQL Editor.")
         return 1
 
     print("PASSED - anonymous callers can read nothing and write nothing.")

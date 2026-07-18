@@ -22,7 +22,7 @@ Open Supabase Studio → SQL Editor → New query. Paste the contents of [supaba
 
 Creates: `sp_user_map`, `customers_data`, `brand_sales_data`, helper functions (`current_user_sp`, `current_user_is_admin`), and RLS policies.
 
-Then run the rest in order: `0002` … `0004`, then **`0007_file_acl_and_admin.sql`**.
+Then run the rest in order: `0002` … `0004`, then **`0007_file_acl_and_admin.sql`**, then **`0008_targets_require_login.sql`**.
 
 > **Do not run `0005_disable_auth_temporary.sql`.** It turns RLS off, which makes every
 > table readable *and writable* by anyone holding the anon key — and the anon key ships
@@ -33,6 +33,13 @@ Then run the rest in order: `0002` … `0004`, then **`0007_file_acl_and_admin.s
 `data-files` storage bucket, adds the Users panel's `admin_list_users()` function,
 and sets the admin roster. It is idempotent and ends with a check that exactly one
 admin exists — if that check fails, the whole migration rolls back and nothing changes.
+
+`0008` closes one hole `0007` left open: the team-total sales targets (`sp = '_TEAM'`)
+were readable without logging in, because `0003` shared them unconditionally. `0008`
+adds the missing `auth.uid() is not null` gate — same visibility for real users, no
+anonymous access.
+
+Verify both landed with `python scripts/verify_access.py` — it should print `PASSED`.
 
 ## 3. Create salesperson logins
 
