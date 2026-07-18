@@ -273,20 +273,21 @@ export default function DataTab({ data }) {
           <button onClick={refresh} style={actionBtn("#3B82F6")}>↻ Refresh</button>
         </div>
 
-        <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:14,lineHeight:1.6}}>
-          These workbooks live in a private bucket that only admins can read. Regular users never see this tab, and the
-          database blocks them from the files even if they call the API directly. Downloads are short-lived signed links.
-        </div>
+        {/* The long explainer is only worth the space once there is actually
+            something here; when empty this card collapses to one line so it
+            stops dominating the screen above the upload area. */}
+        {active.length > 0 && (
+          <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:14,lineHeight:1.6}}>
+            These workbooks live in a private bucket that only admins can read. Regular users never see this tab, and the
+            database blocks them from the files even if they call the API directly. Downloads are short-lived signed links.
+          </div>
+        )}
 
         {loading ? (
-          <div style={{fontSize:12,color:"rgba(var(--tint),0.4)",padding:"20px 0",textAlign:"center"}}>Loading files…</div>
+          <div style={{fontSize:12,color:"rgba(var(--tint),0.4)",padding:"4px 0"}}>Loading files…</div>
         ) : !active.length ? (
-          <div style={{padding:"32px 20px",textAlign:"center",border:"1px dashed rgba(var(--tint),0.1)",borderRadius:10}}>
-            <div style={{fontSize:26,opacity:0.35,marginBottom:8}}>📂</div>
-            <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>No files uploaded yet</div>
-            <div style={{fontSize:12,color:"rgba(var(--tint),0.45)",maxWidth:460,margin:"0 auto",lineHeight:1.6}}>
-              Upload .xlsx workbooks below. They are stored privately and used to refresh the dashboard numbers.
-            </div>
+          <div style={{fontSize:12,color:"rgba(var(--tint),0.45)",padding:"2px 0 4px",lineHeight:1.6}}>
+            Nothing on the server yet — files you upload below will appear here. Stored privately, admin-only.
           </div>
         ) : (
           <div style={{overflowX:"auto",border:"1px solid rgba(var(--tint),0.06)",borderRadius:10}}>
@@ -403,12 +404,59 @@ export default function DataTab({ data }) {
 
         {selectedFiles.length > 0 && (
           <>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:16,marginBottom:8}}>
-              <div style={{fontSize:12,color:"rgba(var(--tint),0.6)"}}>
-                <strong style={{color:"var(--text)"}}>{selectedFiles.length}</strong> file{selectedFiles.length===1?"":"s"} selected
-                {invalidNames.length > 0 && <span style={{color:"#F87171"}}> · {invalidNames.length} invalid name{invalidNames.length===1?"":"s"}</span>}
+            {/* Action bar sits directly under the drop zone. It used to live below
+                the file list, which pushed it off-screen with a long selection —
+                so the one button that matters was invisible. */}
+            <div style={{
+              display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",
+              marginTop:16,padding:"12px 14px",borderRadius:10,
+              background:"rgba(232,99,59,0.08)",border:"1px solid rgba(232,99,59,0.28)",
+            }}>
+              <div style={{flex:"1 1 220px",fontSize:12,lineHeight:1.5}}>
+                <strong style={{color:"var(--text)"}}>{validNames.length} file{validNames.length===1?"":"s"} ready</strong>
+                <span style={{color:"rgba(var(--tint),0.65)"}}> — still on your computer, not uploaded yet</span>
+                {invalidNames.length > 0 && (
+                  <span style={{color:"#F87171"}}> · {invalidNames.length} skipped (filename doesn't match the pattern)</span>
+                )}
               </div>
-              <button onClick={() => setSelectedFiles([])} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.4)",fontSize:11,cursor:"pointer",textDecoration:"underline"}}>clear</button>
+              <button
+                onClick={onUploadClick}
+                disabled={uploading || !validNames.length}
+                style={{
+                  background: uploading || !validNames.length ? "rgba(var(--tint),0.05)" : "#E8633B",
+                  color: uploading || !validNames.length ? "rgba(var(--tint),0.3)" : "#fff",
+                  border:"none",borderRadius:8,padding:"10px 22px",fontSize:13,fontWeight:700,
+                  cursor: uploading || !validNames.length ? "not-allowed" : "pointer",
+                  fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
+                }}>
+                {uploading ? "Uploading…" : `⤴ Upload ${validNames.length} file${validNames.length===1?"":"s"}`}
+              </button>
+              <button
+                onClick={() => setSelectedFiles([])}
+                disabled={uploading}
+                style={{
+                  background:"transparent",border:"1px solid rgba(var(--tint),0.15)",
+                  color:"rgba(var(--tint),0.6)",borderRadius:8,padding:"9px 14px",fontSize:12,
+                  cursor: uploading ? "not-allowed" : "pointer",fontFamily:"'DM Sans',sans-serif",
+                }}>Clear</button>
+            </div>
+
+            {progress && (
+              <div style={{marginTop:12}}>
+                <div style={{fontSize:12,color:"rgba(var(--tint),0.6)",fontFamily:"'Space Mono',monospace",marginBottom:6}}>
+                  [{progress.index + 1}/{progress.total}] uploading {progress.file}
+                </div>
+                <div style={{height:6,background:"rgba(var(--tint),0.06)",borderRadius:3,overflow:"hidden"}}>
+                  <div style={{
+                    width:`${Math.round((progress.index / Math.max(progress.total,1)) * 100)}%`,
+                    height:"100%",background:"#E8633B",transition:"width 0.2s",
+                  }} />
+                </div>
+              </div>
+            )}
+
+            <div style={{fontSize:11,color:"rgba(var(--tint),0.45)",margin:"14px 0 6px",textTransform:"uppercase",letterSpacing:1}}>
+              Selected files
             </div>
             <div style={{maxHeight:240,overflowY:"auto",border:"1px solid rgba(var(--tint),0.04)",borderRadius:8}}>
               {selectedFiles.map(f => {
@@ -420,33 +468,12 @@ export default function DataTab({ data }) {
                       <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{f.name}</span>
                       {info && <span style={{color:"rgba(var(--tint),0.4)",fontSize:10,fontFamily:"'Space Mono',monospace",flexShrink:0}}>{info.sp} · {info.year}</span>}
                     </div>
-                    <button onClick={() => setSelectedFiles(prev => prev.filter(x => x.name !== f.name))} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.3)",cursor:"pointer",fontSize:14,padding:"0 0 0 8px"}}>✕</button>
+                    <button onClick={() => setSelectedFiles(prev => prev.filter(x => x.name !== f.name))} disabled={uploading} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.3)",cursor: uploading ? "not-allowed" : "pointer",fontSize:14,padding:"0 0 0 8px"}}>✕</button>
                   </div>
                 );
               })}
             </div>
           </>
-        )}
-
-        <div style={{display:"flex",gap:10,marginTop:16,flexWrap:"wrap"}}>
-          <button
-            onClick={onUploadClick}
-            disabled={uploading || !validNames.length}
-            style={{
-              background: uploading || !validNames.length ? "rgba(var(--tint),0.05)" : "#E8633B",
-              color: uploading || !validNames.length ? "rgba(var(--tint),0.3)" : "#fff",
-              border:"none",borderRadius:8,padding:"10px 22px",fontSize:13,fontWeight:600,
-              cursor: uploading || !validNames.length ? "not-allowed" : "pointer",
-              fontFamily:"'DM Sans',sans-serif"
-            }}>
-            {uploading ? "Uploading…" : `Upload ${validNames.length} file${validNames.length===1?"":"s"}`}
-          </button>
-        </div>
-
-        {progress && (
-          <div style={{marginTop:14,fontSize:12,color:"rgba(var(--tint),0.6)",fontFamily:"'Space Mono',monospace"}}>
-            [{progress.index + 1}/{progress.total}] uploading {progress.file}
-          </div>
         )}
       </Card>
 
