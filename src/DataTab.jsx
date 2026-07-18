@@ -83,6 +83,18 @@ export default function DataTab({ data }) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(null);
 
+  // Sorting + quick search. Defaults to newest-first, which is what the list
+  // did before it was sortable.
+  const [sort, setSort] = useState({ key: "uploadedAt", dir: "desc" });
+  const [query, setQuery] = useState("");
+
+  const toggleSort = (key) =>
+    setSort(s => (s.key === key
+      ? { key, dir: s.dir === "asc" ? "desc" : "asc" }
+      // First click on a new column: names read best A->Z, but dates and
+      // sizes are almost always wanted biggest/newest first.
+      : { key, dir: (key === "uploadedAt" || key === "sizeBytes") ? "desc" : "asc" }));
+
   const dropRef = useRef(null);
   const inputRef = useRef(null);
   const updateInputRef = useRef(null);
@@ -102,10 +114,36 @@ export default function DataTab({ data }) {
 
   useEffect(() => { refresh(); }, []);
 
-  const active = useMemo(
-    () => files.filter(f => !f.deletedAt).sort((a,b) => (b.uploadedAt||0) - (a.uploadedAt||0)),
-    [files]
-  );
+  // Live (non-trashed) files, narrowed by the search box and ordered by the
+  // current sort. Sorting on 'kind' uses the label shown in the Type column so
+  // A->Z matches what the eye reads, not the internal 'customer'/'brand' value.
+  const active = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let list = files.filter(f => !f.deletedAt);
+    if (q) {
+      list = list.filter(f =>
+        (f.name || "").toLowerCase().includes(q) ||
+        (f.sp || "").toLowerCase().includes(q) ||
+        String(f.year || "").includes(q) ||
+        detectedLabel(f.kind).toLowerCase().includes(q)
+      );
+    }
+    const { key, dir } = sort;
+    const mul = dir === "asc" ? 1 : -1;
+    const val = (f) => (key === "kind" ? detectedLabel(f.kind) : f[key]);
+    return [...list].sort((a, b) => {
+      const av = val(a), bv = val(b);
+      if (typeof av === "string" || typeof bv === "string") {
+        // numeric:true so "Alan 2022" sorts before "Alan 2023" naturally
+        return mul * String(av ?? "").localeCompare(String(bv ?? ""), undefined, {
+          numeric: true, sensitivity: "base",
+        });
+      }
+      return mul * ((av ?? 0) - (bv ?? 0));
+    });
+  }, [files, sort, query]);
+
+  const liveCount = useMemo(() => files.filter(f => !f.deletedAt).length, [files]);
   const trashed = useMemo(
     () => files.filter(f => f.deletedAt).sort((a,b) => (b.deletedAt||0) - (a.deletedAt||0)),
     [files]
@@ -243,6 +281,24 @@ export default function DataTab({ data }) {
   const validNames = selectedFiles.filter(f => parseFilename(f.name));
   const invalidNames = selectedFiles.filter(f => !parseFilename(f.name));
 
+  const SortHeader = ({ label, k }) => {
+    const on = sort.key === k;
+    const nextDir = on && sort.dir === "asc" ? "Z–A" : "A–Z";
+    return (
+      <th
+        onClick={() => toggleSort(k)}
+        title={`Sort by ${label} (${nextDir})`}
+        style={{...thStyle, cursor:"pointer", userSelect:"none", color: on ? "#E8633B" : thStyle.color}}>
+        <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
+          {label}
+          <span style={{fontSize:9,opacity: on ? 1 : 0.35}}>
+            {on ? (sort.dir === "asc" ? "▲" : "▼") : "⇅"}
+          </span>
+        </span>
+      </th>
+    );
+  };
+
   return (
     <>
       <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
@@ -268,15 +324,47 @@ export default function DataTab({ data }) {
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
           <div style={{fontSize:14,fontWeight:600}}>
             📁 Uploaded files
-            <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:12}}> · {active.length} file{active.length===1?"":"s"} · admin-only</span>
+            <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:12}}>
+              {" · "}
+              {query.trim() && active.length !== liveCount
+                ? `${active.length} of ${liveCount} files`
+                : `${liveCount} file${liveCount===1?"":"s"}`}
+              {" · admin-only"}
+            </span>
           </div>
-          <button onClick={refresh} style={actionBtn("#3B82F6")}>↻ Refresh</button>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            {liveCount > 0 && (
+              <div style={{position:"relative",display:"flex",alignItems:"center"}}>
+                <span style={{position:"absolute",left:10,fontSize:11,opacity:0.4,pointerEvents:"none"}}>🔍</span>
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search name, rep, year, type…"
+                  style={{
+                    background:"rgba(var(--tint),0.04)",
+                    border:"1px solid rgba(var(--tint),0.1)",
+                    color:"var(--text)",borderRadius:8,
+                    padding:"6px 26px 6px 28px",fontSize:12,width:230,outline:"none",
+                    fontFamily:"'DM Sans',sans-serif",
+                  }}
+                />
+                {query && (
+                  <button
+                    onClick={() => setQuery("")}
+                    title="Clear search"
+                    style={{position:"absolute",right:6,background:"transparent",border:"none",
+                            color:"rgba(var(--tint),0.45)",cursor:"pointer",fontSize:13,padding:"0 2px"}}>✕</button>
+                )}
+              </div>
+            )}
+            <button onClick={refresh} style={actionBtn("#3B82F6")}>↻ Refresh</button>
+          </div>
         </div>
 
         {/* The long explainer is only worth the space once there is actually
             something here; when empty this card collapses to one line so it
             stops dominating the screen above the upload area. */}
-        {active.length > 0 && (
+        {liveCount > 0 && (
           <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:14,lineHeight:1.6}}>
             These workbooks live in a private bucket that only admins can read. Regular users never see this tab, and the
             database blocks them from the files even if they call the API directly. Downloads are short-lived signed links.
@@ -285,19 +373,26 @@ export default function DataTab({ data }) {
 
         {loading ? (
           <div style={{fontSize:12,color:"rgba(var(--tint),0.4)",padding:"4px 0"}}>Loading files…</div>
-        ) : !active.length ? (
+        ) : !liveCount ? (
           <div style={{fontSize:12,color:"rgba(var(--tint),0.45)",padding:"2px 0 4px",lineHeight:1.6}}>
             Nothing on the server yet — files you upload below will appear here. Stored privately, admin-only.
+          </div>
+        ) : !active.length ? (
+          <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",padding:"14px 0",textAlign:"center"}}>
+            No file matches “{query}”.{" "}
+            <button onClick={() => setQuery("")} style={{background:"transparent",border:"none",color:"#3B82F6",cursor:"pointer",fontSize:12,textDecoration:"underline",padding:0}}>
+              Clear search
+            </button>
           </div>
         ) : (
           <div style={{overflowX:"auto",border:"1px solid rgba(var(--tint),0.06)",borderRadius:10}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
               <thead>
                 <tr style={{background:"rgba(var(--tint),0.03)"}}>
-                  <th style={thStyle}>File</th>
-                  <th style={thStyle}>Type</th>
-                  <th style={thStyle}>Size</th>
-                  <th style={thStyle}>Uploaded</th>
+                  <SortHeader label="File" k="name" />
+                  <SortHeader label="Type" k="kind" />
+                  <SortHeader label="Size" k="sizeBytes" />
+                  <SortHeader label="Uploaded" k="uploadedAt" />
                   <th style={thStyle}>Actions</th>
                 </tr>
               </thead>
