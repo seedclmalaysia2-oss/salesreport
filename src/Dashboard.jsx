@@ -1,9 +1,10 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, lazy, Suspense } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, ReferenceLine } from "recharts";
-import bakedData from "./data.json";
 import WeeklySalesCard from "./WeeklySalesCard.jsx";
-import DataTab from "./DataTab.jsx";
-import AdminUsers from "./AdminUsers.jsx";
+// Admin-only panels. Only one account can open these, so there is no reason
+// for everyone else to download them — and DataTab drags in the xlsx parser.
+const DataTab = lazy(() => import("./DataTab.jsx"));
+const AdminUsers = lazy(() => import("./AdminUsers.jsx"));
 
 // Uploads used to be parsed into these keys while the dashboard ran open to
 // everyone, and the cache took priority over the server's response. With
@@ -18,6 +19,65 @@ function purgeLegacyCache() {
     try { localStorage.removeItem(k); } catch {}
   }
 }
+
+// Layout breakpoints. The dashboard is inline-styled, so media queries can't
+// reach most of it — this hook lets the same styles switch on viewport width.
+function useMediaQuery(q) {
+  const [matches, setMatches] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(q).matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(q);
+    const sync = () => setMatches(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    // Belt and braces: some embedded/preview browsers resize the viewport
+    // without dispatching the media-query change event, which would leave the
+    // layout stuck in whatever mode it first mounted in (e.g. after a phone
+    // rotates). resize always fires.
+    window.addEventListener("resize", sync);
+    window.addEventListener("orientationchange", sync);
+    return () => {
+      mq.removeEventListener("change", sync);
+      window.removeEventListener("resize", sync);
+      window.removeEventListener("orientationchange", sync);
+    };
+  }, [q]);
+  return matches;
+}
+
+// Global rules that inline styles can't express: stop the page scrolling
+// sideways on a phone, let wide tables scroll inside themselves, and keep
+// tap targets from being cramped.
+const RESPONSIVE_CSS = `
+  html, body { max-width: 100%; overflow-x: hidden; }
+  * { -webkit-tap-highlight-color: transparent; }
+  .seed-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .seed-tabs { scrollbar-width: none; }
+  .seed-tabs::-webkit-scrollbar { display: none; }
+  @keyframes seedspin { to { transform: rotate(360deg); } }
+  @media (max-width: 768px) {
+    .recharts-wrapper, .recharts-surface { max-width: 100% !important; }
+    /* Wide data tables must scroll inside their own box. Without this they
+       stretch the page and the whole dashboard scrolls sideways on a phone. */
+    [data-seed-theme] table {
+      display: block;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    [data-seed-theme] table thead, [data-seed-theme] table tbody { width: max-content; min-width: 100%; }
+
+    /* Everything below is the CSS half of the responsive layout. The isMobile
+       hook handles the same cases in JS, but a stylesheet rule keeps the phone
+       layout correct even if React hasn't re-rendered after a rotate/resize —
+       CSS re-evaluates on its own. !important is needed to beat inline styles. */
+    [data-seed-theme] div[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+    .seed-tabs { flex-wrap: nowrap !important; overflow-x: auto !important; }
+  }
+`;
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const SALESPEOPLE_ORDER = ["Alan","Dino","Khen","Sakinah","Simon","Seed Malaysia"];
@@ -186,7 +246,9 @@ function migrateThemeKey(stored) {
   return "slate";
 }
 
-export default function Dashboard({ data: incomingData, user, onLogout, onRefresh }) {
+export default function Dashboard({ data: incomingData, user, brandsLoading, onLogout, onRefresh }) {
+  const isMobile = useMediaQuery("(max-width: 768px)");
+  const isNarrow = useMediaQuery("(max-width: 1100px)");
   const [tab, setTab] = useState("overview");
   const [selectedYear, setSelectedYear] = useState(2026);
   const [selectedSP, setSelectedSP] = useState("All");
@@ -206,7 +268,10 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
   // Whatever App hands us has already been filtered by RLS to this user's
   // scope, so it is the only thing we render. No local override.
   useEffect(() => { purgeLegacyCache(); }, []);
-  const data = incomingData ?? bakedData;
+  // App only mounts Dashboard once data exists, so there is nothing to fall
+  // back to here — importing the 2.5 MB snapshot just to satisfy a ?? was
+  // what put the whole dataset in the initial bundle.
+  const data = incomingData;
 
   // Make sure selectedYear is valid for the current data
   const YEARS = data.years && data.years.length ? data.years : YEARS_FALLBACK;
@@ -588,6 +653,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
         }
         [data-seed-theme] input::placeholder { color: rgba(${tk.tintRgb}, 0.5); }
         [data-seed-theme] input, [data-seed-theme] button, [data-seed-theme] table { color: inherit; }
+        ${RESPONSIVE_CSS}
       `}</style>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
@@ -595,7 +661,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
       <div style={{
         background:"linear-gradient(135deg, rgba(232,99,59,0.08) 0%, rgba(59,130,246,0.05) 100%)",
         borderBottom:"1px solid rgba(var(--tint),0.06)",
-        padding:"28px 32px 20px",
+        padding: isMobile ? "18px 14px 14px" : "28px 32px 20px",
       }}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:16}}>
           <div>
@@ -717,7 +783,15 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
           </div>
         </div>
 
-        <div style={{display:"flex",gap:4,marginTop:20,flexWrap:"wrap"}}>
+        {/* On a phone these 11 tabs wrapped into a wall of buttons that pushed
+            the content off screen; scroll them in one row instead. */}
+        <div className="seed-tabs" style={{
+          display:"flex", gap:4, marginTop: isMobile ? 14 : 20,
+          flexWrap: isMobile ? "nowrap" : "wrap",
+          overflowX: isMobile ? "auto" : "visible",
+          WebkitOverflowScrolling: "touch",
+          paddingBottom: isMobile ? 4 : 0,
+        }}>
           <TabButton active={tab==="overview"} onClick={()=>setTab("overview")}>Overview</TabButton>
           <TabButton active={tab==="monthly"} onClick={()=>setTab("monthly")}>Monthly Trends</TabButton>
           <TabButton active={tab==="team"} onClick={()=>setTab("team")}>Team Analysis</TabButton>
@@ -737,7 +811,24 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
         </div>
       </div>
 
-      <div style={{padding:"24px 32px",maxWidth:1280,margin:"0 auto"}}>
+      <div style={{padding: isMobile ? "16px 12px" : "24px 32px", maxWidth:1280, margin:"0 auto"}}>
+
+        {/* The brand rows are ~24k and load after the page is already usable.
+            Say so on the tabs that need them rather than showing empty charts. */}
+        {brandsLoading && ["brands","heatmap","drilldown","monthly"].includes(tab) && (
+          <div style={{
+            display:"flex",alignItems:"center",gap:10,marginBottom:16,
+            padding:"9px 14px",borderRadius:10,fontSize:12,
+            background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.25)",color:"#3B82F6",
+          }}>
+            <span style={{
+              width:12,height:12,borderRadius:"50%",flexShrink:0,
+              border:"2px solid rgba(59,130,246,0.25)",borderTopColor:"#3B82F6",
+              animation:"seedspin 0.8s linear infinite",
+            }} />
+            Loading brand-level rows — this chart fills in shortly.
+          </div>
+        )}
 
         {tab === "overview" && (
           <>
@@ -764,7 +855,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
               <KPI label="Avg Monthly" value={`RM ${fmt(currentYearTotal / Math.max(SUMMARY.find(s => s.year === selectedYear)?.months.filter(m => m > 0).length || 12, 1))}`} sub="active months" color="#A855F7" />
             </div>
 
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
+            <div style={{display:"grid",gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",gap:20,marginBottom:24}}>
               <Card>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                   <div style={{fontSize:14,fontWeight:600}}>Monthly Revenue vs Target — {selectedYear}</div>
@@ -815,7 +906,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
               </Card>
             </div>
 
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
+            <div style={{display:"grid",gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",gap:20,marginBottom:24}}>
               <Card>
                 <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Revenue by Team — {selectedYear}</div>
                 <ResponsiveContainer width="100%" height={260}>
@@ -1010,7 +1101,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
         )}
 
         {tab === "team" && (
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(340px, 1fr))",gap:16}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(min(340px,100%), 1fr))",gap:16}}>
             {SALESPEOPLE.map(sp => {
               const spData = SUMMARY.filter(s => s.sp === sp).sort((a,b) => a.year - b.year);
               return (
@@ -1045,7 +1136,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
               <KPI label="Local : Overseas" value={`${((customerIndex.filter(c => c.region === "Local").reduce((a,c) => a + c.total, 0) / Math.max(customerIndex.reduce((a,c) => a + c.total, 0), 1)) * 100).toFixed(0)}% / ${((customerIndex.filter(c => c.region === "Overseas").reduce((a,c) => a + c.total, 0) / Math.max(customerIndex.reduce((a,c) => a + c.total, 0), 1)) * 100).toFixed(0)}%`} sub="of all-time revenue" color="#10B981" />
             </div>
 
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+            <div style={{display:"grid",gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",gap:20}}>
               <Card>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                   <div style={{fontSize:14,fontWeight:600}}>🇲🇾 Top 20 Local — All Time</div>
@@ -1116,7 +1207,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
             </div>
 
             {topCustomersBySpView === "grid" && (
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(380px, 1fr))",gap:16}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(min(380px,100%), 1fr))",gap:16}}>
                 {SALESPEOPLE.map(sp => {
                   const list = topCustomersBySP[sp] || [];
                   const spTotal = list.reduce((a, c) => a + c.total, 0);
@@ -1154,7 +1245,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
             )}
 
             {topCustomersBySpView === "list" && (
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(420px, 1fr))",gap:16}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(min(420px,100%), 1fr))",gap:16}}>
                 {SALESPEOPLE.map(sp => {
                   const list = topCustomersBySP[sp] || [];
                   const spTotal = list.reduce((a, c) => a + c.total, 0);
@@ -1290,7 +1381,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
             {selectedSP === "All" && (
               <>
                 <div style={{marginTop:24,marginBottom:14,fontSize:14,fontWeight:600}}>YoY by Sales Team</div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))",gap:16}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(min(280px,100%), 1fr))",gap:16}}>
                   {SALESPEOPLE.map(sp => {
                     const spYears = YEARS.map(y => {
                       const s = SUMMARY.find(d => d.sp === sp && d.year === y);
@@ -1340,7 +1431,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
         )}
 
         {tab === "drilldown" && (
-          <div style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:20}}>
+          <div style={{display:"grid",gridTemplateColumns: isNarrow ? "1fr" : "320px 1fr",gap:20}}>
             <Card>
               <div style={{fontSize:14,fontWeight:600,marginBottom:12}}>Customers ({customerIndex.length.toLocaleString()})</div>
               <input
@@ -1410,7 +1501,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
                     </ResponsiveContainer>
                   </Card>
 
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+                  <div style={{display:"grid",gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",gap:16}}>
                     <Card>
                       <div style={{fontSize:14,fontWeight:600,marginBottom:14}}>Annual Total</div>
                       <ResponsiveContainer width="100%" height={220}>
@@ -1484,7 +1575,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
               <KPI label="Total Quantity" value={brandYearTotals.reduce((a,b) => a+(b.qty||0), 0).toLocaleString()} sub="units sold" color="#F59E0B" />
             </div>
 
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(420px, 1fr))",gap:20,marginBottom:20}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(min(420px,100%), 1fr))",gap:20,marginBottom:20}}>
               <Card>
                 <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>💰 Top 20 Brands by Revenue — {selectedYear}</div>
                 <ResponsiveContainer width="100%" height={520}>
@@ -1526,7 +1617,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
               </Card>
             </div>
 
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+            <div style={{display:"grid",gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",gap:20}}>
               <Card>
                 <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Top 15 Brands by Team — {selectedYear}</div>
                 <ResponsiveContainer width="100%" height={380}>
@@ -1580,7 +1671,7 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
               <KPI label="Net Customer Δ" value={cohort.new.length - cohort.lost.length} sub={cohort.new.length > cohort.lost.length ? "growth" : "decline"} color={cohort.new.length >= cohort.lost.length ? "#34D399" : "#F87171"} />
             </div>
 
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
+            <div style={{display:"grid",gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(min(240px,100%), 1fr))",gap:16}}>
               {[
                 { title: "🟢 New", color: "#34D399", list: cohort.new, valueKey: "total", valueLabel: `${selectedYear} revenue` },
                 { title: "🔵 Retained", color: "#3B82F6", list: cohort.retained, valueKey: "total", valueLabel: `${selectedYear} revenue` },
@@ -1878,12 +1969,16 @@ export default function Dashboard({ data: incomingData, user, onLogout, onRefres
             control. Both panels also read through RLS / an admin-only function,
             so a non-admin who forced this state client-side still sees nothing. */}
         {tab === "data" && (user?.isAdmin
-          ? <DataTab user={user} data={data} />
+          ? <Suspense fallback={<Card><div style={{fontSize:13,color:"rgba(var(--tint),0.5)"}}>Loading file manager…</div></Card>}>
+              <DataTab user={user} data={data} />
+            </Suspense>
           : <Card><div style={{fontSize:13,color:"rgba(var(--tint),0.5)"}}>Admins only.</div></Card>
         )}
 
         {tab === "users" && (user?.isAdmin
-          ? <AdminUsers user={user} />
+          ? <Suspense fallback={<Card><div style={{fontSize:13,color:"rgba(var(--tint),0.5)"}}>Loading users…</div></Card>}>
+              <AdminUsers user={user} />
+            </Suspense>
           : <Card><div style={{fontSize:13,color:"rgba(var(--tint),0.5)"}}>Admins only.</div></Card>
         )}
 

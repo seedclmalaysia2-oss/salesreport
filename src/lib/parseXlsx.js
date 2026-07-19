@@ -2,7 +2,16 @@
 // Given an array of File objects (uploaded xlsx), returns the aggregated
 // dashboard payload in the same shape as src/data.json.
 
-import * as XLSX from "xlsx";
+// xlsx is by far the heaviest dependency here, and it is only needed when
+// someone actually parses an uploaded workbook — which only admins ever do.
+// Loading it on demand keeps it out of the initial bundle, so a normal user
+// never downloads it. parseFilename()/isSalesBrand() below stay synchronous
+// because they are pure string work and the upload UI calls them per keystroke.
+let _xlsxPromise = null;
+function loadXlsx() {
+  if (!_xlsxPromise) _xlsxPromise = import("xlsx");
+  return _xlsxPromise;
+}
 
 const MONTH_COLS_0 = [6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28]; // 0-indexed
 
@@ -26,7 +35,7 @@ export function parseFilename(name) {
   return { sp: m[1].trim(), year: parseInt(m[2], 10), kind: m[3] };
 }
 
-function sheetToRows(sheet) {
+function sheetToRows(XLSX, sheet) {
   return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true, blankrows: true });
 }
 
@@ -137,8 +146,9 @@ function parseBrandRows(rows) {
 }
 
 async function readWorkbook(file) {
+  const XLSX = await loadXlsx();
   const buf = await file.arrayBuffer();
-  return XLSX.read(buf, { type: "array", cellDates: false });
+  return { XLSX, wb: XLSX.read(buf, { type: "array", cellDates: false }) };
 }
 
 export async function parseFile(file) {
@@ -146,9 +156,9 @@ export async function parseFile(file) {
   if (!fnameInfo) {
     return { ok: false, file: file.name, error: "Filename does not match expected pattern" };
   }
-  let wb;
+  let wb, XLSX;
   try {
-    wb = await readWorkbook(file);
+    ({ wb, XLSX } = await readWorkbook(file));
   } catch (e) {
     return { ok: false, file: file.name, error: `Failed to read xlsx: ${e.message}` };
   }
@@ -156,7 +166,7 @@ export async function parseFile(file) {
   if (!sheet) {
     return { ok: false, file: file.name, error: "No 'Page 1' sheet found" };
   }
-  const rows = sheetToRows(sheet);
+  const rows = sheetToRows(XLSX, sheet);
 
   if (fnameInfo.kind === "Sales Analysis by customer") {
     const parsed = parseCustomerRows(rows);

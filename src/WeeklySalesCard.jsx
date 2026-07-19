@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef } from "react";
-import * as XLSX from "xlsx";
+// xlsx loaded on demand (see src/lib/parseXlsx.js) — only the admin's weekly
+// upload needs it, so it must not sit in the initial bundle.
 import { supabase } from "./lib/supabase.js";
 
 // Retail Sales Team = the three reps who count toward the "Sales Team" column.
@@ -110,7 +111,7 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
 
       {/* Threshold balances */}
       <div style={{
-        display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8,
+        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(90px,100%), 1fr))", gap: 8,
         paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.05)",
       }}>
         {[
@@ -250,7 +251,7 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
       )}
 
       {/* Two columns side by side */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(260px,100%), 1fr))", gap: 16 }}>
         <ScopeColumn
           title="Retail Sales Team"
           subtitle="Alan + Dino + Khen"
@@ -305,6 +306,7 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded }) {
   const onFile = async (file) => {
     setError(null); setInfo(null);
     try {
+      const XLSX = await import("xlsx");
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
       const sheet = wb.Sheets[wb.SheetNames[0]];
