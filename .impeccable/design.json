@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-25T00:00:00Z",
+  "title": "Design System: SEED Malaysia Sales Dashboard",
+  "extensions": {
+    "colorMeta": {
+      "signal-orange": {
+        "role": "primary",
+        "displayName": "Signal Orange",
+        "canonical": "oklch(66% 0.16 42)",
+        "note": "The only loud colour in the system. Capped at 10% of any screen. series-alan is an alias of this value.",
+        "tonalRamp": ["oklch(15% 0.06 42)", "oklch(26% 0.10 42)", "oklch(38% 0.14 42)", "oklch(50% 0.16 42)", "oklch(66% 0.16 42)", "oklch(76% 0.12 42)", "oklch(87% 0.07 42)", "oklch(95% 0.03 42)"]
+      },
+      "status-ahead": {
+        "role": "secondary",
+        "displayName": "Ahead Mint",
+        "canonical": "oklch(78% 0.15 163)",
+        "note": "At or above target; positive year-on-year movement.",
+        "tonalRamp": ["oklch(20% 0.05 163)", "oklch(31% 0.08 163)", "oklch(43% 0.11 163)", "oklch(55% 0.13 163)", "oklch(66% 0.15 163)", "oklch(78% 0.15 163)", "oklch(88% 0.09 163)", "oklch(95% 0.04 163)"]
+      },
+      "status-watch": {
+        "role": "secondary",
+        "displayName": "Watch Amber",
+        "canonical": "oklch(77% 0.16 70)",
+        "note": "90-99% of target. Collides with series-simon; separate by label or position, never hue alone.",
+        "tonalRamp": ["oklch(20% 0.05 70)", "oklch(31% 0.08 70)", "oklch(43% 0.12 70)", "oklch(55% 0.15 70)", "oklch(66% 0.16 70)", "oklch(77% 0.16 70)", "oklch(88% 0.10 70)", "oklch(95% 0.04 70)"]
+      },
+      "status-behind": {
+        "role": "secondary",
+        "displayName": "Behind Coral",
+        "canonical": "oklch(71% 0.16 20)",
+        "note": "Under 90% of target, declines, and destructive actions.",
+        "tonalRamp": ["oklch(18% 0.06 20)", "oklch(29% 0.10 20)", "oklch(41% 0.14 20)", "oklch(53% 0.16 20)", "oklch(63% 0.17 20)", "oklch(71% 0.16 20)", "oklch(85% 0.09 20)", "oklch(94% 0.04 20)"]
+      },
+      "status-info": {
+        "role": "secondary",
+        "displayName": "Info Blue",
+        "canonical": "oklch(62% 0.19 259)",
+        "note": "Neutral emphasis and non-destructive controls. series-dino is an alias of this value.",
+        "tonalRamp": ["oklch(18% 0.07 259)", "oklch(28% 0.11 259)", "oklch(39% 0.15 259)", "oklch(50% 0.18 259)", "oklch(62% 0.19 259)", "oklch(74% 0.14 259)", "oklch(86% 0.08 259)", "oklch(95% 0.03 259)"]
+      },
+      "series-khen": {
+        "role": "tertiary",
+        "displayName": "Khen Green",
+        "canonical": "oklch(70% 0.15 164)",
+        "note": "Series identity only. Sits close to Ahead Mint; never use it to imply performance.",
+        "tonalRamp": ["oklch(19% 0.05 164)", "oklch(30% 0.08 164)", "oklch(41% 0.11 164)", "oklch(53% 0.13 164)", "oklch(70% 0.15 164)", "oklch(80% 0.12 164)", "oklch(89% 0.07 164)", "oklch(96% 0.03 164)"]
+      },
+      "series-sakinah": {
+        "role": "tertiary",
+        "displayName": "Sakinah Violet",
+        "canonical": "oklch(63% 0.23 303)",
+        "note": "Series identity only.",
+        "tonalRamp": ["oklch(18% 0.08 303)", "oklch(28% 0.13 303)", "oklch(39% 0.18 303)", "oklch(51% 0.22 303)", "oklch(63% 0.23 303)", "oklch(76% 0.16 303)", "oklch(87% 0.09 303)", "oklch(95% 0.04 303)"]
+      },
+      "series-seed": {
+        "role": "tertiary",
+        "displayName": "Seed Magenta",
+        "canonical": "oklch(65% 0.22 355)",
+        "note": "Series identity for the house account.",
+        "tonalRamp": ["oklch(18% 0.08 355)", "oklch(29% 0.13 355)", "oklch(40% 0.17 355)", "oklch(52% 0.21 355)", "oklch(65% 0.22 355)", "oklch(77% 0.15 355)", "oklch(88% 0.08 355)", "oklch(95% 0.04 355)"]
+      },
+      "slate-bg": {
+        "role": "neutral",
+        "displayName": "Slate Ground",
+        "canonical": "oklch(22% 0.04 265)",
+        "note": "Default theme background. Surface hierarchy is built from tint alpha, not new hex values.",
+        "tonalRamp": ["oklch(13% 0.03 265)", "oklch(22% 0.04 265)", "oklch(31% 0.04 265)", "oklch(43% 0.04 265)", "oklch(56% 0.03 265)", "oklch(70% 0.02 265)", "oklch(85% 0.01 265)", "oklch(97% 0.005 265)"]
+      },
+      "slate-ink": {
+        "role": "neutral",
+        "displayName": "Slate Ink",
+        "canonical": "oklch(97% 0.005 247)",
+        "note": "Default theme foreground. Its RGB triplet (226,232,240) is the --tint every border and muted text derives from.",
+        "tonalRamp": ["oklch(20% 0.02 247)", "oklch(32% 0.02 247)", "oklch(45% 0.02 247)", "oklch(58% 0.015 247)", "oklch(70% 0.01 247)", "oklch(82% 0.01 247)", "oklch(90% 0.008 247)", "oklch(97% 0.005 247)"]
+      },
+      "crisp-bg": {
+        "role": "neutral",
+        "displayName": "Crisp Ground",
+        "canonical": "oklch(97% 0.005 247)",
+        "note": "The strongest daylight theme. Every colour decision must be verified here as well as in Slate.",
+        "tonalRamp": ["oklch(22% 0.02 247)", "oklch(34% 0.02 247)", "oklch(47% 0.02 247)", "oklch(60% 0.015 247)", "oklch(72% 0.01 247)", "oklch(84% 0.008 247)", "oklch(92% 0.006 247)", "oklch(97% 0.005 247)"]
+      },
+      "carbon-bg": {
+        "role": "neutral",
+        "displayName": "Carbon Ground",
+        "canonical": "oklch(0% 0 0)",
+        "note": "Maximum-contrast theme for the worst lighting.",
+        "tonalRamp": ["oklch(0% 0 0)", "oklch(12% 0 0)", "oklch(25% 0 0)", "oklch(38% 0 0)", "oklch(52% 0 0)", "oklch(68% 0 0)", "oklch(84% 0 0)", "oklch(100% 0 0)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The dashboard title. One per page, never larger." },
+      "headline": { "displayName": "Headline", "purpose": "Login heading and full-screen states." },
+      "title": { "displayName": "Title", "purpose": "Card and section headings. The workhorse of the interface." },
+      "body": { "displayName": "Body", "purpose": "Supporting prose and descriptions. Cap at 65-75ch." },
+      "label": { "displayName": "Label", "purpose": "Uppercase micro-labels: KPI captions and table headers." },
+      "metric": { "displayName": "Metric", "purpose": "Every comparable figure. Monospace so columns align and outliers are visible without reading." }
+    },
+    "shadows": [
+      { "name": "overlay", "value": "0 8px 32px rgba(0,0,0,0.5)", "purpose": "Chart tooltips and transient popovers." },
+      { "name": "dialog", "value": "0 12px 40px rgba(0,0,0,0.5)", "purpose": "File preview modal and dismissable panels." },
+      { "name": "gateway", "value": "0 20px 60px rgba(0,0,0,0.5)", "purpose": "The login card only. Never on a resting surface." }
+    ],
+    "motion": [
+      { "name": "state", "value": "all 0.2s", "purpose": "Default for hover, focus and activation on controls." },
+      { "name": "meter", "value": "width 0.3s", "purpose": "Progress and achievement bars filling to a value." },
+      { "name": "reduced", "value": "none", "purpose": "Under prefers-reduced-motion, transitions resolve instantly. Never gate content visibility on a transition." }
+    ],
+    "breakpoints": [
+      { "name": "phone", "value": "375px", "purpose": "The primary judging width. Every view is verified here first." },
+      { "name": "mobile-max", "value": "768px", "purpose": "Below this: tabs become one scrolling row, grids collapse to a single column, tables scroll inside their own box." },
+      { "name": "narrow-max", "value": "1100px", "purpose": "Below this: the drill-down sidebar stacks above its content." },
+      { "name": "content-max", "value": "1280px", "purpose": "Maximum content width on desktop." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single most likely next action in a view. One per screen.",
+      "html": "<div class=\"ds-stage\"><button class=\"ds-btn-primary\">Upload 4 files</button> <button class=\"ds-btn-primary\" disabled>Uploading…</button></div>",
+      "css": ".ds-stage { background:#0F172A; padding:20px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; font-family:'Inter','DM Sans',system-ui,sans-serif; } .ds-btn-primary { background:#E8633B; color:#fff; border:none; border-radius:8px; padding:10px 22px; font-size:13px; font-weight:600; font-family:inherit; cursor:pointer; transition:all 0.2s; } .ds-btn-primary:hover:not(:disabled) { filter:brightness(1.08); } .ds-btn-primary:focus-visible { outline:2px solid #E8633B; outline-offset:2px; } .ds-btn-primary:disabled { background:rgba(232,99,59,0.5); cursor:not-allowed; }"
+    },
+    {
+      "name": "Ghost Action Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Row-level actions. Colour is semantic: blue views, mint saves, orange updates, coral removes.",
+      "html": "<div class=\"ds-stage\"><button class=\"ds-btn-ghost ds-view\">View</button><button class=\"ds-btn-ghost ds-save\">Save</button><button class=\"ds-btn-ghost ds-update\">Update</button><button class=\"ds-btn-ghost ds-remove\">Remove</button></div>",
+      "css": ".ds-stage { background:#0F172A; padding:20px; display:flex; gap:6px; flex-wrap:wrap; font-family:'Inter','DM Sans',system-ui,sans-serif; } .ds-btn-ghost { background:transparent; border-radius:6px; padding:5px 10px; font-size:11px; font-weight:600; font-family:inherit; cursor:pointer; transition:all 0.2s; } .ds-btn-ghost:focus-visible { outline:2px solid currentColor; outline-offset:2px; } .ds-view { color:#3B82F6; border:1px solid rgba(59,130,246,0.33); } .ds-save { color:#34D399; border:1px solid rgba(52,211,153,0.33); } .ds-update { color:#E8633B; border:1px solid rgba(232,99,59,0.33); } .ds-remove { color:#F87171; border:1px solid rgba(248,113,113,0.33); } .ds-btn-ghost:hover { background:rgba(226,232,240,0.06); }"
+    },
+    {
+      "name": "Navigation Tab",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "Primary navigation. Inactive carries a transparent border so the row never shifts on activation.",
+      "html": "<div class=\"ds-stage\"><button class=\"ds-tab ds-tab-active\">Overview</button><button class=\"ds-tab\">Monthly Trends</button><button class=\"ds-tab\">Team Analysis</button></div>",
+      "css": ".ds-stage { background:#0F172A; padding:20px; display:flex; gap:4px; flex-wrap:wrap; font-family:'DM Sans',sans-serif; } .ds-tab { background:transparent; color:rgba(226,232,240,0.5); border:1px solid transparent; border-radius:8px; padding:8px 18px; font-size:13px; font-weight:400; letter-spacing:0.3px; font-family:inherit; cursor:pointer; transition:all 0.2s; } .ds-tab:hover { color:rgba(226,232,240,0.8); } .ds-tab:focus-visible { outline:2px solid #E8633B; outline-offset:2px; } .ds-tab-active { background:rgba(232,99,59,0.15); color:#E8633B; border:1px solid rgba(232,99,59,0.3); font-weight:600; }"
+    },
+    {
+      "name": "Filter Pill",
+      "kind": "chip",
+      "refersTo": "pill",
+      "description": "Year and scope filters. Monospaced, fully rounded, solid when active.",
+      "html": "<div class=\"ds-stage\"><button class=\"ds-pill ds-pill-active\">2026</button><button class=\"ds-pill\">2025</button><button class=\"ds-pill\">2024</button></div>",
+      "css": ".ds-stage { background:#0F172A; padding:20px; display:flex; gap:6px; flex-wrap:wrap; } .ds-pill { background:rgba(226,232,240,0.05); color:rgba(226,232,240,0.5); border:none; border-radius:20px; padding:6px 16px; font-size:12px; font-weight:600; font-family:'Space Mono',monospace; cursor:pointer; transition:all 0.2s; } .ds-pill:hover { background:rgba(226,232,240,0.1); } .ds-pill:focus-visible { outline:2px solid #E8633B; outline-offset:2px; } .ds-pill-active { background:#E8633B; color:#fff; }"
+    },
+    {
+      "name": "KPI Panel",
+      "kind": "custom",
+      "refersTo": "kpi",
+      "description": "The signature object. Uppercase label, monospaced value coloured by status, and a trend line whose glyph carries direction without colour.",
+      "html": "<div class=\"ds-stage\"><div class=\"ds-kpi\"><div class=\"ds-kpi-label\">YTD vs Target</div><div class=\"ds-kpi-value ds-behind\">87%</div><div class=\"ds-kpi-sub\">RM 243K of RM 280K (Jan–Jul)</div><div class=\"ds-kpi-trend ds-behind\">▼ 4.2% vs prev year</div></div></div>",
+      "css": ".ds-stage { background:#0F172A; padding:20px; font-family:'Inter','DM Sans',system-ui,sans-serif; } .ds-kpi { background:rgba(226,232,240,0.03); border:1px solid rgba(226,232,240,0.06); border-radius:12px; padding:20px 24px; min-width:180px; max-width:280px; } .ds-kpi-label { font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:rgba(226,232,240,0.4); margin-bottom:8px; font-family:'DM Sans',sans-serif; } .ds-kpi-value { font-size:28px; font-weight:700; font-family:'Space Mono',monospace; line-height:1.1; } .ds-kpi-sub { font-size:12px; color:rgba(226,232,240,0.5); margin-top:6px; } .ds-kpi-trend { font-size:12px; margin-top:6px; font-weight:600; } .ds-behind { color:#F87171; } .ds-ahead { color:#34D399; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Page furniture. Flat forever — separation comes from a 2% tint fill and a hairline border, never a shadow.",
+      "html": "<div class=\"ds-stage\"><div class=\"ds-card\"><div class=\"ds-card-title\">Monthly Revenue vs Target</div><div class=\"ds-card-body\">Flat at rest. A shadow here would mean the surface floats, which it does not.</div></div></div>",
+      "css": ".ds-stage { background:#0F172A; padding:20px; font-family:'Inter','DM Sans',system-ui,sans-serif; } .ds-card { background:rgba(226,232,240,0.02); border:1px solid rgba(226,232,240,0.06); border-radius:14px; padding:20px; color:#F1F5F9; } .ds-card-title { font-size:14px; font-weight:600; margin-bottom:8px; } .ds-card-body { font-size:13px; font-weight:450; line-height:1.6; color:rgba(226,232,240,0.6); }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Search and credential fields. Focus replaces the removed outline with a visible border shift.",
+      "html": "<div class=\"ds-stage\"><input class=\"ds-input\" placeholder=\"Search name, rep, year, type…\" /></div>",
+      "css": ".ds-stage { background:#0F172A; padding:20px; font-family:'Inter','DM Sans',system-ui,sans-serif; } .ds-input { width:100%; box-sizing:border-box; background:rgba(226,232,240,0.04); border:1px solid rgba(226,232,240,0.1); color:#F1F5F9; border-radius:8px; padding:10px 14px; font-size:13px; font-family:inherit; outline:none; transition:all 0.2s; } .ds-input::placeholder { color:rgba(226,232,240,0.55); } .ds-input:hover { border-color:rgba(226,232,240,0.18); } .ds-input:focus { border-color:#E8633B; box-shadow:0 0 0 3px rgba(232,99,59,0.15); }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "tab-active",
+      "description": "A state read at a glance: 15% tint of its own colour with that colour at full strength for the text. Never grey on a coloured field.",
+      "html": "<div class=\"ds-stage\"><span class=\"ds-badge ds-b-ahead\">Ahead</span><span class=\"ds-badge ds-b-watch\">Watch</span><span class=\"ds-badge ds-b-behind\">Behind</span><span class=\"ds-badge ds-b-admin\">Admin</span></div>",
+      "css": ".ds-stage { background:#0F172A; padding:20px; display:flex; gap:8px; flex-wrap:wrap; font-family:'Inter','DM Sans',system-ui,sans-serif; } .ds-badge { display:inline-block; padding:3px 10px; border-radius:6px; font-size:11px; font-weight:600; white-space:nowrap; } .ds-b-ahead { background:rgba(52,211,153,0.15); color:#34D399; } .ds-b-watch { background:rgba(245,158,11,0.15); color:#F59E0B; } .ds-b-behind { background:rgba(248,113,113,0.15); color:#F87171; } .ds-b-admin { background:rgba(232,99,59,0.15); color:#E8633B; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Early Warning System",
+    "overview": "This is a monitoring panel, not a report. Its job is to stay quiet while the numbers behave and become impossible to ignore the moment one doesn't. Every visual decision follows from that: the surface is dim and even, figures are set in monospace so columns align and a drop is visible without reading, and exactly one loud colour exists on the whole system. When a screen looks calm, that is information.\n\nThe reader is a salesperson holding a phone between customer visits, possibly in direct Malaysian sun. They already know their business. The system therefore never explains, never congratulates, and never decorates — it reports. Density is welcome where it earns its place; ornament never is.\n\nThe system explicitly rejects two things named in PRODUCT.md. It is not a spreadsheet dump: every screen ranks and de-emphasises, because deciding what matters most is the entire value added over the source workbook. And it is not heavy corporate BI (Power BI, Tableau): no filter rails flanking the content, no chrome competing with the numbers, nothing that needs a training session before a rep can read their own figures.",
+    "keyCharacteristics": [
+      "Flat, even surfaces built from hairline borders and 2-3% tint fills",
+      "Monospaced figures throughout; the numbers are the interface",
+      "One accent colour, used only where action is required",
+      "Five complete themes, dark and light, all first-class",
+      "Phone-first: judged at 375px before any desktop view"
+    ],
+    "rules": [
+      { "name": "The Signal Rule", "body": "Signal Orange appears on no more than 10% of any screen, and only where the user can act or has acted. It is forbidden as decoration, as a heading colour, and as a chart fill for anything other than Alan's series.", "section": "colors" },
+      { "name": "The Two-Palette Rule", "body": "Series colours identify who; status colours report how it is going. They must never be legible as each other. Three collisions exist today by inheritance — Alan shares Signal Orange, Simon shares Watch Amber, Dino shares Info Blue — so any chart showing both identity and performance must separate them by position, label, or shape, never by hue alone.", "section": "colors" },
+      { "name": "The Daylight Rule", "body": "The light themes are not a courtesy. Sunlight readability is a stated product requirement, so no colour decision ships until it has been checked in Crisp as well as Slate. A value that only resolves on a dark background is unfinished.", "section": "colors" },
+      { "name": "The Monospace Figures Rule", "body": "Every number a user might compare — currency, percentage, row count, date, size — is set in Space Mono. Digits then share a width, columns align without effort, and a shorter bar reads as a smaller number at a glance. Proportional digits in a data column are prohibited.", "section": "typography" },
+      { "name": "The One Family Rule", "body": "Inter carries headings, labels, buttons and body. Do not introduce a second sans; the contrast in this system comes from weight, size, and the mono/proportional split, not from a font pairing.", "section": "typography" },
+      { "name": "The Floating Rule", "body": "A shadow means 'this element is above the page and will go away.' Cards, KPI panels, tables and chart containers are page furniture; they are flat, forever. If a resting surface has a shadow, it is wrong.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do set every comparable figure in Space Mono (700 for values) so columns align and outliers are visible without reading.",
+      "Do keep Signal Orange (#E8633B) under 10% of any screen, and only where the user can act.",
+      "Do pair every colour-coded state with a non-colour cue — a ▲/▼ glyph, a label, a position — so meaning survives greyscale, sunlight, and colour-vision deficiency. WCAG 2.1 AA (SC 1.4.1) is the stated bar.",
+      "Do verify every change in Crisp as well as Slate. Sunlight readability is a product requirement, not a preference.",
+      "Do build surface hierarchy from the tint ramp (2% card, 3% KPI, 4-5% hover, 6% border) rather than from new hex values.",
+      "Do let tables scroll inside their own container on a phone. The page itself must never scroll sideways.",
+      "Do keep transitions at 150-250ms. Users are mid-task and should not wait for choreography."
+    ],
+    "donts": [
+      "Don't produce a spreadsheet dump — walls of figures at uniform weight where the reader does the analysis. Rank, group, and de-emphasise on every screen.",
+      "Don't drift toward heavy corporate BI (Power BI, Tableau): filter rails flanking the content, chrome competing with the numbers, or anything requiring training before a rep can read their own figures.",
+      "Don't put a shadow on a resting surface. Shadows mean 'floating and dismissable' — tooltip, modal, login card. Nothing else.",
+      "Don't distinguish salespeople by colour alone in a chart, and never let a series colour be read as a status colour.",
+      "Don't rely on the KPI component's #fff colour fallback. It is invisible on Paper and Crisp; always pass an explicit status colour.",
+      "Don't load a font the interface does not use. Space Grotesk is currently requested on every page load and referenced nowhere in src/.",
+      "Don't nest a card inside a card, or reach for a card when a plain section with a heading would do.",
+      "Don't introduce a second sans-serif family. Contrast comes from weight, size, and the mono/proportional split.",
+      "Don't add gradients, glass blurs, coloured left-edge stripes, or gradient text anywhere. This is an instrument face.",
+      "Don't celebrate. No badges, streaks, trophies or congratulation on a shortfall."
+    ]
+  }
+}
