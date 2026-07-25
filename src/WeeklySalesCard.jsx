@@ -7,10 +7,11 @@ import { supabase } from "./lib/supabase.js";
 // Everyone else only contributes to the "Seed Malaysia" total.
 const RETAIL_TEAM = ["Alan", "Dino", "Khen"];
 
-const SP_COLORS = {
-  "Alan": "#E8633B", "Dino": "#3B82F6", "Khen": "#10B981",
-  "Sakinah": "#A855F7", "Simon": "#F59E0B", "Wani": "#14B8A6",
-  "Seed Malaysia": "#EC4899",
+// Fallback only. The live palette arrives via the seriesColors prop so this
+// card follows the active theme like every other chart surface.
+const SP_COLORS_FALLBACK = {
+  "Alan": "#E28B59", "Dino": "#6890CD", "Khen": "#4DEDE0",
+  "Sakinah": "#9A3DF0", "Simon": "#E0D046", "Seed Malaysia": "#D42F71",
 };
 
 const fmtRM = (v) => `RM ${Number(v).toLocaleString("en-MY", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -27,13 +28,14 @@ const fmtDate = (d) => {
 function ProgressBar({ pct, color }) {
   const clamped = Math.min(Math.max(pct, 0), 1.5);
   return (
-    <div style={{ width: "100%", height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
+    <div style={{ width: "100%", height: 6, background: "rgba(var(--tint),0.06)", borderRadius: 3, overflow: "hidden" }}>
       <div style={{ width: `${clamped * 100}%`, height: "100%", background: color, transition: "width 0.4s" }} />
     </div>
   );
 }
 
-function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period }) {
+function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period, seriesColors }) {
+  const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
   const pct = target > 0 ? total / target : 0;
   const min65 = target * 0.65;
   const min80 = target * 0.8;
@@ -41,11 +43,11 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
   const bal80 = Math.max(min80 - total, 0);
   const bal100 = Math.max(target - total, 0);
   const aboveTarget = total >= target;
-  const color = aboveTarget ? "#34D399" : pct >= 0.8 ? "#F59E0B" : pct >= 0.65 ? "#EAB308" : "#F87171";
+  const color = aboveTarget ? "var(--st-ok)" : pct >= 0.8 ? "var(--st-watch)" : pct >= 0.65 ? "#EAB308" : "var(--st-bad)";
 
   return (
     <div style={{
-      background: "rgba(255,255,255,0.02)",
+      background: "rgba(var(--tint),0.02)",
       border: `1px solid ${accentColor}33`,
       borderRadius: 14,
       padding: 24,
@@ -59,13 +61,13 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
           <div style={{ width: 4, height: 18, background: accentColor, borderRadius: 2 }} />
           <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5, color: accentColor, fontWeight: 700 }}>{title}</div>
         </div>
-        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginLeft: 12 }}>{subtitle}</div>
+        <div style={{ fontSize: 11, color: "rgba(var(--tint),0.4)", marginLeft: 12 }}>{subtitle}</div>
       </div>
 
       {/* Big number + progress */}
       <div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 32, fontWeight: 700, fontFamily: "'Space Mono',monospace", color: "#fff" }}>
+          <div style={{ fontSize: 32, fontWeight: 700, fontFamily: "'Space Mono',monospace", color: "var(--text)" }}>
             {fmtRM(total)}
           </div>
           <div style={{
@@ -75,8 +77,8 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
             {fmtPct(pct)}
           </div>
         </div>
-        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 4 }}>
-          of <span style={{ fontFamily: "'Space Mono',monospace", color: "rgba(255,255,255,0.7)" }}>{fmtRM(target)}</span> monthly target
+        <div style={{ fontSize: 11, color: "rgba(var(--tint),0.5)", marginTop: 4 }}>
+          of <span style={{ fontFamily: "'Space Mono',monospace", color: "rgba(var(--tint),0.7)" }}>{fmtRM(target)}</span> monthly target
         </div>
         <div style={{ marginTop: 10 }}>
           <ProgressBar pct={pct} color={color} />
@@ -85,22 +87,22 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
 
       {/* Per-rep table */}
       <div>
-        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1.5, color: "rgba(255,255,255,0.4)", marginBottom: 8, fontWeight: 600 }}>
+        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1.5, color: "rgba(var(--tint),0.4)", marginBottom: 8, fontWeight: 600 }}>
           By Salesperson · {period}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {rows.length === 0 ? (
-            <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, padding: "12px 0", textAlign: "center" }}>No data</div>
+            <div style={{ color: "rgba(var(--tint),0.4)", fontSize: 12, padding: "12px 0", textAlign: "center" }}>No data</div>
           ) : rows.map((r) => {
             const repPct = total > 0 ? r.amount / total : 0;
             return (
               <div key={r.sp} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
                 <div style={{ width: 8, height: 8, borderRadius: 2, background: SP_COLORS[r.sp] || "#888" }} />
-                <div style={{ flex: 1, color: "rgba(255,255,255,0.85)" }}>{r.sp}</div>
+                <div style={{ flex: 1, color: "rgba(var(--tint),0.85)" }}>{r.sp}</div>
                 <div style={{ flex: 2 }}>
                   <ProgressBar pct={repPct} color={SP_COLORS[r.sp] || "#888"} />
                 </div>
-                <div style={{ width: 90, textAlign: "right", fontFamily: "'Space Mono',monospace", color: "#fff", fontWeight: 600 }}>
+                <div style={{ width: 90, textAlign: "right", fontFamily: "'Space Mono',monospace", color: "var(--text)", fontWeight: 600 }}>
                   {fmtRM(r.amount)}
                 </div>
               </div>
@@ -112,22 +114,22 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
       {/* Threshold balances */}
       <div style={{
         display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(90px,100%), 1fr))", gap: 8,
-        paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.05)",
+        paddingTop: 12, borderTop: "1px solid rgba(var(--tint),0.05)",
       }}>
         {[
           { label: "65% Min", target: min65, balance: bal65, color: "#EAB308" },
-          { label: "80% Min", target: min80, balance: bal80, color: "#F59E0B" },
-          { label: "100%", target: target, balance: bal100, color: "#34D399" },
+          { label: "80% Min", target: min80, balance: bal80, color: "var(--st-watch)" },
+          { label: "100%", target: target, balance: bal100, color: "var(--st-ok)" },
         ].map((t, i) => (
           <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: 1.2, color: t.color, fontWeight: 700 }}>{t.label}</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'Space Mono',monospace" }}>
+            <div style={{ fontSize: 11, color: "rgba(var(--tint),0.5)", fontFamily: "'Space Mono',monospace" }}>
               {fmtRM(t.target)}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "'Space Mono',monospace", color: t.balance > 0 ? "#F87171" : "#34D399" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "'Space Mono',monospace", color: t.balance > 0 ? "var(--st-bad)" : "var(--st-ok)" }}>
               {t.balance > 0 ? `−${fmtRM(t.balance)}` : "✓ hit"}
             </div>
-            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)" }}>
+            <div style={{ fontSize: 9, color: "rgba(var(--tint),0.35)" }}>
               {t.balance > 0 ? "to go" : ""}
             </div>
           </div>
@@ -137,7 +139,8 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
   );
 }
 
-export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploaded }) {
+export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploaded, seriesColors }) {
+  const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
   const [uploadOpen, setUploadOpen] = useState(false);
 
   // Latest period
@@ -168,14 +171,14 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
     return (
       <div style={{
         background: "linear-gradient(135deg, rgba(232,99,59,0.06), rgba(59,130,246,0.04))",
-        border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24, marginBottom: 24,
+        border: "1px solid rgba(var(--tint),0.08)", borderRadius: 14, padding: 24, marginBottom: 24,
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#E8633B", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 4 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--st-accent)", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 4 }}>
               📊 Weekly Sales Update
             </div>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>
+            <div style={{ fontSize: 13, color: "rgba(var(--tint),0.5)" }}>
               No weekly data yet.{isAdmin ? " Use the upload button to add this week's numbers." : " Waiting for admin to upload."}
             </div>
           </div>
@@ -190,7 +193,7 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
           )}
         </div>
         {uploadOpen && (
-          <UploadPanel onClose={() => setUploadOpen(false)} onUploaded={onUploaded} />
+          <UploadPanel onClose={() => setUploadOpen(false)} onUploaded={onUploaded} seriesColors={SP_COLORS} />
         )}
       </div>
     );
@@ -211,27 +214,27 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
   return (
     <div style={{
       background: "linear-gradient(135deg, rgba(232,99,59,0.06), rgba(59,130,246,0.04))",
-      border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 24, marginBottom: 24,
+      border: "1px solid rgba(var(--tint),0.08)", borderRadius: 14, padding: 24, marginBottom: 24,
     }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#E8633B", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 4 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--st-accent)", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 4 }}>
             📊 Weekly Sales Update
           </div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: "#fff", letterSpacing: -0.3 }}>
-            {periodLabel} <span style={{ fontSize: 14, fontWeight: 400, color: "rgba(255,255,255,0.5)" }}>· {monthName}</span>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", letterSpacing: -0.3 }}>
+            {periodLabel} <span style={{ fontSize: 14, fontWeight: 400, color: "rgba(var(--tint),0.5)" }}>· {monthName}</span>
           </div>
           {latestPeriod.uploadedAt && (
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: "rgba(var(--tint),0.35)", marginTop: 4 }}>
               Last updated {new Date(latestPeriod.uploadedAt).toLocaleString()}
             </div>
           )}
         </div>
         {isAdmin && (
           <button onClick={() => setUploadOpen(!uploadOpen)} style={{
-            background: uploadOpen ? "rgba(232,99,59,0.2)" : "#E8633B",
-            color: uploadOpen ? "#E8633B" : "#fff",
+            background: uploadOpen ? "rgba(232,99,59,0.2)" : "var(--st-accent)",
+            color: uploadOpen ? "var(--st-accent)" : "var(--text)",
             border: uploadOpen ? "1px solid rgba(232,99,59,0.5)" : "none",
             borderRadius: 8, padding: "10px 20px", fontSize: 13, fontWeight: 600,
             cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
@@ -243,6 +246,7 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
 
       {uploadOpen && (
         <UploadPanel
+          seriesColors={SP_COLORS}
           defaultStart={latestPeriod.start}
           defaultEnd={latestPeriod.end}
           onClose={() => setUploadOpen(false)}
@@ -253,15 +257,17 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
       {/* Two columns side by side */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(260px,100%), 1fr))", gap: 16 }}>
         <ScopeColumn
+          seriesColors={SP_COLORS}
           title="Retail Sales Team"
           subtitle="Alan + Dino + Khen"
-          accentColor="#3B82F6"
+          accentColor="var(--st-info)"
           total={teamTotal}
           target={monthlyTarget}
           rows={teamRows}
           period={periodLabel}
         />
         <ScopeColumn
+          seriesColors={SP_COLORS}
           title="Seed Malaysia (Total)"
           subtitle="All teams including overseas"
           accentColor="#EC4899"
@@ -279,7 +285,8 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
 // Upload panel — drag-drop xlsx OR manual entry
 // ============================================================
 
-function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded }) {
+function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColors }) {
+  const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
   const [mode, setMode] = useState("xlsx"); // 'xlsx' | 'manual'
   const today = new Date();
   const monday = new Date(today);
@@ -415,20 +422,20 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded }) {
 
   return (
     <div style={{
-      background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.08)",
+      background: "rgba(0,0,0,0.3)", border: "1px solid rgba(var(--tint),0.08)",
       borderRadius: 12, padding: 20, marginBottom: 16, marginTop: 4,
     }}>
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <button onClick={() => setMode("xlsx")} style={{
           background: mode === "xlsx" ? "rgba(232,99,59,0.2)" : "transparent",
-          color: mode === "xlsx" ? "#E8633B" : "rgba(255,255,255,0.5)",
-          border: mode === "xlsx" ? "1px solid rgba(232,99,59,0.5)" : "1px solid rgba(255,255,255,0.1)",
+          color: mode === "xlsx" ? "var(--st-accent)" : "rgba(var(--tint),0.5)",
+          border: mode === "xlsx" ? "1px solid rgba(232,99,59,0.5)" : "1px solid rgba(var(--tint),0.1)",
           borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
         }}>📄 Upload xlsx</button>
         <button onClick={() => setMode("manual")} style={{
           background: mode === "manual" ? "rgba(232,99,59,0.2)" : "transparent",
-          color: mode === "manual" ? "#E8633B" : "rgba(255,255,255,0.5)",
-          border: mode === "manual" ? "1px solid rgba(232,99,59,0.5)" : "1px solid rgba(255,255,255,0.1)",
+          color: mode === "manual" ? "var(--st-accent)" : "rgba(var(--tint),0.5)",
+          border: mode === "manual" ? "1px solid rgba(232,99,59,0.5)" : "1px solid rgba(var(--tint),0.1)",
           borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
         }}>✏️ Manual entry</button>
       </div>
@@ -439,12 +446,12 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded }) {
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) onFile(f); }}
           style={{
-            border: "2px dashed rgba(255,255,255,0.15)", borderRadius: 10,
-            padding: "30px 20px", textAlign: "center", cursor: "pointer", background: "rgba(255,255,255,0.01)",
+            border: "2px dashed rgba(var(--tint),0.15)", borderRadius: 10,
+            padding: "30px 20px", textAlign: "center", cursor: "pointer", background: "rgba(var(--tint),0.01)",
           }}>
           <div style={{ fontSize: 22, marginBottom: 6, opacity: 0.4 }}>⤴</div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>Drop weekly xlsx here</div>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: "rgba(var(--tint),0.4)", marginTop: 4 }}>
             or click to browse · file should match the standard Sales Update layout
           </div>
           <input ref={fileRef} type="file" accept=".xlsx" style={{ display: "none" }}
@@ -455,27 +462,27 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded }) {
       {mode === "manual" && (
         <>
           <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "rgba(var(--tint),0.5)" }}>
               Period start
               <input type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)}
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", borderRadius: 6, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }} />
+                style={{ background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.08)", color: "var(--text)", borderRadius: 6, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }} />
             </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "rgba(var(--tint),0.5)" }}>
               Period end
               <input type="date" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)}
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#fff", borderRadius: 6, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }} />
+                style={{ background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.08)", color: "var(--text)", borderRadius: 6, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }} />
             </label>
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
-              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, color: "rgba(255,255,255,0.4)", fontWeight: 500, textTransform: "uppercase", letterSpacing: 1 }}>Salesperson</th>
-                <th style={{ textAlign: "right", padding: "8px 10px", fontSize: 11, color: "rgba(255,255,255,0.4)", fontWeight: 500, textTransform: "uppercase", letterSpacing: 1 }}>Amount (RM)</th>
+              <tr style={{ borderBottom: "1px solid rgba(var(--tint),0.08)" }}>
+                <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, color: "rgba(var(--tint),0.4)", fontWeight: 500, textTransform: "uppercase", letterSpacing: 1 }}>Salesperson</th>
+                <th style={{ textAlign: "right", padding: "8px 10px", fontSize: 11, color: "rgba(var(--tint),0.4)", fontWeight: 500, textTransform: "uppercase", letterSpacing: 1 }}>Amount (RM)</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
-                <tr key={r.sp} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                <tr key={r.sp} style={{ borderBottom: "1px solid rgba(var(--tint),0.04)" }}>
                   <td style={{ padding: "8px 10px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ width: 8, height: 8, borderRadius: 2, background: SP_COLORS[r.sp] || "#888" }} />
@@ -492,8 +499,8 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded }) {
                         setRows(newRows);
                       }}
                       style={{
-                        background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-                        color: "#fff", borderRadius: 6, padding: "6px 10px", fontSize: 13,
+                        background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.08)",
+                        color: "var(--text)", borderRadius: 6, padding: "6px 10px", fontSize: 13,
                         fontFamily: "'Space Mono',monospace", textAlign: "right", width: 140,
                       }}
                     />
@@ -512,11 +519,11 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded }) {
           cursor: busy ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
         }}>{busy ? "Saving…" : "Save weekly update"}</button>
         <button onClick={onClose} style={{
-          background: "transparent", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)",
+          background: "transparent", color: "rgba(var(--tint),0.5)", border: "1px solid rgba(var(--tint),0.1)",
           borderRadius: 8, padding: "10px 22px", fontSize: 13, cursor: "pointer",
         }}>Cancel</button>
-        {info && <div style={{ fontSize: 12, color: "#34D399" }}>✓ {info}</div>}
-        {error && <div style={{ fontSize: 12, color: "#F87171" }}>⚠ {error}</div>}
+        {info && <div style={{ fontSize: 12, color: "var(--st-ok)" }}>✓ {info}</div>}
+        {error && <div style={{ fontSize: 12, color: "var(--st-bad)" }}>⚠ {error}</div>}
       </div>
     </div>
   );

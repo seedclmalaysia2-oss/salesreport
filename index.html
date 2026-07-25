@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SEED Malaysia Sales Dashboard</title>
+    <!--
+      Fonts are requested once, here, rather than from inside React components.
+      Previously five <link> tags were injected across App/Dashboard/LoginScreen,
+      re-requesting DM Sans and Space Mono three times over and pulling in Space
+      Grotesk, which the interface never uses. Declaring them in the head lets the
+      browser start the download during HTML parse instead of after hydration.
+      Weights are limited to the five the UI actually sets (400/450/500/600/700);
+      Inter is loaded as a variable range so 450 resolves without a synthetic face.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Inter:wght@400..700&family=Space+Mono:wght@400;700&display=swap"
+    />
   </head>
   <body style="margin:0;background:#0A0A0F;">
     <div id="root"></div>

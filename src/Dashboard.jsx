@@ -83,16 +83,64 @@ const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct"
 const SALESPEOPLE_ORDER = ["Alan","Dino","Khen","Sakinah","Simon","Seed Malaysia"];
 const YEARS_FALLBACK = [2022,2023,2024,2025,2026];
 
-const COLORS = {
-  "Alan": "#E8633B",
-  "Dino": "#3B82F6",
-  "Khen": "#10B981",
-  "Sakinah": "#A855F7",
-  "Simon": "#F59E0B",
-  "Seed Malaysia": "#EC4899",
+// A second, non-colour channel for the year-over-year lines. Colour alone can't
+// carry identity (WCAG 1.4.1), and overlapping lines are the hardest case: the
+// selected year stays solid so it still reads as the subject.
+const YEAR_DASHES = ["6 3", "2 3", "10 4", "1 3", "8 3 2 3"];
+
+// Semantic status colours, per theme family — the same reason the series palette
+// is split. The bright dark-theme values (#34D399 etc.) sit at ~2.3–3:1 on the
+// light "sunlight" themes, so a headline number or a trend arrow was failing
+// contrast exactly where daylight legibility matters most. The light variants
+// are darkened to clear 4.5:1 on both #F1F5F9 and #FAF7F2 while holding their
+// hue, and still give white text ≥5:1 so button fills work. ok=ahead,
+// bad=behind, watch=near-target, info=neutral, accent=Signal Orange,
+// qty=quantity charts, alt=incidental purple.
+const STATUS_DARK = {
+  ok: "#34D399", bad: "#F87171", watch: "#F59E0B", info: "#3B82F6",
+  accent: "#E8633B", qty: "#10B981", alt: "#A855F7",
+};
+const STATUS_LIGHT = {
+  ok: "#177D58", bad: "#DD0606", watch: "#9A6204", info: "#0662F9",
+  accent: "#CA3C12", qty: "#077D56", alt: "#9831FA",
 };
 
-const PIE_COLORS = ["#E8633B","#3B82F6","#10B981","#A855F7","#F59E0B","#EC4899","#6366F1","#14B8A6","#F43F5E","#84CC16"];
+// ============================================================
+// Series palettes — one per theme family, and that split is deliberate.
+//
+// A single palette cannot serve both. Clearing WCAG 1.4.11's 3:1 against
+// near-white (#F1F5F9) caps a colour's relative luminance at 0.265; clearing it
+// against near-black (#0F172A) demands at least 0.135. Forcing six colours into
+// that 0.13-wide band makes them near-identical in luminance, which is exactly
+// what collapses them under colour-blind vision — the old single palette scored
+// dE 6.1 (deuteranopia) and 3.4 (tritanopia) between reps, i.e. indistinguishable.
+//
+// Splitting per theme frees each set to use a wide luminance range, so the six
+// separate by lightness as well as hue. Both sets were solver-optimised and
+// verified: every colour clears 3:1 on its own backgrounds, and worst-case
+// separation is dE >= 20 for normal/protanopia/deuteranopia and >= 15 for
+// tritanopia (~1 in 10,000, and covered by the non-colour cues besides).
+//
+// Hues stay near each rep's original colour so people still recognise their own.
+// Note none of these equal a status colour: identity and performance must never
+// be readable as each other.
+const SERIES_DARK = {
+  "Alan": "#E28B59",
+  "Dino": "#6890CD",
+  "Khen": "#4DEDE0",
+  "Sakinah": "#9A3DF0",
+  "Simon": "#E0D046",
+  "Seed Malaysia": "#D42F71",
+};
+
+const SERIES_LIGHT = {
+  "Alan": "#E06711",
+  "Dino": "#1832C6",
+  "Khen": "#2A9C70",
+  "Sakinah": "#C259E2",
+  "Simon": "#5C5410",
+  "Seed Malaysia": "#7C1968",
+};
 
 const fmt = (v) => {
   if (v >= 1000000) return `${(v/1000000).toFixed(1)}M`;
@@ -121,10 +169,12 @@ const CustomTooltip = ({active, payload, label}) => {
 const KPI = ({label, value, sub, trend, color}) => (
   <div style={{background:"rgba(var(--tint),0.03)",border:"1px solid rgba(var(--tint),0.06)",borderRadius:12,padding:"20px 24px",flex:1,minWidth:180}}>
     <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:1.5,color:"rgba(var(--tint),0.4)",marginBottom:8,fontFamily:"'DM Sans',sans-serif"}}>{label}</div>
-    <div style={{fontSize:28,fontWeight:700,color:color||"#fff",fontFamily:"'Space Mono',monospace",lineHeight:1.1}}>{value}</div>
+    {/* Falls back to the theme ink, not #fff — a white value is invisible on
+        the Paper and Crisp light themes. */}
+    <div style={{fontSize:28,fontWeight:700,color:color||"var(--text)",fontFamily:"'Space Mono',monospace",lineHeight:1.1}}>{value}</div>
     {sub && <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginTop:6}}>{sub}</div>}
     {trend !== undefined && (
-      <div style={{fontSize:12,marginTop:6,color:trend>=0?"#34D399":"#F87171",fontWeight:600}}>
+      <div style={{fontSize:12,marginTop:6,color:trend>=0?"var(--st-ok)":"var(--st-bad)",fontWeight:600}}>
         {trend>=0?"▲":"▼"} {Math.abs(trend).toFixed(1)}% vs prev year
       </div>
     )}
@@ -134,7 +184,7 @@ const KPI = ({label, value, sub, trend, color}) => (
 const TabButton = ({active, children, onClick, accent}) => (
   <button onClick={onClick} style={{
     background: active ? (accent ? "rgba(52,211,153,0.15)" : "rgba(232,99,59,0.15)") : "transparent",
-    color: active ? (accent ? "#34D399" : "#E8633B") : "rgba(var(--tint),0.5)",
+    color: active ? (accent ? "var(--st-ok)" : "var(--st-accent)") : "rgba(var(--tint),0.5)",
     border: active ? `1px solid ${accent ? "rgba(52,211,153,0.3)" : "rgba(232,99,59,0.3)"}` : "1px solid transparent",
     borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: active ? 600 : 400,
     cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans',sans-serif",
@@ -144,7 +194,7 @@ const TabButton = ({active, children, onClick, accent}) => (
 
 const Pill = ({label, active, onClick}) => (
   <button onClick={onClick} style={{
-    background: active ? "#E8633B" : "rgba(var(--tint),0.05)",
+    background: active ? "var(--st-accent)" : "rgba(var(--tint),0.05)",
     color: active ? "#fff" : "rgba(var(--tint),0.5)",
     border: "none", borderRadius: 20, padding: "6px 16px", fontSize: 12, fontWeight: 600,
     cursor: "pointer", transition: "all 0.2s", fontFamily: "'Space Mono',monospace"
@@ -163,6 +213,8 @@ const Card = ({children, style}) => (
 // ============================================================
 const THEMES = {
   slate: {
+    series: SERIES_DARK,
+    status: STATUS_DARK,
     name: "Slate", subtitle: "Soft dark · default", mode: "dark",
     swatch: ["#0F172A", "#1E293B", "#E2E8F0", "#FB923C"],
     bg: "#0F172A",
@@ -178,6 +230,8 @@ const THEMES = {
     heatmapBaseAlpha: 0.10,
   },
   midnight: {
+    series: SERIES_DARK,
+    status: STATUS_DARK,
     name: "Midnight", subtitle: "Deep ocean blue", mode: "dark",
     swatch: ["#0B1426", "#152843", "#BAE6FD", "#22D3EE"],
     bg: "#0B1426",
@@ -193,6 +247,8 @@ const THEMES = {
     heatmapBaseAlpha: 0.10,
   },
   paper: {
+    series: SERIES_LIGHT,
+    status: STATUS_LIGHT,
     name: "Paper", subtitle: "Warm cream", mode: "light",
     swatch: ["#FAF7F2", "#FFFFFF", "#1C1917", "#EA580C"],
     bg: "#FAF7F2",
@@ -208,6 +264,8 @@ const THEMES = {
     heatmapBaseAlpha: 0.05,
   },
   crisp: {
+    series: SERIES_LIGHT,
+    status: STATUS_LIGHT,
     name: "Crisp", subtitle: "Cool light · pro", mode: "light",
     swatch: ["#F1F5F9", "#FFFFFF", "#0F172A", "#0EA5E9"],
     bg: "#F1F5F9",
@@ -223,6 +281,8 @@ const THEMES = {
     heatmapBaseAlpha: 0.05,
   },
   carbon: {
+    series: SERIES_DARK,
+    status: STATUS_DARK,
     name: "Carbon", subtitle: "Max contrast", mode: "dark",
     swatch: ["#000000", "#0F0F0F", "#FFFFFF", "#FFD60A"],
     bg: "#000000",
@@ -264,6 +324,15 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   // Active theme object. All tokens live here so Recharts gets resolved colors
   // (SVG fill/stroke don't read CSS vars) and inline styles can use CSS vars.
   const tk = THEMES[themeKey] || THEMES.slate;
+
+  // Series colours follow the theme: each family has its own verified palette.
+  const COLORS = tk.series;
+  const PIE_COLORS = useMemo(() => Object.values(tk.series), [tk]);
+
+  // Status colours also follow the theme (see STATUS_DARK/LIGHT). Chart fills
+  // read STATUS.* directly (real hex, SVG-safe); CSS-only module-level helpers
+  // read the --st-* custom properties emitted on the theme wrapper below.
+  const STATUS = tk.status;
 
   // Whatever App hands us has already been filtered by RLS to this user's
   // scope, so it is the only thing we render. No local override.
@@ -647,6 +716,11 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           --bg: ${tk.bg};
           --text: ${tk.text};
           --tint: ${tk.tintRgb};
+          --st-ok: ${tk.status.ok};
+          --st-bad: ${tk.status.bad};
+          --st-watch: ${tk.status.watch};
+          --st-info: ${tk.status.info};
+          --st-accent: ${tk.status.accent};
           --tooltip-bg: ${tk.tooltipBg};
           --tooltip-border: ${tk.tooltipBorder};
           --tooltip-text: ${tk.tooltipText};
@@ -655,8 +729,6 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         [data-seed-theme] input, [data-seed-theme] button, [data-seed-theme] table { color: inherit; }
         ${RESPONSIVE_CSS}
       `}</style>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
 
       <div style={{
         background:"linear-gradient(135deg, rgba(232,99,59,0.08) 0%, rgba(59,130,246,0.05) 100%)",
@@ -668,7 +740,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:2,color:"rgba(var(--tint),0.35)",marginBottom:6,display:"flex",alignItems:"center",gap:10}}>
               <span>SEED Malaysia</span>
               {user?.isAdmin && (
-                <span style={{padding:"2px 8px",background:"rgba(232,99,59,0.15)",color:"#E8633B",borderRadius:10,fontSize:10,letterSpacing:0.5}}>ADMIN</span>
+                <span style={{padding:"2px 8px",background:"rgba(232,99,59,0.15)",color:STATUS.accent,borderRadius:10,fontSize:10,letterSpacing:0.5}}>ADMIN</span>
               )}
             </div>
             <h1 style={{fontSize:26,fontWeight:700,margin:0,letterSpacing:-0.5,color:"var(--text)"}}>
@@ -751,7 +823,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                             <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>{t.name}</div>
                             <div style={{fontSize:11,color:"rgba(var(--tint),0.55)"}}>{t.subtitle}</div>
                           </div>
-                          {active && <span style={{color:"#E8633B",fontSize:14}}>●</span>}
+                          {active && <span style={{color:STATUS.accent,fontSize:14}}>●</span>}
                         </button>
                       );
                     })}
@@ -763,7 +835,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 12px 6px 8px",background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.08)",borderRadius:20}}>
                 <div style={{
                   width:26,height:26,borderRadius:"50%",
-                  background: user.isAdmin ? "linear-gradient(135deg,#E8633B,#F59E0B)" : (COLORS[user.sp] || "#3B82F6"),
+                  background: user.isAdmin ? "linear-gradient(135deg,#E8633B,#F59E0B)" : (COLORS[user.sp] || STATUS.info),
                   color:"var(--text)",display:"flex",alignItems:"center",justifyContent:"center",
                   fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace"
                 }}>{(user.sp || "?")[0]?.toUpperCase()}</div>
@@ -819,11 +891,11 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           <div style={{
             display:"flex",alignItems:"center",gap:10,marginBottom:16,
             padding:"9px 14px",borderRadius:10,fontSize:12,
-            background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.25)",color:"#3B82F6",
+            background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.25)",color:STATUS.info,
           }}>
             <span style={{
               width:12,height:12,borderRadius:"50%",flexShrink:0,
-              border:"2px solid rgba(59,130,246,0.25)",borderTopColor:"#3B82F6",
+              border:"2px solid rgba(59,130,246,0.25)",borderTopColor:STATUS.info,
               animation:"seedspin 0.8s linear infinite",
             }} />
             Loading brand-level rows — this chart fills in shortly.
@@ -837,22 +909,23 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               targets={TARGETS}
               isAdmin={!!user?.isAdmin}
               onUploaded={onRefresh}
+              seriesColors={COLORS}
             />
             <div style={{display:"flex",gap:16,marginBottom:28,flexWrap:"wrap"}}>
-              <KPI label="Total Revenue" value={`RM ${fmt(currentYearTotal)}`} sub={`${selectedYear}`} trend={selectedYear>YEARS[0]?yoyChange:undefined} color="#E8633B" />
+              <KPI label="Total Revenue" value={`RM ${fmt(currentYearTotal)}`} sub={`${selectedYear}`} trend={selectedYear>YEARS[0]?yoyChange:undefined} color={STATUS.accent} />
               {annualTarget > 0 ? (
                 <KPI
                   label="YTD vs Target"
                   value={`${ytdAchievement.toFixed(0)}%`}
                   sub={`RM ${fmt(ytd.actual)} of RM ${fmt(ytd.target)} (Jan–${MONTH_NAMES[Math.max(ytd.lastMonth-1,0)] || "Dec"})`}
-                  color={ytdAchievement >= 100 ? "#34D399" : ytdAchievement >= 90 ? "#F59E0B" : "#F87171"}
+                  color={ytdAchievement >= 100 ? STATUS.ok : ytdAchievement >= 90 ? STATUS.watch : STATUS.bad}
                 />
               ) : (
-                <KPI label="Top Performer" value={topSP?.sp || "—"} sub={`RM ${fmt(topSP?.total||0)}`} color="#3B82F6" />
+                <KPI label="Top Performer" value={topSP?.sp || "—"} sub={`RM ${fmt(topSP?.total||0)}`} color={STATUS.info} />
               )}
-              <KPI label="Annual Target" value={annualTarget > 0 ? `RM ${fmt(annualTarget)}` : "—"} sub={annualTarget > 0 ? `${annualAchievement.toFixed(0)}% achieved` : "no target set"} color="#3B82F6" />
-              <KPI label="Active Teams" value={spPerformance.filter(s=>s.total>0).length} sub={`of ${SALESPEOPLE.length} teams`} color="#10B981" />
-              <KPI label="Avg Monthly" value={`RM ${fmt(currentYearTotal / Math.max(SUMMARY.find(s => s.year === selectedYear)?.months.filter(m => m > 0).length || 12, 1))}`} sub="active months" color="#A855F7" />
+              <KPI label="Annual Target" value={annualTarget > 0 ? `RM ${fmt(annualTarget)}` : "—"} sub={annualTarget > 0 ? `${annualAchievement.toFixed(0)}% achieved` : "no target set"} color={STATUS.info} />
+              <KPI label="Active Teams" value={spPerformance.filter(s=>s.total>0).length} sub={`of ${SALESPEOPLE.length} teams`} color={STATUS.qty} />
+              <KPI label="Avg Monthly" value={`RM ${fmt(currentYearTotal / Math.max(SUMMARY.find(s => s.year === selectedYear)?.months.filter(m => m > 0).length || 12, 1))}`} sub="active months" color={STATUS.alt} />
             </div>
 
             <div style={{display:"grid",gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",gap:20,marginBottom:24}}>
@@ -870,15 +943,15 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   <ComposedChart data={monthlyData}>
                     <defs>
                       <linearGradient id="totalGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#E8633B" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#E8633B" stopOpacity={0}/>
+                        <stop offset="5%" stopColor={STATUS.accent} stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor={STATUS.accent} stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} />
                     <XAxis dataKey="month" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} />
                     <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Area type="monotone" dataKey="total" stroke="#E8633B" fill="url(#totalGrad)" strokeWidth={2} name="Actual" />
+                    <Area type="monotone" dataKey="total" stroke={STATUS.accent} fill="url(#totalGrad)" strokeWidth={2} name="Actual" />
                     {annualTarget > 0 && (
                       <Line type="monotone" dataKey="target" stroke="#94A3B8" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Target" />
                     )}
@@ -892,15 +965,15 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   <AreaChart data={monthlyQtyData}>
                     <defs>
                       <linearGradient id="qtyGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                        <stop offset="5%" stopColor={STATUS.qty} stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor={STATUS.qty} stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} />
                     <XAxis dataKey="month" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} />
                     <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={(v) => v.toLocaleString()} />
                     <Tooltip formatter={(v) => `${v.toLocaleString()} units`} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                    <Area type="monotone" dataKey="total" stroke="#10B981" fill="url(#qtyGrad)" strokeWidth={2} name="Quantity" />
+                    <Area type="monotone" dataKey="total" stroke={STATUS.qty} fill="url(#qtyGrad)" strokeWidth={2} name="Quantity" />
                   </AreaChart>
                 </ResponsiveContainer>
               </Card>
@@ -957,7 +1030,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                             display:"inline-flex",alignItems:"center",justifyContent:"center",
                             width:24,height:24,borderRadius:"50%",fontSize:11,fontWeight:700,
                             background:i===0?"rgba(232,99,59,0.2)":i===1?"rgba(59,130,246,0.15)":i===2?"rgba(16,185,129,0.15)":"rgba(var(--tint),0.05)",
-                            color:i===0?"#E8633B":i===1?"#3B82F6":i===2?"#10B981":"rgba(var(--tint),0.5)"
+                            color:i===0?STATUS.accent:i===1?STATUS.info:i===2?STATUS.qty:"rgba(var(--tint),0.5)"
                           }}>{i+1}</span>
                         </td>
                         <td style={{padding:"12px 14px",fontWeight:600}}>
@@ -974,7 +1047,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                             <span style={{
                               padding:"3px 10px",borderRadius:12,fontSize:11,fontWeight:600,
                               background:s.change>=0?"rgba(52,211,153,0.15)":"rgba(248,113,113,0.15)",
-                              color:s.change>=0?"#34D399":"#F87171"
+                              color:s.change>=0?STATUS.ok:STATUS.bad
                             }}>
                               {s.change>=0?"▲":"▼"} {Math.abs(s.change).toFixed(1)}%
                             </span>
@@ -1092,7 +1165,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   <Tooltip content={<CustomTooltip />} />
                   <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />
                   {YEARS.map((y, i) => (
-                    <Line key={y} type="monotone" dataKey={y} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={y===selectedYear?3:1.5} dot={false} name={y.toString()} opacity={y===selectedYear?1:0.5} />
+                    <Line key={y} type="monotone" dataKey={y} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={y===selectedYear?3:1.5} strokeDasharray={y===selectedYear?undefined:YEAR_DASHES[i % YEAR_DASHES.length]} dot={false} name={y.toString()} opacity={y===selectedYear?1:0.55} />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
@@ -1131,9 +1204,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         {tab === "customers" && (
           <>
             <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
-              <KPI label="Local Customers" value={customerIndex.filter(c => c.region === "Local").length.toLocaleString()} sub={`RM ${fmt(customerIndex.filter(c => c.region === "Local").reduce((a,c) => a + c.total, 0))} all-time`} color="#3B82F6" />
+              <KPI label="Local Customers" value={customerIndex.filter(c => c.region === "Local").length.toLocaleString()} sub={`RM ${fmt(customerIndex.filter(c => c.region === "Local").reduce((a,c) => a + c.total, 0))} all-time`} color={STATUS.info} />
               <KPI label="Overseas / Export" value={customerIndex.filter(c => c.region === "Overseas").length.toLocaleString()} sub={`RM ${fmt(customerIndex.filter(c => c.region === "Overseas").reduce((a,c) => a + c.total, 0))} all-time`} color="#EC4899" />
-              <KPI label="Local : Overseas" value={`${((customerIndex.filter(c => c.region === "Local").reduce((a,c) => a + c.total, 0) / Math.max(customerIndex.reduce((a,c) => a + c.total, 0), 1)) * 100).toFixed(0)}% / ${((customerIndex.filter(c => c.region === "Overseas").reduce((a,c) => a + c.total, 0) / Math.max(customerIndex.reduce((a,c) => a + c.total, 0), 1)) * 100).toFixed(0)}%`} sub="of all-time revenue" color="#10B981" />
+              <KPI label="Local : Overseas" value={`${((customerIndex.filter(c => c.region === "Local").reduce((a,c) => a + c.total, 0) / Math.max(customerIndex.reduce((a,c) => a + c.total, 0), 1)) * 100).toFixed(0)}% / ${((customerIndex.filter(c => c.region === "Overseas").reduce((a,c) => a + c.total, 0) / Math.max(customerIndex.reduce((a,c) => a + c.total, 0), 1)) * 100).toFixed(0)}%`} sub="of all-time revenue" color={STATUS.qty} />
             </div>
 
             <div style={{display:"grid",gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",gap:20}}>
@@ -1152,7 +1225,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       <YAxis type="category" dataKey="customer" tick={{fill:tk.chartTickFillDim,fontSize:11}} axisLine={false} width={135} />
                       <Tooltip formatter={(v) => fmtFull(v)} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
                       <Bar dataKey="total" name="Total Sales" radius={[0,4,4,0]}>
-                        {topLocalCustomers.map((_, i) => <Cell key={i} fill="#3B82F6" opacity={1 - i * 0.035} />)}
+                        {topLocalCustomers.map((_, i) => <Cell key={i} fill={STATUS.info} opacity={1 - i * 0.035} />)}
                         <LabelList dataKey="total" position="right" formatter={(v) => fmt(v)} fill={tk.text} fontSize={11} fontFamily="'Space Mono',monospace" />
                       </Bar>
                     </BarChart>
@@ -1193,12 +1266,12 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                 <div style={{display:"inline-flex",background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.06)",borderRadius:8,padding:2}}>
                   <button onClick={()=>setTopCustomersBySpView("grid")} style={{
                     background: topCustomersBySpView === "grid" ? "rgba(232,99,59,0.2)" : "transparent",
-                    color: topCustomersBySpView === "grid" ? "#E8633B" : "rgba(var(--tint),0.5)",
+                    color: topCustomersBySpView === "grid" ? STATUS.accent : "rgba(var(--tint),0.5)",
                     border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"
                   }}>▦ Grid</button>
                   <button onClick={()=>setTopCustomersBySpView("list")} style={{
                     background: topCustomersBySpView === "list" ? "rgba(232,99,59,0.2)" : "transparent",
-                    color: topCustomersBySpView === "list" ? "#E8633B" : "rgba(var(--tint),0.5)",
+                    color: topCustomersBySpView === "list" ? STATUS.accent : "rgba(var(--tint),0.5)",
                     border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"
                   }}>≡ List</button>
                 </div>
@@ -1347,7 +1420,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                   <Tooltip content={<CustomTooltip />} />
                   {selectedSP === "All" ? (
-                    <Line type="monotone" dataKey="total" stroke="#E8633B" strokeWidth={3} dot={{r:5,fill:"#E8633B"}} name="Total Revenue">
+                    <Line type="monotone" dataKey="total" stroke={STATUS.accent} strokeWidth={3} dot={{r:5,fill:STATUS.accent}} name="Total Revenue">
                       <LabelList
                         dataKey="total"
                         position="top"
@@ -1402,7 +1475,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                             <span style={{
                               padding:"3px 8px",borderRadius:10,fontSize:10,fontWeight:600,
                               background:yoy>=0?"rgba(52,211,153,0.15)":"rgba(248,113,113,0.15)",
-                              color:yoy>=0?"#34D399":"#F87171"
+                              color:yoy>=0?STATUS.ok:STATUS.bad
                             }}>
                               {yoy>=0?"▲":"▼"} {Math.abs(yoy).toFixed(0)}%
                             </span>
@@ -1471,7 +1544,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:1.5,color:"rgba(var(--tint),0.4)",marginBottom:6}}>Customer</div>
                     <div style={{fontSize:24,fontWeight:700,marginBottom:8}}>{activeCustomer.customer}</div>
                     <div style={{display:"flex",gap:24,flexWrap:"wrap",fontSize:13,color:"rgba(var(--tint),0.7)"}}>
-                      <div><span style={{color:"rgba(var(--tint),0.4)"}}>Total all time:</span> <span style={{fontFamily:"'Space Mono',monospace",fontWeight:600,color:"#E8633B"}}>{fmtFull(activeCustomer.total)}</span></div>
+                      <div><span style={{color:"rgba(var(--tint),0.4)"}}>Total all time:</span> <span style={{fontFamily:"'Space Mono',monospace",fontWeight:600,color:STATUS.accent}}>{fmtFull(activeCustomer.total)}</span></div>
                       <div><span style={{color:"rgba(var(--tint),0.4)"}}>Active years:</span> {Object.keys(activeCustomer.perYear).filter(y => activeCustomer.perYear[y] > 0).length}</div>
                       <div>
                         <span style={{color:"rgba(var(--tint),0.4)"}}>Served by:</span>{" "}
@@ -1510,7 +1583,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                           <XAxis dataKey="year" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} />
                           <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                           <Tooltip formatter={(v) => fmtFull(v)} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                          <Bar dataKey="total" fill="#E8633B" radius={[3,3,0,0]} />
+                          <Bar dataKey="total" fill={STATUS.accent} radius={[3,3,0,0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     </Card>
@@ -1525,7 +1598,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                             <XAxis type="number" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                             <YAxis type="category" dataKey="brand" tick={{fill:tk.chartTickFillDim,fontSize:11}} axisLine={false} width={75} />
                             <Tooltip formatter={(v, name, props) => [`${fmtFull(v)}  (${(props.payload.qty || 0).toLocaleString()} units)`, "Revenue"]} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                            <Bar dataKey="amt" fill="#E8633B" radius={[0,3,3,0]}>
+                            <Bar dataKey="amt" fill={STATUS.accent} radius={[0,3,3,0]}>
                               <LabelList dataKey="amt" position="right" formatter={(v) => fmt(v)} fill={tk.text} fontSize={10} fontFamily="'Space Mono',monospace" />
                             </Bar>
                           </BarChart>
@@ -1545,7 +1618,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                             <XAxis type="number" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={(v) => v.toLocaleString()} />
                             <YAxis type="category" dataKey="brand" tick={{fill:tk.chartTickFillDim,fontSize:11}} axisLine={false} width={75} />
                             <Tooltip formatter={(v, name, props) => [`${v.toLocaleString()} units  (${fmtFull(props.payload.amt || 0)})`, "Quantity"]} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                            <Bar dataKey="qty" fill="#10B981" radius={[0,3,3,0]}>
+                            <Bar dataKey="qty" fill={STATUS.qty} radius={[0,3,3,0]}>
                               <LabelList dataKey="qty" position="right" formatter={(v) => v.toLocaleString()} fill={tk.text} fontSize={10} fontFamily="'Space Mono',monospace" />
                             </Bar>
                           </BarChart>
@@ -1568,11 +1641,11 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             </div>
 
             <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
-              <KPI label="Total Brands" value={brandYearTotals.length} sub={`${selectedYear} · ${selectedSP === "All" ? "all teams" : selectedSP}`} color="#E8633B" />
-              <KPI label="Top Brand (Revenue)" value={brandYearTotals[0]?.brand || "—"} sub={`RM ${fmt(brandYearTotals[0]?.amt || 0)}`} color="#3B82F6" />
-              <KPI label="Top Brand (Qty)" value={brandYearTotalsByQty[0]?.brand || "—"} sub={`${(brandYearTotalsByQty[0]?.qty || 0).toLocaleString()} pcs/boxes`} color="#10B981" />
-              <KPI label="Total Brand Revenue" value={`RM ${fmt(brandYearTotals.reduce((a,b) => a+b.amt, 0))}`} sub={`${selectedYear}`} color="#A855F7" />
-              <KPI label="Total Quantity" value={brandYearTotals.reduce((a,b) => a+(b.qty||0), 0).toLocaleString()} sub="units sold" color="#F59E0B" />
+              <KPI label="Total Brands" value={brandYearTotals.length} sub={`${selectedYear} · ${selectedSP === "All" ? "all teams" : selectedSP}`} color={STATUS.accent} />
+              <KPI label="Top Brand (Revenue)" value={brandYearTotals[0]?.brand || "—"} sub={`RM ${fmt(brandYearTotals[0]?.amt || 0)}`} color={STATUS.info} />
+              <KPI label="Top Brand (Qty)" value={brandYearTotalsByQty[0]?.brand || "—"} sub={`${(brandYearTotalsByQty[0]?.qty || 0).toLocaleString()} pcs/boxes`} color={STATUS.qty} />
+              <KPI label="Total Brand Revenue" value={`RM ${fmt(brandYearTotals.reduce((a,b) => a+b.amt, 0))}`} sub={`${selectedYear}`} color={STATUS.alt} />
+              <KPI label="Total Quantity" value={brandYearTotals.reduce((a,b) => a+(b.qty||0), 0).toLocaleString()} sub="units sold" color={STATUS.watch} />
             </div>
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(min(420px,100%), 1fr))",gap:20,marginBottom:20}}>
@@ -1587,7 +1660,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       formatter={(v, name, props) => [`${fmtFull(v)}  (${(props.payload.qty || 0).toLocaleString()} units)`, "Revenue"]}
                       contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
                     <Bar dataKey="amt" radius={[0,4,4,0]}>
-                      {brandYearTotals.slice(0,20).map((_, i) => <Cell key={i} fill="#E8633B" opacity={1 - i * 0.025} />)}
+                      {brandYearTotals.slice(0,20).map((_, i) => <Cell key={i} fill={STATUS.accent} opacity={1 - i * 0.025} />)}
                       <LabelList dataKey="amt" position="right" formatter={(v) => fmt(v)} fill={tk.text} fontSize={11} fontFamily="'Space Mono',monospace" />
                     </Bar>
                   </BarChart>
@@ -1608,7 +1681,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                         formatter={(v, name, props) => [`${v.toLocaleString()} units  (${fmtFull(props.payload.amt || 0)})`, "Quantity"]}
                         contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
                       <Bar dataKey="qty" radius={[0,4,4,0]}>
-                        {brandYearTotalsByQty.slice(0,20).map((_, i) => <Cell key={i} fill="#10B981" opacity={1 - i * 0.025} />)}
+                        {brandYearTotalsByQty.slice(0,20).map((_, i) => <Cell key={i} fill={STATUS.qty} opacity={1 - i * 0.025} />)}
                         <LabelList dataKey="qty" position="right" formatter={(v) => v.toLocaleString()} fill={tk.text} fontSize={11} fontFamily="'Space Mono',monospace" />
                       </Bar>
                     </BarChart>
@@ -1665,17 +1738,17 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             </div>
 
             <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
-              <KPI label="New Customers" value={cohort.new.length} sub={`RM ${fmt(cohort.newRevenue)} revenue`} color="#34D399" />
-              <KPI label="Retained" value={cohort.retained.length} sub={`RM ${fmt(cohort.retainedRevenue)} revenue`} color="#3B82F6" />
-              <KPI label="Lost" value={cohort.lost.length} sub={`RM ${fmt(cohort.lostRevenue)} prior revenue`} color="#F87171" />
-              <KPI label="Net Customer Δ" value={cohort.new.length - cohort.lost.length} sub={cohort.new.length > cohort.lost.length ? "growth" : "decline"} color={cohort.new.length >= cohort.lost.length ? "#34D399" : "#F87171"} />
+              <KPI label="New Customers" value={cohort.new.length} sub={`RM ${fmt(cohort.newRevenue)} revenue`} color={STATUS.ok} />
+              <KPI label="Retained" value={cohort.retained.length} sub={`RM ${fmt(cohort.retainedRevenue)} revenue`} color={STATUS.info} />
+              <KPI label="Lost" value={cohort.lost.length} sub={`RM ${fmt(cohort.lostRevenue)} prior revenue`} color={STATUS.bad} />
+              <KPI label="Net Customer Δ" value={cohort.new.length - cohort.lost.length} sub={cohort.new.length > cohort.lost.length ? "growth" : "decline"} color={cohort.new.length >= cohort.lost.length ? STATUS.ok : STATUS.bad} />
             </div>
 
             <div style={{display:"grid",gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(min(240px,100%), 1fr))",gap:16}}>
               {[
-                { title: "🟢 New", color: "#34D399", list: cohort.new, valueKey: "total", valueLabel: `${selectedYear} revenue` },
-                { title: "🔵 Retained", color: "#3B82F6", list: cohort.retained, valueKey: "total", valueLabel: `${selectedYear} revenue` },
-                { title: "🔴 Lost", color: "#F87171", list: cohort.lost, valueKey: "prevTotal", valueLabel: `${selectedYear-1} revenue` },
+                { title: "🟢 New", color: STATUS.ok, list: cohort.new, valueKey: "total", valueLabel: `${selectedYear} revenue` },
+                { title: "🔵 Retained", color: STATUS.info, list: cohort.retained, valueKey: "total", valueLabel: `${selectedYear} revenue` },
+                { title: "🔴 Lost", color: STATUS.bad, list: cohort.lost, valueKey: "prevTotal", valueLabel: `${selectedYear-1} revenue` },
               ].map(col => (
                 <Card key={col.title}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
@@ -1716,7 +1789,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             ) : (
               <>
                 <Card style={{marginBottom:20}}>
-                  <div style={{fontSize:14,fontWeight:600,marginBottom:6,color:"#E8633B"}}>💰 Revenue heatmap — Top 12 × Top 12 — {selectedYear}</div>
+                  <div style={{fontSize:14,fontWeight:600,marginBottom:6,color:STATUS.accent}}>💰 Revenue heatmap — Top 12 × Top 12 — {selectedYear}</div>
                   <div style={{fontSize:12,color:"rgba(var(--tint),0.4)",marginBottom:16}}>Cell intensity = RM revenue. Hover for exact values (revenue + quantity).</div>
                   <div style={{overflowX:"auto"}}>
                     <table style={{borderCollapse:"separate",borderSpacing:2,fontSize:11}}>
@@ -1757,7 +1830,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                 </Card>
 
                 <Card>
-                  <div style={{fontSize:14,fontWeight:600,marginBottom:6,color:"#10B981"}}>📦 Quantity heatmap — same Top 12 × Top 12 — {selectedYear}</div>
+                  <div style={{fontSize:14,fontWeight:600,marginBottom:6,color:STATUS.qty}}>📦 Quantity heatmap — same Top 12 × Top 12 — {selectedYear}</div>
                   <div style={{fontSize:12,color:"rgba(var(--tint),0.4)",marginBottom:16}}>Cell intensity = units sold. Same axes as the revenue grid above for direct comparison.</div>
                   <div style={{overflowX:"auto"}}>
                     <table style={{borderCollapse:"separate",borderSpacing:2,fontSize:11}}>
@@ -1818,14 +1891,14 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             ) : (
               <>
                 <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
-                  <KPI label="Annual Target" value={`RM ${fmt(annualTarget)}`} sub={`${selectedSP === "All" ? "team" : selectedSP} · ${selectedYear}`} color="#3B82F6" />
-                  <KPI label="YTD Actual" value={`RM ${fmt(ytd.actual)}`} sub={ytd.lastMonth ? `Jan–${MONTH_NAMES[ytd.lastMonth-1]}` : "no data"} color="#E8633B" />
+                  <KPI label="Annual Target" value={`RM ${fmt(annualTarget)}`} sub={`${selectedSP === "All" ? "team" : selectedSP} · ${selectedYear}`} color={STATUS.info} />
+                  <KPI label="YTD Actual" value={`RM ${fmt(ytd.actual)}`} sub={ytd.lastMonth ? `Jan–${MONTH_NAMES[ytd.lastMonth-1]}` : "no data"} color={STATUS.accent} />
                   <KPI label="YTD Target" value={`RM ${fmt(ytd.target)}`} sub={ytd.lastMonth ? `Jan–${MONTH_NAMES[ytd.lastMonth-1]}` : "—"} color="#94A3B8" />
                   <KPI
                     label="YTD Achievement"
                     value={`${ytdAchievement.toFixed(1)}%`}
                     sub={ytd.actual >= ytd.target ? `▲ RM ${fmt(ytd.actual - ytd.target)} above target` : `▼ RM ${fmt(ytd.target - ytd.actual)} below target`}
-                    color={ytdAchievement >= 100 ? "#34D399" : ytdAchievement >= 90 ? "#F59E0B" : "#F87171"}
+                    color={ytdAchievement >= 100 ? STATUS.ok : ytdAchievement >= 90 ? STATUS.watch : STATUS.bad}
                   />
                 </div>
 
@@ -1849,7 +1922,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />
-                      <Bar dataKey="actual" fill="#E8633B" radius={[3,3,0,0]} name="Actual">
+                      <Bar dataKey="actual" fill={STATUS.accent} radius={[3,3,0,0]} name="Actual">
                         <LabelList dataKey="actual" position="top" formatter={(v) => v > 0 ? fmt(v) : ""} fill={tk.text} fontSize={10} fontFamily="'Space Mono',monospace" />
                       </Bar>
                       <Line type="monotone" dataKey="target" stroke="#94A3B8" strokeWidth={2} strokeDasharray="5 5" dot={{r:4,fill:"#94A3B8"}} name="Target" />
@@ -1880,13 +1953,13 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                           if (target === 0 && actual === 0) return null;
                           const gap = actual - target;
                           const pct = target > 0 ? (actual / target) * 100 : 0;
-                          const color = pct >= 100 ? "#34D399" : pct >= 90 ? "#F59E0B" : pct > 0 ? "#F87171" : "rgba(var(--tint),0.3)";
+                          const color = pct >= 100 ? STATUS.ok : pct >= 90 ? STATUS.watch : pct > 0 ? STATUS.bad : "rgba(var(--tint),0.3)";
                           return (
                             <tr key={m} style={{borderBottom:"1px solid rgba(var(--tint),0.04)"}}>
                               <td style={{padding:"10px 14px",fontWeight:600}}>{m}</td>
                               <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.6)"}}>{fmtFull(target)}</td>
                               <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",fontWeight:600}}>{actual > 0 ? fmtFull(actual) : "—"}</td>
-                              <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",color:gap >= 0 ? "#34D399" : "#F87171"}}>
+                              <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",color:gap >= 0 ? STATUS.ok : STATUS.bad}}>
                                 {actual > 0 ? `${gap >= 0 ? "+" : ""}${fmtFull(gap)}` : "—"}
                               </td>
                               <td style={{padding:"10px 14px"}}>
@@ -1930,7 +2003,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                           }
                           repTargets.filter(t => t.month <= ytd.lastMonth).forEach(t => { ytdT += t.target; });
                           const pct = ytdT > 0 ? (ytdA / ytdT) * 100 : 0;
-                          const color = pct >= 100 ? "#34D399" : pct >= 90 ? "#F59E0B" : pct > 0 ? "#F87171" : "rgba(var(--tint),0.3)";
+                          const color = pct >= 100 ? STATUS.ok : pct >= 90 ? STATUS.watch : pct > 0 ? STATUS.bad : "rgba(var(--tint),0.3)";
                           return (
                             <tr key={sp} style={{borderBottom:"1px solid rgba(var(--tint),0.04)"}}>
                               <td style={{padding:"10px 14px",fontWeight:600}}>

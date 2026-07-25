@@ -23,7 +23,6 @@ export default function LoginScreen() {
       fontFamily: "'DM Sans',sans-serif",
       backgroundImage: "linear-gradient(135deg, rgba(232,99,59,0.05) 0%, rgba(59,130,246,0.04) 100%)",
     }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
       <div style={{
         background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
         borderRadius: 16, padding: "40px 36px", width: "100%", maxWidth: 380,

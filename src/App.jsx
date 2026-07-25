@@ -19,7 +19,6 @@ function FullScreenMessage({ title, detail, accent = "#E8633B", children }) {
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       fontFamily: "'DM Sans',sans-serif", textAlign: "center", padding: 24,
     }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
       <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 2, color: "rgba(255,255,255,0.35)", marginBottom: 8 }}>SEED Malaysia</div>
       <h1 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 12px 0", color: accent }}>{title}</h1>
       {detail && <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", maxWidth: 480, lineHeight: 1.6 }}>{detail}</div>}
@@ -44,7 +43,6 @@ function LoadingScreen({ stage }) {
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       fontFamily: "'DM Sans',sans-serif", textAlign: "center", padding: 24,
     }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
       <style>{`
         @keyframes seedspin { to { transform: rotate(360deg); } }
         @keyframes seedpulse { 0%,100% { opacity:.35 } 50% { opacity:1 } }
