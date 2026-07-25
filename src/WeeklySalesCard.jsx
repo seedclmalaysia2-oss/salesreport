@@ -270,7 +270,7 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
           seriesColors={SP_COLORS}
           title="Seed Malaysia (Total)"
           subtitle="All teams including overseas"
-          accentColor="#EC4899"
+          accentColor="var(--st-region)"
           total={allTotal}
           target={monthlyTarget}
           rows={allRows}

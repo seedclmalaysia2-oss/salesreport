@@ -98,11 +98,11 @@ const YEAR_DASHES = ["6 3", "2 3", "10 4", "1 3", "8 3 2 3"];
 // qty=quantity charts, alt=incidental purple.
 const STATUS_DARK = {
   ok: "#34D399", bad: "#F87171", watch: "#F59E0B", info: "#3B82F6",
-  accent: "#E8633B", qty: "#10B981", alt: "#A855F7",
+  accent: "#E8633B", qty: "#10B981", alt: "#A855F7", region: "#EC4899",
 };
 const STATUS_LIGHT = {
   ok: "#177D58", bad: "#DD0606", watch: "#9A6204", info: "#0662F9",
-  accent: "#CA3C12", qty: "#077D56", alt: "#9831FA",
+  accent: "#CA3C12", qty: "#077D56", alt: "#9831FA", region: "#B31069",
 };
 
 // ============================================================
@@ -721,6 +721,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           --st-watch: ${tk.status.watch};
           --st-info: ${tk.status.info};
           --st-accent: ${tk.status.accent};
+          --st-region: ${tk.status.region};
           --tooltip-bg: ${tk.tooltipBg};
           --tooltip-border: ${tk.tooltipBorder};
           --tooltip-text: ${tk.tooltipText};
@@ -1205,7 +1206,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           <>
             <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
               <KPI label="Local Customers" value={customerIndex.filter(c => c.region === "Local").length.toLocaleString()} sub={`RM ${fmt(customerIndex.filter(c => c.region === "Local").reduce((a,c) => a + c.total, 0))} all-time`} color={STATUS.info} />
-              <KPI label="Overseas / Export" value={customerIndex.filter(c => c.region === "Overseas").length.toLocaleString()} sub={`RM ${fmt(customerIndex.filter(c => c.region === "Overseas").reduce((a,c) => a + c.total, 0))} all-time`} color="#EC4899" />
+              <KPI label="Overseas / Export" value={customerIndex.filter(c => c.region === "Overseas").length.toLocaleString()} sub={`RM ${fmt(customerIndex.filter(c => c.region === "Overseas").reduce((a,c) => a + c.total, 0))} all-time`} color={STATUS.region} />
               <KPI label="Local : Overseas" value={`${((customerIndex.filter(c => c.region === "Local").reduce((a,c) => a + c.total, 0) / Math.max(customerIndex.reduce((a,c) => a + c.total, 0), 1)) * 100).toFixed(0)}% / ${((customerIndex.filter(c => c.region === "Overseas").reduce((a,c) => a + c.total, 0) / Math.max(customerIndex.reduce((a,c) => a + c.total, 0), 1)) * 100).toFixed(0)}%`} sub="of all-time revenue" color={STATUS.qty} />
             </div>
 
@@ -1248,7 +1249,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       <YAxis type="category" dataKey="customer" tick={{fill:tk.chartTickFillDim,fontSize:11}} axisLine={false} width={135} />
                       <Tooltip formatter={(v) => fmtFull(v)} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
                       <Bar dataKey="total" name="Total Sales" radius={[0,4,4,0]}>
-                        {topOverseasCustomers.map((_, i) => <Cell key={i} fill="#EC4899" opacity={1 - i * 0.035} />)}
+                        {topOverseasCustomers.map((_, i) => <Cell key={i} fill={STATUS.region} opacity={1 - i * 0.035} />)}
                         <LabelList dataKey="total" position="right" formatter={(v) => fmt(v)} fill={tk.text} fontSize={11} fontFamily="'Space Mono',monospace" />
                       </Bar>
                     </BarChart>
