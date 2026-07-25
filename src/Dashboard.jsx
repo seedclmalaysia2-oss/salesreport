@@ -88,6 +88,62 @@ const YEARS_FALLBACK = [2022,2023,2024,2025,2026];
 // selected year stays solid so it still reads as the subject.
 const YEAR_DASHES = ["6 3", "2 3", "10 4", "1 3", "8 3 2 3"];
 
+// Texture as a second channel for the stacked bar charts, where reps sit in one
+// column and colour is otherwise the only thing telling adjacent segments apart
+// (WCAG 1.4.1). Each rep gets a signature weave layered over their fill, so a
+// segment is identifiable in greyscale and under colour-blindness — and because
+// the Bar's fill becomes the pattern, the chart legend swatch inherits the
+// texture for free. Kept deliberately faint to respect the flat, calm surface.
+const seriesSlug = (sp) => `seedpat-${String(sp).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+const seriesFill = (colors, sp) => (colors[sp] ? `url(#${seriesSlug(sp)})` : "#888");
+
+// relative luminance, to pick a texture overlay that reads on the rep's OWN fill
+// (black on light colours, white on dark) rather than on the theme background.
+function hexLum(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(c => {
+    c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+}
+
+// One <pattern> per rep, keyed to SALESPEOPLE_ORDER so the weave is stable per
+// person. Six textures: solid / fwd-diagonal / dots / back-diagonal / horizontal
+// / crosshatch. Rendered into a document-scoped hidden <svg>; paint-server refs
+// resolve across the whole document, so every chart can point at these ids.
+function texturePaths(kind, ov) {
+  const s = { stroke: ov, strokeWidth: 1.1, fill: "none", shapeRendering: "crispEdges" };
+  switch (kind) {
+    case "diag":   return <path d="M-1,1 L1,-1 M0,8 L8,0 M7,9 L9,7" {...s} />;
+    case "back":   return <path d="M7,-1 L9,1 M0,0 L8,8 M-1,7 L1,9" {...s} />;
+    case "dots":   return <><circle cx="2" cy="2" r="1" fill={ov} /><circle cx="6" cy="6" r="1" fill={ov} /></>;
+    case "horiz":  return <path d="M0,2 L8,2 M0,6 L8,6" {...s} />;
+    case "cross":  return <path d="M0,8 L8,0 M0,0 L8,8" {...s} />;
+    default:       return null; // solid
+  }
+}
+const TEXTURE_ORDER = ["solid", "diag", "dots", "back", "horiz", "cross"];
+
+function ChartPatterns({ colors, order }) {
+  return (
+    <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true" focusable="false">
+      <defs>
+        {order.map((sp, i) => {
+          const color = colors[sp];
+          if (!color) return null;
+          const ov = hexLum(color) > 0.45 ? "rgba(0,0,0,0.34)" : "rgba(255,255,255,0.45)";
+          return (
+            <pattern key={sp} id={seriesSlug(sp)} width="8" height="8" patternUnits="userSpaceOnUse">
+              <rect width="8" height="8" fill={color} />
+              {texturePaths(TEXTURE_ORDER[i % TEXTURE_ORDER.length], ov)}
+            </pattern>
+          );
+        })}
+      </defs>
+    </svg>
+  );
+}
+
 // Semantic status colours, per theme family — the same reason the series palette
 // is split. The bright dark-theme values (#34D399 etc.) sit at ~2.3–3:1 on the
 // light "sunlight" themes, so a headline number or a trend arrow was failing
@@ -731,6 +787,10 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         ${RESPONSIVE_CSS}
       `}</style>
 
+      {/* Document-scoped series textures for the stacked charts. Re-rendered per
+          theme so the pattern base colours track the active series palette. */}
+      <ChartPatterns colors={COLORS} order={SALESPEOPLE_ORDER} />
+
       <div style={{
         background:"linear-gradient(135deg, rgba(232,99,59,0.08) 0%, rgba(59,130,246,0.05) 100%)",
         borderBottom:"1px solid rgba(var(--tint),0.06)",
@@ -1083,7 +1143,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   {selectedSP === "All" ? (
                     <>
                       {SALESPEOPLE.filter(sp => SUMMARY.some(s => s.sp === sp && s.year === selectedYear && s.total > 0)).map((sp, idx, arr) => (
-                        <Bar key={sp} dataKey={sp} stackId="a" fill={COLORS[sp] || "#888"} radius={idx === arr.length - 1 ? [3,3,0,0] : [0,0,0,0]}>
+                        <Bar key={sp} dataKey={sp} stackId="a" fill={seriesFill(COLORS, sp)} radius={idx === arr.length - 1 ? [3,3,0,0] : [0,0,0,0]}>
                           {idx === arr.length - 1 && (
                             <LabelList
                               dataKey="total"
@@ -1131,7 +1191,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   {selectedSP === "All" ? (
                     <>
                       {SALESPEOPLE.filter(sp => SUMMARY.some(s => s.sp === sp && s.year === selectedYear && s.total > 0)).map((sp, idx, arr) => (
-                        <Bar key={sp} dataKey={sp} stackId="qty" fill={COLORS[sp] || "#888"} radius={idx === arr.length - 1 ? [3,3,0,0] : [0,0,0,0]}>
+                        <Bar key={sp} dataKey={sp} stackId="qty" fill={seriesFill(COLORS, sp)} radius={idx === arr.length - 1 ? [3,3,0,0] : [0,0,0,0]}>
                           {idx === arr.length - 1 && (
                             <LabelList dataKey="total" position="top" formatter={(v) => v > 0 ? v.toLocaleString() : ""} fill={tk.text} fontSize={11} fontFamily="'Space Mono',monospace" />
                           )}
@@ -1701,7 +1761,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     <YAxis type="category" dataKey="brand" tick={{fill:tk.chartTickFillDim,fontSize:10}} axisLine={false} width={75} />
                     <Tooltip content={<CustomTooltip />} />
                     <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />
-                    {SALESPEOPLE.map(sp => <Bar key={sp} dataKey={sp} stackId="x" fill={COLORS[sp] || "#888"} />)}
+                    {SALESPEOPLE.map(sp => <Bar key={sp} dataKey={sp} stackId="x" fill={seriesFill(COLORS, sp)} />)}
                   </BarChart>
                 </ResponsiveContainer>
               </Card>
