@@ -7,12 +7,23 @@ colors:
   status-watch: "#F59E0B"
   status-behind: "#F87171"
   status-info: "#3B82F6"
-  series-alan: "#E8633B"
-  series-dino: "#3B82F6"
-  series-khen: "#10B981"
-  series-sakinah: "#A855F7"
-  series-simon: "#F59E0B"
-  series-seed: "#EC4899"
+  status-ahead-light: "#177D58"
+  status-watch-light: "#9A6204"
+  status-behind-light: "#DD0606"
+  status-info-light: "#0662F9"
+  signal-orange-light: "#CA3C12"
+  series-alan-dark: "#E28B59"
+  series-dino-dark: "#6890CD"
+  series-khen-dark: "#4DEDE0"
+  series-sakinah-dark: "#9A3DF0"
+  series-simon-dark: "#E0D046"
+  series-seed-dark: "#D42F71"
+  series-alan-light: "#E06711"
+  series-dino-light: "#1832C6"
+  series-khen-light: "#2A9C70"
+  series-sakinah-light: "#C259E2"
+  series-simon-light: "#5C5410"
+  series-seed-light: "#7C1968"
   slate-bg: "#0F172A"
   slate-ink: "#F1F5F9"
   midnight-bg: "#0B1426"
@@ -164,8 +175,9 @@ The status vocabulary. These four say how a number is performing and nothing els
 - **Info Blue** (#3B82F6): neutral emphasis and non-destructive controls (View, Refresh).
 
 ### Tertiary
-The series vocabulary. These six identify a salesperson in a chart and carry no judgement.
-- **Alan** (#E8633B) · **Dino** (#3B82F6) · **Khen** (#10B981) · **Sakinah** (#A855F7) · **Simon** (#F59E0B) · **Seed Malaysia** (#EC4899)
+The series vocabulary. Six colours identify a salesperson in a chart and carry no judgement — and there are **two** verified sets, one per theme family, because no single set can clear 3:1 on both a near-black and a near-white background at once. Forcing six colours into that shared luminance band leaves them indistinguishable under colour-blind vision; splitting frees each set to separate by lightness as well as hue. Both were solver-optimised: every colour clears 3:1 on its own backgrounds, and worst-case separation is dE ≥ 20 (normal / protanopia / deuteranopia) and ≥ 15 (tritanopia). Hues stay near each rep's original so people recognise their own.
+- **Dark themes** — Alan #E28B59 · Dino #6890CD · Khen #4DEDE0 · Sakinah #9A3DF0 · Simon #E0D046 · Seed Malaysia #D42F71
+- **Light themes** — Alan #E06711 · Dino #1832C6 · Khen #2A9C70 · Sakinah #C259E2 · Simon #5C5410 · Seed Malaysia #7C1968
 
 ### Neutral
 Five complete themes ship, each defining a background, an ink, and a tint triplet that every border, fill and muted text derives from via `rgba(var(--tint), α)`.
@@ -175,15 +187,17 @@ Five complete themes ship, each defining a background, an ink, and a tint triple
 - **Crisp** (#F1F5F9 bg / #0F172A ink): cool light. The strongest daylight option.
 - **Carbon** (#000000 bg / #FFFFFF ink): maximum contrast, for the worst lighting or the sharpest eyes.
 
+Both the status and series vocabularies are theme-aware: the bright values above are the dark-theme set, and each has a darkened light-theme variant (see the `*-light` tokens in the frontmatter) that clears 4.5:1 on both #F1F5F9 and #FAF7F2 while still giving white text ≥5:1 for button fills. Delivery is split by rendering context: module-level CSS reads `--st-*` custom properties on the theme wrapper; chart fills read a JS `STATUS`/`COLORS` object, because CSS `var()` does not resolve inside an SVG `fill`/`stroke` attribute.
+
 Surface hierarchy inside a theme is built from the tint alone: page background at 0%, cards at 2%, KPI panels at 3%, hover states at 4–5%, borders at 6%.
 
 ### Named Rules
 
-**The Signal Rule.** Signal Orange appears on no more than 10% of any screen, and only where the user can act or has acted. It is forbidden as decoration, as a heading colour, and as a chart fill for anything other than Alan's series.
+**The Signal Rule.** Signal Orange appears on no more than 10% of any screen, and only where the user can act or has acted. It is forbidden as decoration, as a heading colour, and as a chart fill for a salesperson's series.
 
-**The Two-Palette Rule.** Series colours identify *who*; status colours report *how it is going*. They must never be legible as each other. Three collisions exist today by inheritance — Alan shares Signal Orange, Simon shares Watch Amber, Dino shares Info Blue — so any chart that shows both a rep identity and a performance state must separate them by position, label, or shape, never by hue alone.
+**The Two-Palette Rule.** Series colours identify *who*; status colours report *how it is going*. They must never be legible as each other, and the two vocabularies are now fully disjoint — the series palette was rebuilt so no rep shares a status hue. Even so, any chart showing both identity and performance should still separate them by position, label, or shape as well as colour.
 
-**The Daylight Rule.** The light themes are not a courtesy. Sunlight readability is a stated product requirement, so no colour decision ships until it has been checked in Crisp as well as Slate. A value that only resolves on a dark background is unfinished.
+**The Daylight Rule.** The light themes are not a courtesy. Sunlight readability is a stated product requirement, so no colour decision ships until it has been checked in Crisp as well as Slate. Every status and series colour now has a verified light-theme variant clearing 4.5:1; a value that only resolves on a dark background is unfinished.
 
 ## 3. Typography
 
@@ -273,9 +287,9 @@ The system's most repeated object and the one that carries the north star. An up
 - **Don't** produce a **spreadsheet dump** — walls of figures at uniform weight where the reader does the analysis. Rank, group, and de-emphasise on every screen.
 - **Don't** drift toward **heavy corporate BI** (Power BI, Tableau): filter rails flanking the content, chrome competing with the numbers, or anything requiring training before a rep can read their own figures.
 - **Don't** put a shadow on a resting surface. Shadows mean "floating and dismissable" — tooltip, modal, login card. Nothing else.
-- **Don't** distinguish salespeople by colour alone in a chart, and never let a series colour be read as a status colour. Alan collides with Signal Orange, Simon with Watch Amber, Dino with Info Blue.
-- **Don't** rely on the KPI component's `#fff` colour fallback. It is invisible on Paper and Crisp; always pass an explicit status colour.
-- **Don't** load a font the interface does not use. Space Grotesk is currently requested on every page load and referenced nowhere in `src/` — remove it, and de-duplicate the repeated DM Sans / Space Mono requests across the `<link>` tags.
+- **Don't** distinguish salespeople by colour alone in a chart. The palettes are now disjoint (no rep shares a status hue) and per-theme, but colour still needs a second channel — position, a direct label, or the year-line dash pattern.
+- **Don't** hardcode a bright status/series hex as foreground text or a chart fill. Route it through `STATUS.*` (charts) or `var(--st-*)` (CSS) so it picks up the light-theme variant; a raw dark-theme value fails contrast on Paper and Crisp.
+- **Don't** reintroduce a font the interface doesn't use, or inject font `<link>` tags from inside React. Fonts load once from `index.html` (Inter / DM Sans / Space Mono only).
 - **Don't** nest a card inside a card, or reach for a card when a plain section with a heading would do.
 - **Don't** introduce a second sans-serif family. Contrast comes from weight, size, and the mono/proportional split.
 - **Don't** add gradients, glass blurs, coloured left-edge stripes, or gradient text anywhere. This is an instrument face.
