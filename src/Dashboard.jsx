@@ -365,6 +365,10 @@ function migrateThemeKey(stored) {
 export default function Dashboard({ data: incomingData, user, brandsLoading, onLogout, onRefresh }) {
   const isMobile = useMediaQuery("(max-width: 768px)");
   const isNarrow = useMediaQuery("(max-width: 1100px)");
+  // Recharts entrance animations are JS-driven, so the global CSS
+  // reduced-motion reset can't reach them; gate them here instead. No effect
+  // for the vast majority without the preference set.
+  const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [tab, setTab] = useState("overview");
   const [selectedYear, setSelectedYear] = useState(2026);
   const [selectedSP, setSelectedSP] = useState("All");
@@ -1012,9 +1016,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     <XAxis dataKey="month" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} />
                     <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Area type="monotone" dataKey="total" stroke={STATUS.accent} fill="url(#totalGrad)" strokeWidth={2} name="Actual" />
+                    <Area isAnimationActive={!reduceMotion} type="monotone" dataKey="total" stroke={STATUS.accent} fill="url(#totalGrad)" strokeWidth={2} name="Actual" />
                     {annualTarget > 0 && (
-                      <Line type="monotone" dataKey="target" stroke="#94A3B8" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Target" />
+                      <Line isAnimationActive={!reduceMotion} type="monotone" dataKey="target" stroke="#94A3B8" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Target" />
                     )}
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -1034,7 +1038,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     <XAxis dataKey="month" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} />
                     <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={(v) => v.toLocaleString()} />
                     <Tooltip formatter={(v) => `${v.toLocaleString()} units`} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                    <Area type="monotone" dataKey="total" stroke={STATUS.qty} fill="url(#qtyGrad)" strokeWidth={2} name="Quantity" />
+                    <Area isAnimationActive={!reduceMotion} type="monotone" dataKey="total" stroke={STATUS.qty} fill="url(#qtyGrad)" strokeWidth={2} name="Quantity" />
                   </AreaChart>
                 </ResponsiveContainer>
               </Card>
@@ -1045,7 +1049,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                 <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Revenue by Team — {selectedYear}</div>
                 <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
-                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={95} dataKey="value" paddingAngle={3} stroke="none">
+                    <Pie isAnimationActive={!reduceMotion} data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={95} dataKey="value" paddingAngle={3} stroke="none">
                       {pieData.map((_, i) => <Cell key={i} fill={COLORS[pieData[i]?.name] || PIE_COLORS[i]} />)}
                     </Pie>
                     <Tooltip formatter={(v) => fmtFull(v)} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
@@ -1143,7 +1147,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   {selectedSP === "All" ? (
                     <>
                       {SALESPEOPLE.filter(sp => SUMMARY.some(s => s.sp === sp && s.year === selectedYear && s.total > 0)).map((sp, idx, arr) => (
-                        <Bar key={sp} dataKey={sp} stackId="a" fill={seriesFill(COLORS, sp)} radius={idx === arr.length - 1 ? [3,3,0,0] : [0,0,0,0]}>
+                        <Bar isAnimationActive={!reduceMotion} key={sp} dataKey={sp} stackId="a" fill={seriesFill(COLORS, sp)} radius={idx === arr.length - 1 ? [3,3,0,0] : [0,0,0,0]}>
                           {idx === arr.length - 1 && (
                             <LabelList
                               dataKey="total"
@@ -1158,7 +1162,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       ))}
                     </>
                   ) : (
-                    <Bar dataKey={selectedSP} fill={COLORS[selectedSP] || "#888"} radius={[4,4,0,0]}>
+                    <Bar isAnimationActive={!reduceMotion} dataKey={selectedSP} fill={COLORS[selectedSP] || "#888"} radius={[4,4,0,0]}>
                       <LabelList
                         dataKey={selectedSP}
                         position="top"
@@ -1191,7 +1195,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   {selectedSP === "All" ? (
                     <>
                       {SALESPEOPLE.filter(sp => SUMMARY.some(s => s.sp === sp && s.year === selectedYear && s.total > 0)).map((sp, idx, arr) => (
-                        <Bar key={sp} dataKey={sp} stackId="qty" fill={seriesFill(COLORS, sp)} radius={idx === arr.length - 1 ? [3,3,0,0] : [0,0,0,0]}>
+                        <Bar isAnimationActive={!reduceMotion} key={sp} dataKey={sp} stackId="qty" fill={seriesFill(COLORS, sp)} radius={idx === arr.length - 1 ? [3,3,0,0] : [0,0,0,0]}>
                           {idx === arr.length - 1 && (
                             <LabelList dataKey="total" position="top" formatter={(v) => v > 0 ? v.toLocaleString() : ""} fill={tk.text} fontSize={11} fontFamily="'Space Mono',monospace" />
                           )}
@@ -1199,7 +1203,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       ))}
                     </>
                   ) : (
-                    <Bar dataKey={selectedSP} fill={COLORS[selectedSP] || "#888"} radius={[4,4,0,0]}>
+                    <Bar isAnimationActive={!reduceMotion} dataKey={selectedSP} fill={COLORS[selectedSP] || "#888"} radius={[4,4,0,0]}>
                       <LabelList dataKey={selectedSP} position="top" formatter={(v) => v > 0 ? v.toLocaleString() : ""} fill={tk.text} fontSize={11} fontFamily="'Space Mono',monospace" />
                     </Bar>
                   )}
@@ -1226,7 +1230,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   <Tooltip content={<CustomTooltip />} />
                   <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />
                   {YEARS.map((y, i) => (
-                    <Line key={y} type="monotone" dataKey={y} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={y===selectedYear?3:1.5} strokeDasharray={y===selectedYear?undefined:YEAR_DASHES[i % YEAR_DASHES.length]} dot={false} name={y.toString()} opacity={y===selectedYear?1:0.55} />
+                    <Line isAnimationActive={!reduceMotion} key={y} type="monotone" dataKey={y} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={y===selectedYear?3:1.5} strokeDasharray={y===selectedYear?undefined:YEAR_DASHES[i % YEAR_DASHES.length]} dot={false} name={y.toString()} opacity={y===selectedYear?1:0.55} />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
@@ -1253,7 +1257,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       <XAxis dataKey="year" tick={{fill:tk.chartTickFill,fontSize:10}} axisLine={false} tickLine={false} />
                       <YAxis hide />
                       <Tooltip formatter={(v) => fmtFull(v)} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                      <Bar dataKey="total" fill={COLORS[sp] || "#888"} radius={[3,3,0,0]} opacity={0.8} />
+                      <Bar isAnimationActive={!reduceMotion} dataKey="total" fill={COLORS[sp] || "#888"} radius={[3,3,0,0]} opacity={0.8} />
                     </BarChart>
                   </ResponsiveContainer>
                 </Card>
@@ -1285,7 +1289,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       <XAxis type="number" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                       <YAxis type="category" dataKey="customer" tick={{fill:tk.chartTickFillDim,fontSize:11}} axisLine={false} width={135} />
                       <Tooltip formatter={(v) => fmtFull(v)} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                      <Bar dataKey="total" name="Total Sales" radius={[0,4,4,0]}>
+                      <Bar isAnimationActive={!reduceMotion} dataKey="total" name="Total Sales" radius={[0,4,4,0]}>
                         {topLocalCustomers.map((_, i) => <Cell key={i} fill={STATUS.info} opacity={1 - i * 0.035} />)}
                         <LabelList dataKey="total" position="right" formatter={(v) => fmt(v)} fill={tk.text} fontSize={11} fontFamily="'Space Mono',monospace" />
                       </Bar>
@@ -1308,7 +1312,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       <XAxis type="number" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                       <YAxis type="category" dataKey="customer" tick={{fill:tk.chartTickFillDim,fontSize:11}} axisLine={false} width={135} />
                       <Tooltip formatter={(v) => fmtFull(v)} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                      <Bar dataKey="total" name="Total Sales" radius={[0,4,4,0]}>
+                      <Bar isAnimationActive={!reduceMotion} dataKey="total" name="Total Sales" radius={[0,4,4,0]}>
                         {topOverseasCustomers.map((_, i) => <Cell key={i} fill={STATUS.region} opacity={1 - i * 0.035} />)}
                         <LabelList dataKey="total" position="right" formatter={(v) => fmt(v)} fill={tk.text} fontSize={11} fontFamily="'Space Mono',monospace" />
                       </Bar>
@@ -1366,7 +1370,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                             <XAxis type="number" tick={{fill:tk.chartTickFill,fontSize:10}} axisLine={false} tickFormatter={fmt} />
                             <YAxis type="category" dataKey="customer" tick={{fill:tk.chartTickFillDim,fontSize:10}} axisLine={false} width={110} />
                             <Tooltip formatter={(v) => fmtFull(v)} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                            <Bar dataKey="total" fill={COLORS[sp] || "#888"} radius={[0,3,3,0]}>
+                            <Bar isAnimationActive={!reduceMotion} dataKey="total" fill={COLORS[sp] || "#888"} radius={[0,3,3,0]}>
                               <LabelList dataKey="total" position="right" formatter={(v) => fmt(v)} fill={tk.text} fontSize={11} fontFamily="'Space Mono',monospace" />
                             </Bar>
                           </BarChart>
@@ -1452,10 +1456,10 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   {selectedSP === "All" && <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />}
                   {selectedSP === "All" ? (
                     SALESPEOPLE.map(sp => (
-                      <Bar key={sp} dataKey={sp} fill={COLORS[sp] || "#888"} radius={[2,2,0,0]} />
+                      <Bar isAnimationActive={!reduceMotion} key={sp} dataKey={sp} fill={COLORS[sp] || "#888"} radius={[2,2,0,0]} />
                     ))
                   ) : (
-                    <Bar dataKey={selectedSP} fill={COLORS[selectedSP] || "#888"} radius={[3,3,0,0]}>
+                    <Bar isAnimationActive={!reduceMotion} dataKey={selectedSP} fill={COLORS[selectedSP] || "#888"} radius={[3,3,0,0]}>
                       <LabelList
                         dataKey={selectedSP}
                         position="top"
@@ -1481,7 +1485,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                   <Tooltip content={<CustomTooltip />} />
                   {selectedSP === "All" ? (
-                    <Line type="monotone" dataKey="total" stroke={STATUS.accent} strokeWidth={3} dot={{r:5,fill:STATUS.accent}} name="Total Revenue">
+                    <Line isAnimationActive={!reduceMotion} type="monotone" dataKey="total" stroke={STATUS.accent} strokeWidth={3} dot={{r:5,fill:STATUS.accent}} name="Total Revenue">
                       <LabelList
                         dataKey="total"
                         position="top"
@@ -1493,7 +1497,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       />
                     </Line>
                   ) : (
-                    <Line type="monotone" dataKey={selectedSP} stroke={COLORS[selectedSP] || "#888"} strokeWidth={3} dot={{r:5,fill:COLORS[selectedSP] || "#888"}} name={selectedSP}>
+                    <Line isAnimationActive={!reduceMotion} type="monotone" dataKey={selectedSP} stroke={COLORS[selectedSP] || "#888"} strokeWidth={3} dot={{r:5,fill:COLORS[selectedSP] || "#888"}} name={selectedSP}>
                       <LabelList
                         dataKey={selectedSP}
                         position="top"
@@ -1550,7 +1554,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                             <XAxis dataKey="year" tick={{fill:tk.chartTickFill,fontSize:10}} axisLine={false} tickLine={false} />
                             <YAxis hide />
                             <Tooltip formatter={(v) => fmtFull(v)} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                            <Bar dataKey="total" fill={COLORS[sp] || "#888"} radius={[3,3,0,0]} opacity={0.85}>
+                            <Bar isAnimationActive={!reduceMotion} dataKey="total" fill={COLORS[sp] || "#888"} radius={[3,3,0,0]} opacity={0.85}>
                               <LabelList dataKey="total" position="top" formatter={(v) => v > 0 ? fmt(v) : ""} fill={tk.text} fontSize={9} fontFamily="'Space Mono',monospace" />
                             </Bar>
                           </BarChart>
@@ -1629,7 +1633,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                         <Tooltip content={<CustomTooltip />} />
                         <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />
                         {YEARS.map((y, i) => (
-                          <Line key={y} type="monotone" dataKey={y} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} dot={false} name={y.toString()} />
+                          <Line isAnimationActive={!reduceMotion} key={y} type="monotone" dataKey={y} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} dot={false} name={y.toString()} />
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
@@ -1644,7 +1648,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                           <XAxis dataKey="year" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} />
                           <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                           <Tooltip formatter={(v) => fmtFull(v)} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                          <Bar dataKey="total" fill={STATUS.accent} radius={[3,3,0,0]} />
+                          <Bar isAnimationActive={!reduceMotion} dataKey="total" fill={STATUS.accent} radius={[3,3,0,0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     </Card>
@@ -1659,7 +1663,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                             <XAxis type="number" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                             <YAxis type="category" dataKey="brand" tick={{fill:tk.chartTickFillDim,fontSize:11}} axisLine={false} width={75} />
                             <Tooltip formatter={(v, name, props) => [`${fmtFull(v)}  (${(props.payload.qty || 0).toLocaleString()} units)`, "Revenue"]} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                            <Bar dataKey="amt" fill={STATUS.accent} radius={[0,3,3,0]}>
+                            <Bar isAnimationActive={!reduceMotion} dataKey="amt" fill={STATUS.accent} radius={[0,3,3,0]}>
                               <LabelList dataKey="amt" position="right" formatter={(v) => fmt(v)} fill={tk.text} fontSize={10} fontFamily="'Space Mono',monospace" />
                             </Bar>
                           </BarChart>
@@ -1679,7 +1683,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                             <XAxis type="number" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={(v) => v.toLocaleString()} />
                             <YAxis type="category" dataKey="brand" tick={{fill:tk.chartTickFillDim,fontSize:11}} axisLine={false} width={75} />
                             <Tooltip formatter={(v, name, props) => [`${v.toLocaleString()} units  (${fmtFull(props.payload.amt || 0)})`, "Quantity"]} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                            <Bar dataKey="qty" fill={STATUS.qty} radius={[0,3,3,0]}>
+                            <Bar isAnimationActive={!reduceMotion} dataKey="qty" fill={STATUS.qty} radius={[0,3,3,0]}>
                               <LabelList dataKey="qty" position="right" formatter={(v) => v.toLocaleString()} fill={tk.text} fontSize={10} fontFamily="'Space Mono',monospace" />
                             </Bar>
                           </BarChart>
@@ -1720,7 +1724,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     <Tooltip
                       formatter={(v, name, props) => [`${fmtFull(v)}  (${(props.payload.qty || 0).toLocaleString()} units)`, "Revenue"]}
                       contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                    <Bar dataKey="amt" radius={[0,4,4,0]}>
+                    <Bar isAnimationActive={!reduceMotion} dataKey="amt" radius={[0,4,4,0]}>
                       {brandYearTotals.slice(0,20).map((_, i) => <Cell key={i} fill={STATUS.accent} opacity={1 - i * 0.025} />)}
                       <LabelList dataKey="amt" position="right" formatter={(v) => fmt(v)} fill={tk.text} fontSize={11} fontFamily="'Space Mono',monospace" />
                     </Bar>
@@ -1741,7 +1745,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       <Tooltip
                         formatter={(v, name, props) => [`${v.toLocaleString()} units  (${fmtFull(props.payload.amt || 0)})`, "Quantity"]}
                         contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} />
-                      <Bar dataKey="qty" radius={[0,4,4,0]}>
+                      <Bar isAnimationActive={!reduceMotion} dataKey="qty" radius={[0,4,4,0]}>
                         {brandYearTotalsByQty.slice(0,20).map((_, i) => <Cell key={i} fill={STATUS.qty} opacity={1 - i * 0.025} />)}
                         <LabelList dataKey="qty" position="right" formatter={(v) => v.toLocaleString()} fill={tk.text} fontSize={11} fontFamily="'Space Mono',monospace" />
                       </Bar>
@@ -1761,7 +1765,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     <YAxis type="category" dataKey="brand" tick={{fill:tk.chartTickFillDim,fontSize:10}} axisLine={false} width={75} />
                     <Tooltip content={<CustomTooltip />} />
                     <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />
-                    {SALESPEOPLE.map(sp => <Bar key={sp} dataKey={sp} stackId="x" fill={seriesFill(COLORS, sp)} />)}
+                    {SALESPEOPLE.map(sp => <Bar isAnimationActive={!reduceMotion} key={sp} dataKey={sp} stackId="x" fill={seriesFill(COLORS, sp)} />)}
                   </BarChart>
                 </ResponsiveContainer>
               </Card>
@@ -1776,7 +1780,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     <Tooltip content={<CustomTooltip />} />
                     <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:10}}>{v}</span>} />
                     {top8BrandNames.map((b, i) => (
-                      <Line key={b} type="monotone" dataKey={b} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} dot={false} />
+                      <Line isAnimationActive={!reduceMotion} key={b} type="monotone" dataKey={b} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} dot={false} />
                     ))}
                   </LineChart>
                 </ResponsiveContainer>
@@ -1983,10 +1987,10 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />
-                      <Bar dataKey="actual" fill={STATUS.accent} radius={[3,3,0,0]} name="Actual">
+                      <Bar isAnimationActive={!reduceMotion} dataKey="actual" fill={STATUS.accent} radius={[3,3,0,0]} name="Actual">
                         <LabelList dataKey="actual" position="top" formatter={(v) => v > 0 ? fmt(v) : ""} fill={tk.text} fontSize={10} fontFamily="'Space Mono',monospace" />
                       </Bar>
-                      <Line type="monotone" dataKey="target" stroke="#94A3B8" strokeWidth={2} strokeDasharray="5 5" dot={{r:4,fill:"#94A3B8"}} name="Target" />
+                      <Line isAnimationActive={!reduceMotion} type="monotone" dataKey="target" stroke="#94A3B8" strokeWidth={2} strokeDasharray="5 5" dot={{r:4,fill:"#94A3B8"}} name="Target" />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </Card>

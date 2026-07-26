@@ -19,6 +19,55 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Inter:wght@400..700&family=Space+Mono:wght@400;700&display=swap"
     />
+    <style>
+      /* ------------------------------------------------------------------
+         Global accessibility layer. The app styles inline, so these
+         cross-cutting concerns — keyboard focus, hover/press feedback,
+         reduced motion — live here once rather than being repeated (or
+         forgotten) per component. Applies document-wide, so it covers the
+         pre-auth login and loading screens as well as the dashboard.
+         ------------------------------------------------------------------ */
+
+      /* Visible keyboard focus on every control. The text inputs set
+         `outline:none` inline to drop the default ring; !important restores a
+         ring for keyboard/AT users only (:focus-visible), never on mouse
+         click. Signal Orange reads on all five themes and the dark auth
+         screens, and a focused control is exactly "where you can act", so the
+         accent is on-doctrine here. */
+      :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+        outline: 2px solid #E8633B !important;
+        outline-offset: 2px;
+      }
+      /* No ring on pointer interaction — keyboard only. */
+      a:focus:not(:focus-visible),
+      button:focus:not(:focus-visible),
+      input:focus:not(:focus-visible),
+      select:focus:not(:focus-visible),
+      textarea:focus:not(:focus-visible) { outline: none; }
+
+      /* Subtle, universal hover/press feedback. filter and transform are not
+         set in the inline styles, so these layer on without touching any
+         control's own background or colour. */
+      button:not(:disabled):hover { filter: brightness(1.08); }
+      button:not(:disabled):active { transform: translateY(0.5px); }
+      button:disabled { cursor: not-allowed; }
+
+      /* Remove the 300ms tap delay on controls (this is a phone-first app). */
+      a, button, select, input, [role="button"] { touch-action: manipulation; }
+
+      /* Reduced motion is not optional. Freeze the loading spinner, the pulse,
+         and the indeterminate bar, and make transitions instant. Progress is
+         still conveyed: the loading screen's elapsed counter is JS-driven and
+         keeps ticking. */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
   </head>
   <body style="margin:0;background:#0A0A0F;">
     <div id="root"></div>
