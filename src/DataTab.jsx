@@ -7,7 +7,7 @@
 // (Dashboard gates it), but nothing here is load-bearing for security — the
 // database is.
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, Fragment } from "react";
 import { parseFile, parseFilename } from "./lib/parseXlsx.js";
 import {
   listFiles, uploadFile, replaceFile,
@@ -31,6 +31,21 @@ function fmtDate(ts) {
   return ts
     ? new Date(ts).toLocaleString("en-MY", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" })
     : "—";
+}
+
+// Key like "2026-05" for grouping and label like "May 2026" for display. Files
+// with no uploadedAt fall into an "Unknown" bucket that sorts last.
+function monthKeyFor(ts) {
+  if (!ts) return "unknown";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "unknown";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabelFor(key) {
+  if (key === "unknown") return "Unknown date";
+  const [y, m] = key.split("-").map(Number);
+  return `${MONTH_NAMES[m - 1]} ${y}`;
 }
 
 const Card = ({children, style}) => (
@@ -142,6 +157,63 @@ export default function DataTab({ data }) {
       return mul * ((av ?? 0) - (bv ?? 0));
     });
   }, [files, sort, query]);
+
+  // Group active files by upload month. Order: newest month first, "Unknown"
+  // last. Each group keeps the current sort order for the files inside it.
+  const grouped = useMemo(() => {
+    const buckets = new Map();
+    for (const entry of active) {
+      const key = monthKeyFor(entry.uploadedAt);
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(entry);
+    }
+    const keys = [...buckets.keys()].sort((a, b) => {
+      if (a === "unknown") return 1;
+      if (b === "unknown") return -1;
+      return b.localeCompare(a);
+    });
+    return keys.map(key => ({
+      key,
+      label: monthLabelFor(key),
+      entries: buckets.get(key),
+      totalSize: buckets.get(key).reduce((s, e) => s + (e.sizeBytes || 0), 0),
+    }));
+  }, [active]);
+
+  // Which month sections are expanded. Default: only the most recent month.
+  // The user's clicks stick, but new months auto-open when they first appear.
+  const [openMonths, setOpenMonths] = useState(() => new Set());
+  const [seenMonths, setSeenMonths] = useState(() => new Set());
+  useEffect(() => {
+    if (!grouped.length) return;
+    const fresh = grouped.map(g => g.key).filter(k => !seenMonths.has(k));
+    if (!fresh.length) return;
+    setSeenMonths(prev => {
+      const next = new Set(prev);
+      fresh.forEach(k => next.add(k));
+      return next;
+    });
+    setOpenMonths(prev => {
+      // First render: open only the newest bucket. After that: open new arrivals.
+      if (prev.size === 0 && seenMonths.size === 0) {
+        return new Set([grouped[0].key]);
+      }
+      const next = new Set(prev);
+      fresh.forEach(k => next.add(k));
+      return next;
+    });
+  }, [grouped, seenMonths]);
+
+  const toggleMonth = (key) => {
+    setOpenMonths(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+  const expandAllMonths = () => setOpenMonths(new Set(grouped.map(g => g.key)));
+  const collapseAllMonths = () => setOpenMonths(new Set());
 
   const liveCount = useMemo(() => files.filter(f => !f.deletedAt).length, [files]);
   const trashed = useMemo(
@@ -357,6 +429,12 @@ export default function DataTab({ data }) {
                 )}
               </div>
             )}
+            {grouped.length > 1 && (
+              <>
+                <button onClick={expandAllMonths} style={actionBtn("rgba(255,255,255,0.5)")} title="Expand every month">Expand all</button>
+                <button onClick={collapseAllMonths} style={actionBtn("rgba(255,255,255,0.5)")} title="Collapse every month">Collapse all</button>
+              </>
+            )}
             <button onClick={refresh} style={actionBtn("#3B82F6")}>↻ Refresh</button>
           </div>
         </div>
@@ -397,36 +475,60 @@ export default function DataTab({ data }) {
                 </tr>
               </thead>
               <tbody>
-                {active.map(entry => (
-                  <tr key={entry.id}>
-                    <td style={{...tdStyle,maxWidth:280}}>
-                      <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
-                        <span style={{color: entry.kind === "customer" ? "#34D399" : "#A855F7",fontSize:14,marginTop:1,flexShrink:0}}>📄</span>
-                        <div style={{minWidth:0}}>
-                          <div style={{fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:260}}>{entry.name}</div>
-                          <div style={{fontSize:10,color:"rgba(var(--tint),0.45)",fontFamily:"'Space Mono',monospace",marginTop:2}}>
-                            {entry.sp || "—"} · {entry.year || "—"} · {entry.rowCount} rows
+                {grouped.map(group => {
+                  const isOpen = openMonths.has(group.key);
+                  return (
+                    <Fragment key={group.key}>
+                      <tr onClick={() => toggleMonth(group.key)}
+                          style={{cursor:"pointer",background:"rgba(var(--tint),0.045)"}}>
+                        <td colSpan={5} style={{
+                          padding:"9px 14px",
+                          borderTop:"1px solid rgba(var(--tint),0.06)",
+                          borderBottom: isOpen ? "1px solid rgba(var(--tint),0.06)" : "none",
+                          fontSize:12,fontWeight:600,
+                        }}>
+                          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                            <span style={{color:"rgba(var(--tint),0.55)",width:12,display:"inline-block",fontFamily:"'Space Mono',monospace"}}>{isOpen ? "▾" : "▸"}</span>
+                            <span>{group.label}</span>
+                            <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:11,fontFamily:"'Space Mono',monospace"}}>
+                              · {group.entries.length} file{group.entries.length===1?"":"s"} · {fmtSize(group.totalSize)}
+                            </span>
                           </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td style={tdStyle}>
-                      <span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,background:`${entry.kind === "customer" ? "#34D399" : "#A855F7"}15`,color: entry.kind === "customer" ? "#34D399" : "#A855F7",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>
-                        {detectedLabel(entry.kind)}
-                      </span>
-                    </td>
-                    <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",whiteSpace:"nowrap"}}>{fmtSize(entry.sizeBytes)}</td>
-                    <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.6)",whiteSpace:"nowrap",fontSize:11}}>{fmtDate(entry.uploadedAt)}</td>
-                    <td style={tdStyle}>
-                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                        <button onClick={() => setViewing(entry)} style={actionBtn("#3B82F6")}>👁 View</button>
-                        <button onClick={() => onDownload(entry)} disabled={busyId === entry.id} style={actionBtn("#34D399", busyId === entry.id)}>⬇ Save</button>
-                        <button onClick={() => onUpdateFile(entry)} disabled={busyId === entry.id} style={actionBtn("#E8633B", busyId === entry.id)}>↻ Update</button>
-                        <button onClick={() => onDelete(entry)} disabled={busyId === entry.id} style={actionBtn("#F87171", busyId === entry.id)}>🗑 Remove</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                        </td>
+                      </tr>
+                      {isOpen && group.entries.map(entry => (
+                        <tr key={entry.id}>
+                          <td style={{...tdStyle,maxWidth:280}}>
+                            <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                              <span style={{color: entry.kind === "customer" ? "#34D399" : "#A855F7",fontSize:14,marginTop:1,flexShrink:0}}>📄</span>
+                              <div style={{minWidth:0}}>
+                                <div style={{fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:260}}>{entry.name}</div>
+                                <div style={{fontSize:10,color:"rgba(var(--tint),0.45)",fontFamily:"'Space Mono',monospace",marginTop:2}}>
+                                  {entry.sp || "—"} · {entry.year || "—"} · {entry.rowCount} rows
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={tdStyle}>
+                            <span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,background:`${entry.kind === "customer" ? "#34D399" : "#A855F7"}15`,color: entry.kind === "customer" ? "#34D399" : "#A855F7",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>
+                              {detectedLabel(entry.kind)}
+                            </span>
+                          </td>
+                          <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",whiteSpace:"nowrap"}}>{fmtSize(entry.sizeBytes)}</td>
+                          <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.6)",whiteSpace:"nowrap",fontSize:11}}>{fmtDate(entry.uploadedAt)}</td>
+                          <td style={tdStyle}>
+                            <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                              <button onClick={() => setViewing(entry)} style={actionBtn("#3B82F6")}>👁 View</button>
+                              <button onClick={() => onDownload(entry)} disabled={busyId === entry.id} style={actionBtn("#34D399", busyId === entry.id)}>⬇ Save</button>
+                              <button onClick={() => onUpdateFile(entry)} disabled={busyId === entry.id} style={actionBtn("#E8633B", busyId === entry.id)}>↻ Update</button>
+                              <button onClick={() => onDelete(entry)} disabled={busyId === entry.id} style={actionBtn("#F87171", busyId === entry.id)}>🗑 Remove</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
