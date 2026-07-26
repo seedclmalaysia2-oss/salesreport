@@ -237,15 +237,27 @@ const KPI = ({label, value, sub, trend, color}) => (
   </div>
 );
 
-const TabButton = ({active, children, onClick, accent}) => (
-  <button onClick={onClick} style={{
-    background: active ? (accent ? "rgba(52,211,153,0.15)" : "rgba(232,99,59,0.15)") : "transparent",
-    color: active ? (accent ? "var(--st-ok)" : "var(--st-accent)") : "rgba(var(--tint),0.5)",
-    border: active ? `1px solid ${accent ? "rgba(52,211,153,0.3)" : "rgba(232,99,59,0.3)"}` : "1px solid transparent",
-    borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: active ? 600 : 400,
-    cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans',sans-serif",
-    letterSpacing: 0.3
-  }}>{children}</button>
+// role="tab" + roving tabindex so a screen reader announces the group as tabs
+// with a selected state, and the arrow keys move between them (WAI-ARIA tabs
+// pattern). Only the active tab is in the page tab-order; the container's
+// onKeyDown owns arrow/Home/End navigation.
+const TabButton = ({active, children, onClick, onKeyDown, accent, tabKey}) => (
+  <button
+    role="tab"
+    id={`tab-${tabKey}`}
+    aria-selected={active}
+    aria-controls={`panel-${tabKey}`}
+    tabIndex={active ? 0 : -1}
+    onClick={onClick}
+    onKeyDown={onKeyDown}
+    style={{
+      background: active ? (accent ? "rgba(52,211,153,0.15)" : "rgba(232,99,59,0.15)") : "transparent",
+      color: active ? (accent ? "var(--st-ok)" : "var(--st-accent)") : "rgba(var(--tint),0.5)",
+      border: active ? `1px solid ${accent ? "rgba(52,211,153,0.3)" : "rgba(232,99,59,0.3)"}` : "1px solid transparent",
+      borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: active ? 600 : 400,
+      cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans',sans-serif",
+      letterSpacing: 0.3
+    }}>{children}</button>
 );
 
 const Pill = ({label, active, onClick}) => (
@@ -370,6 +382,32 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   // for the vast majority without the preference set.
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [tab, setTab] = useState("overview");
+  // Ordered list of the tab keys actually shown (Data/Users are admin-only),
+  // and the arrow-key handler that drives the WAI-ARIA tabs roving focus.
+  const visibleTabKeys = [
+    "overview","monthly","team","customers","yoy","drilldown",
+    "brands","cohort","heatmap","targets",
+    ...(user?.isAdmin ? ["data","users"] : []),
+  ];
+  const onTablistKeyDown = (e) => {
+    const keys = visibleTabKeys;
+    const i = keys.indexOf(tab);
+    if (i < 0) return;
+    let next = null;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") next = keys[(i + 1) % keys.length];
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") next = keys[(i - 1 + keys.length) % keys.length];
+    else if (e.key === "Home") next = keys[0];
+    else if (e.key === "End") next = keys[keys.length - 1];
+    if (next) {
+      e.preventDefault();
+      setTab(next);
+      // Focus follows selection. Every tab button is always in the DOM, and
+      // programmatic focus ignores the roving tabindex, so we can focus the
+      // target synchronously — no rAF/timeout dependency (rAF doesn't fire in
+      // backgrounded/headless contexts, which would strand focus there).
+      document.getElementById(`tab-${next}`)?.focus();
+    }
+  };
   const [selectedYear, setSelectedYear] = useState(2026);
   const [selectedSP, setSelectedSP] = useState("All");
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -922,33 +960,38 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
         {/* On a phone these 11 tabs wrapped into a wall of buttons that pushed
             the content off screen; scroll them in one row instead. */}
-        <div className="seed-tabs" style={{
+        <div className="seed-tabs" role="tablist" aria-label="Dashboard views" aria-orientation="horizontal"
+          onKeyDown={onTablistKeyDown} style={{
           display:"flex", gap:4, marginTop: isMobile ? 14 : 20,
           flexWrap: isMobile ? "nowrap" : "wrap",
           overflowX: isMobile ? "auto" : "visible",
           WebkitOverflowScrolling: "touch",
           paddingBottom: isMobile ? 4 : 0,
         }}>
-          <TabButton active={tab==="overview"} onClick={()=>setTab("overview")}>Overview</TabButton>
-          <TabButton active={tab==="monthly"} onClick={()=>setTab("monthly")}>Monthly Trends</TabButton>
-          <TabButton active={tab==="team"} onClick={()=>setTab("team")}>Team Analysis</TabButton>
-          <TabButton active={tab==="customers"} onClick={()=>setTab("customers")}>Top Customers</TabButton>
-          <TabButton active={tab==="yoy"} onClick={()=>setTab("yoy")}>Year-over-Year</TabButton>
-          <TabButton active={tab==="drilldown"} onClick={()=>setTab("drilldown")}>Customer Drill-down</TabButton>
-          <TabButton active={tab==="brands"} onClick={()=>setTab("brands")}>Brand Performance</TabButton>
-          <TabButton active={tab==="cohort"} onClick={()=>setTab("cohort")}>New vs Lost</TabButton>
-          <TabButton active={tab==="heatmap"} onClick={()=>setTab("heatmap")}>Customer × Brand</TabButton>
-          <TabButton active={tab==="targets"} onClick={()=>setTab("targets")}>🎯 Targets</TabButton>
+          <TabButton tabKey="overview" active={tab==="overview"} onClick={()=>setTab("overview")}>Overview</TabButton>
+          <TabButton tabKey="monthly" active={tab==="monthly"} onClick={()=>setTab("monthly")}>Monthly Trends</TabButton>
+          <TabButton tabKey="team" active={tab==="team"} onClick={()=>setTab("team")}>Team Analysis</TabButton>
+          <TabButton tabKey="customers" active={tab==="customers"} onClick={()=>setTab("customers")}>Top Customers</TabButton>
+          <TabButton tabKey="yoy" active={tab==="yoy"} onClick={()=>setTab("yoy")}>Year-over-Year</TabButton>
+          <TabButton tabKey="drilldown" active={tab==="drilldown"} onClick={()=>setTab("drilldown")}>Customer Drill-down</TabButton>
+          <TabButton tabKey="brands" active={tab==="brands"} onClick={()=>setTab("brands")}>Brand Performance</TabButton>
+          <TabButton tabKey="cohort" active={tab==="cohort"} onClick={()=>setTab("cohort")}>New vs Lost</TabButton>
+          <TabButton tabKey="heatmap" active={tab==="heatmap"} onClick={()=>setTab("heatmap")}>Customer × Brand</TabButton>
+          <TabButton tabKey="targets" active={tab==="targets"} onClick={()=>setTab("targets")}>🎯 Targets</TabButton>
           {user?.isAdmin && (
-            <TabButton active={tab==="data"} onClick={()=>setTab("data")} accent>Data ⤴</TabButton>
+            <TabButton tabKey="data" active={tab==="data"} onClick={()=>setTab("data")} accent>Data ⤴</TabButton>
           )}
           {user?.isAdmin && (
-            <TabButton active={tab==="users"} onClick={()=>setTab("users")}>👤 Users</TabButton>
+            <TabButton tabKey="users" active={tab==="users"} onClick={()=>setTab("users")}>👤 Users</TabButton>
           )}
         </div>
       </div>
 
-      <div style={{padding: isMobile ? "16px 12px" : "24px 32px", maxWidth:1280, margin:"0 auto"}}>
+      {/* The active view is the tab's panel, labelled by its tab button. No
+          tabIndex: every panel holds focusable controls, so per WAI-ARIA the
+          panel itself shouldn't be a tab stop (and shouldn't take the ring). */}
+      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}
+        style={{padding: isMobile ? "16px 12px" : "24px 32px", maxWidth:1280, margin:"0 auto"}}>
 
         {/* The brand rows are ~24k and load after the page is already usable.
             Say so on the tabs that need them rather than showing empty charts. */}
