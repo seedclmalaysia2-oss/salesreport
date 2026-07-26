@@ -319,60 +319,114 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
 
-      // Find period from any cell containing "DD/MM" range like "01/05 -08/05"
-      let detectedStart = periodStart, detectedEnd = periodEnd;
-      const periodRe = /(\d{1,2})\/(\d{1,2})\s*[-–]\s*(\d{1,2})\/(\d{1,2})/;
-      for (const row of grid) {
-        for (const c of row || []) {
-          if (typeof c === "string") {
-            const m = c.match(periodRe);
-            if (m) {
-              const yr = (() => {
-                // try to find year from any title cell
-                for (const r2 of grid) for (const c2 of r2 || []) {
-                  if (typeof c2 === "string") {
-                    const ym = c2.match(/\b(20\d{2})\b/);
-                    if (ym) return parseInt(ym[1]);
-                  }
-                }
-                return new Date().getFullYear();
-              })();
-              const pad = (n) => String(n).padStart(2, "0");
-              detectedStart = `${yr}-${pad(parseInt(m[2]))}-${pad(parseInt(m[1]))}`;
-              detectedEnd = `${yr}-${pad(parseInt(m[4]))}-${pad(parseInt(m[3]))}`;
-              break;
-            }
-          }
-        }
-      }
-
-      // Normalize names. The xlsx uses 'Alan Loh', 'Dino Lim', etc.
+      // Rep-name normaliser. Accepts short first names, full names, and the
+      // ALL-CAPS forms Autocount exports on the Customer Invoice Listing
+      // (e.g. "NOR SAKINAH ARDANI"). Anything unrecognised is ignored so a
+      // stray "Cash sales" row can't leak into a rep total.
       const NAMES = {
         "alan loh": "Alan", "alan": "Alan",
         "dino lim": "Dino", "dino": "Dino",
         "khen tan": "Khen", "khen": "Khen",
-        "sakinah": "Sakinah",
-        "wani": "Wani",
+        "sakinah": "Sakinah", "nor sakinah ardani": "Sakinah", "nor sakinah": "Sakinah",
+        "wani": "Wani", "nurzawani": "Wani",
         "simon low": "Simon", "simon": "Simon",
-        "seed malaysia": "Seed Malaysia",
+        "seed malaysia": "Seed Malaysia", "seed": "Seed Malaysia",
       };
+      const canon = (raw) => NAMES[String(raw || "").trim().toLowerCase()] || null;
 
-      // Find rows where col[0] is a known rep name; read the LAST numeric value in that row
-      // (which is the "Seed Malaysia" / comprehensive total).
-      const found = {};
-      for (const row of grid) {
-        if (!row || !row.length) continue;
-        const label = row[0];
-        if (typeof label !== "string") continue;
-        const key = label.trim().toLowerCase();
-        const sp = NAMES[key];
-        if (!sp) continue;
-        // Walk right-to-left for the first numeric cell.
-        let amount = 0;
-        for (let i = row.length - 1; i >= 1; i--) {
-          if (typeof row[i] === "number") { amount = row[i]; break; }
+      // Look for the Autocount "Customer Invoice Listing" export first — that
+      // format is per-invoice detail rather than a per-rep summary, so needs
+      // its own aggregator. We detect it by the report title anywhere in the
+      // first ~20 rows plus a "Date : DD-Mon-YY To DD-Mon-YY" header.
+      const isInvoiceListing = grid.slice(0, 20).some(r =>
+        (r || []).some(c => typeof c === "string" && /customer invoice listing/i.test(c))
+      );
+
+      let detectedStart = periodStart, detectedEnd = periodEnd;
+      let found = {};
+
+      if (isInvoiceListing) {
+        // Header row uses fixed column offsets from the Autocount template:
+        //   col 2  = invoice date (e.g. "01-Jul-26")
+        //   col 23 = line amount (numeric)
+        //   col 30 = salesman name (uppercase full name)
+        // The template stays the same for May/June exports too.
+        const parseDMY = (s) => {
+          const m = String(s).match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+          if (!m) return null;
+          const MON = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
+          const mm = MON[m[2].toLowerCase()]; if (!mm) return null;
+          const dd = parseInt(m[1], 10);
+          let yy = parseInt(m[3], 10); if (yy < 100) yy += 2000;
+          return `${yy}-${String(mm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`;
+        };
+        // Pull the header "Date : 01-Jul-26 To 26-Jul-26" for the period.
+        for (const row of grid.slice(0, 15)) {
+          const joined = (row || []).filter(c => c != null).join(" ");
+          const m = joined.match(/(\d{1,2}-[A-Za-z]{3}-\d{2,4}).*?(?:to|→|-)\s*(\d{1,2}-[A-Za-z]{3}-\d{2,4})/i);
+          if (m) {
+            const a = parseDMY(m[1]), b = parseDMY(m[2]);
+            if (a && b) { detectedStart = a; detectedEnd = b; break; }
+          }
         }
-        found[sp] = amount;
+        // Aggregate line amounts by rep. Also widen the period from actual
+        // invoice dates in case the header cell was missing/blurred.
+        let minDate = detectedStart, maxDate = detectedEnd;
+        let lineCount = 0;
+        for (const row of grid) {
+          if (!row) continue;
+          const amount = row[23];
+          const sp = canon(row[30]);
+          if (typeof amount !== "number" || !sp) continue;
+          const iso = typeof row[2] === "string" ? parseDMY(row[2]) : null;
+          if (iso) {
+            if (!minDate || iso < minDate) minDate = iso;
+            if (!maxDate || iso > maxDate) maxDate = iso;
+          }
+          found[sp] = (found[sp] || 0) + amount;
+          lineCount += 1;
+        }
+        if (lineCount === 0) {
+          setError("Recognised Customer Invoice Listing but couldn't find invoice rows (expected columns C=Date, X=Amount, AE=Salesman).");
+          return;
+        }
+        detectedStart = minDate; detectedEnd = maxDate;
+      } else {
+        // Legacy per-rep summary format (e.g. "01/05 -08/05" period header,
+        // one row per rep in column A with the total in the last numeric cell).
+        const periodRe = /(\d{1,2})\/(\d{1,2})\s*[-–]\s*(\d{1,2})\/(\d{1,2})/;
+        for (const row of grid) {
+          for (const c of row || []) {
+            if (typeof c === "string") {
+              const m = c.match(periodRe);
+              if (m) {
+                const yr = (() => {
+                  for (const r2 of grid) for (const c2 of r2 || []) {
+                    if (typeof c2 === "string") {
+                      const ym = c2.match(/\b(20\d{2})\b/);
+                      if (ym) return parseInt(ym[1]);
+                    }
+                  }
+                  return new Date().getFullYear();
+                })();
+                const pad = (n) => String(n).padStart(2, "0");
+                detectedStart = `${yr}-${pad(parseInt(m[2]))}-${pad(parseInt(m[1]))}`;
+                detectedEnd = `${yr}-${pad(parseInt(m[4]))}-${pad(parseInt(m[3]))}`;
+                break;
+              }
+            }
+          }
+        }
+        for (const row of grid) {
+          if (!row || !row.length) continue;
+          const sp = canon(row[0]);
+          if (!sp) continue;
+          let amount = 0;
+          for (let i = row.length - 1; i >= 1; i--) {
+            if (typeof row[i] === "number") { amount = row[i]; break; }
+          }
+          found[sp] = amount;
+        }
       }
 
       if (Object.keys(found).length === 0) {
@@ -386,7 +440,11 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
       setRows(newRows);
       setPeriodStart(detectedStart);
       setPeriodEnd(detectedEnd);
-      setInfo(`Parsed ${Object.keys(found).length} rep rows · period ${detectedStart} → ${detectedEnd}`);
+      setInfo(
+        isInvoiceListing
+          ? `Invoice Listing: ${Object.keys(found).length} reps · period ${detectedStart} → ${detectedEnd}`
+          : `Parsed ${Object.keys(found).length} rep rows · period ${detectedStart} → ${detectedEnd}`
+      );
       setMode("manual"); // show preview/edit before commit
     } catch (e) {
       setError(`Failed to parse: ${e.message}`);
