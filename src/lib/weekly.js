@@ -130,3 +130,138 @@ export async function syncWeeklyFromFiles(files) {
     periodEnd: ends[ends.length - 1],
   };
 }
+
+// ============================================================
+// Customer + brand fact-table sync
+// ============================================================
+//
+// The dashboard charts read from public.customers_data and public.brand_sales_data,
+// not from data_files.rows_json. Uploading a workbook to the Data tab used to
+// only archive it — the fact tables were never touched, so the charts stayed
+// frozen on whatever the seed script had loaded.
+//
+// The rule the user asked for: "for each (sp, year), the newest uploaded file
+// wins — replace all fact rows for that scope with that file's rows". These
+// helpers implement it. Re-uploading a file with the same name just makes
+// itself the newest and takes over.
+//
+// The replace is DELETE-then-INSERT per (sp, year) rather than upsert because
+// there's no natural (sp,year,customer[,brand]) unique key on the fact tables
+// — new customers appear each year and old ones drop, so any leftover row from
+// the previous upload would linger. Deleting first is the only shape that
+// guarantees "the chart shows exactly what's in the file."
+
+function eligibleFactFiles(files, kind) {
+  return (files || []).filter(
+    (f) =>
+      f.kind === kind &&
+      !f.deletedAt &&
+      Array.isArray(f.rows) &&
+      f.sp &&
+      Number.isFinite(f.year)
+  );
+}
+
+// For each (sp, year), pick the newest non-deleted file with parsed rows.
+// Ties on uploadedAt fall back to the id order Supabase returned them in.
+function latestFilePerScope(files, kind) {
+  const winners = new Map(); // "sp|year" -> file entry
+  for (const f of eligibleFactFiles(files, kind)) {
+    const key = `${f.sp}|${f.year}`;
+    const cur = winners.get(key);
+    if (!cur || (f.uploadedAt || 0) > (cur.uploadedAt || 0)) {
+      winners.set(key, f);
+    }
+  }
+  return [...winners.values()];
+}
+
+// Replay every "latest per (sp, year)" customer file into customers_data.
+// Each scope is a DELETE-by-(sp,year) followed by a chunked INSERT. Returns
+// a summary the checklist can render.
+export async function syncCustomersFromFiles(files) {
+  const winners = latestFilePerScope(files, "customer");
+  if (!winners.length) {
+    return { files: 0, scopes: 0, rows: 0, scopeLabels: [] };
+  }
+  let totalRows = 0;
+  const scopeLabels = [];
+  for (const f of winners) {
+    // 1) Clear the previous rows for this scope.
+    const { error: delErr } = await supabase
+      .from("customers_data")
+      .delete()
+      .eq("sp", f.sp)
+      .eq("year", f.year);
+    if (delErr) throw new Error(`Clearing ${f.sp} ${f.year} failed: ${delErr.message}`);
+
+    // 2) Insert the file's rows, in chunks so a large file doesn't stall on
+    //    a single 5 MB payload.
+    const rows = (f.rows || [])
+      .filter((r) => r && r.customer)
+      .map((r) => ({
+        sp: f.sp,
+        year: f.year,
+        customer: r.customer,
+        months: Array.isArray(r.months) && r.months.length === 12
+          ? r.months.map((m) => Number(m) || 0)
+          : new Array(12).fill(0),
+        total: Number(r.total) || 0,
+      }));
+    if (rows.length) {
+      const CHUNK = 500;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const { error: insErr } = await supabase
+          .from("customers_data")
+          .insert(rows.slice(i, i + CHUNK));
+        if (insErr) throw new Error(`Inserting ${f.sp} ${f.year} failed: ${insErr.message}`);
+      }
+    }
+    totalRows += rows.length;
+    scopeLabels.push(`${f.sp} ${f.year}`);
+  }
+  return { files: winners.length, scopes: winners.length, rows: totalRows, scopeLabels };
+}
+
+// Same shape for brand_sales_data. Brand rows carry (customer, brand, amt, qty)
+// rather than the monthly customer breakdown, but the sync strategy is
+// identical: newest file per (sp, year) wins, DELETE-then-INSERT for that scope.
+export async function syncBrandsFromFiles(files) {
+  const winners = latestFilePerScope(files, "brand");
+  if (!winners.length) {
+    return { files: 0, scopes: 0, rows: 0, scopeLabels: [] };
+  }
+  let totalRows = 0;
+  const scopeLabels = [];
+  for (const f of winners) {
+    const { error: delErr } = await supabase
+      .from("brand_sales_data")
+      .delete()
+      .eq("sp", f.sp)
+      .eq("year", f.year);
+    if (delErr) throw new Error(`Clearing ${f.sp} ${f.year} failed: ${delErr.message}`);
+
+    const rows = (f.rows || [])
+      .filter((r) => r && r.customer && r.brand)
+      .map((r) => ({
+        sp: f.sp,
+        year: f.year,
+        customer: r.customer,
+        brand: r.brand,
+        amt: Number(r.amt) || 0,
+        qty: Number(r.qty) || 0,
+      }));
+    if (rows.length) {
+      const CHUNK = 500;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const { error: insErr } = await supabase
+          .from("brand_sales_data")
+          .insert(rows.slice(i, i + CHUNK));
+        if (insErr) throw new Error(`Inserting ${f.sp} ${f.year} failed: ${insErr.message}`);
+      }
+    }
+    totalRows += rows.length;
+    scopeLabels.push(`${f.sp} ${f.year}`);
+  }
+  return { files: winners.length, scopes: winners.length, rows: totalRows, scopeLabels };
+}

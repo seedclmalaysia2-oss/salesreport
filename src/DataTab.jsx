@@ -13,7 +13,10 @@ import {
   listFiles, uploadFile, replaceFile,
   softDeleteFile, restoreFile, purgeFile, downloadUrl,
 } from "./lib/files.js";
-import { syncWeeklyFromFiles, invoiceFilesFrom } from "./lib/weekly.js";
+import {
+  syncWeeklyFromFiles, invoiceFilesFrom,
+  syncCustomersFromFiles, syncBrandsFromFiles,
+} from "./lib/weekly.js";
 import { fetchAll } from "./lib/supabase.js";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -183,13 +186,15 @@ export default function DataTab({ data, onRefresh }) {
   // just calling onRefresh, so every stage's row count is visible before the
   // parent picks up the same data on its own re-fetch.
   const RECALC_STAGES = [
-    { id: "files",     label: "Reload file library" },
-    { id: "weekly",    label: "Sync invoice listings → weekly board" },
-    { id: "customers", label: "Fetch customer sales rows" },
-    { id: "targets",   label: "Fetch monthly sales targets" },
-    { id: "weeklyDb",  label: "Fetch weekly sales rows" },
-    { id: "brands",    label: "Fetch brand sales rows (largest)" },
-    { id: "reload",    label: "Refresh every dashboard chart" },
+    { id: "files",       label: "Reload file library" },
+    { id: "pushCust",    label: "Push customer files → customers_data (charts)" },
+    { id: "pushBrand",   label: "Push brand files → brand_sales_data (charts)" },
+    { id: "weekly",      label: "Sync invoice listings → weekly board" },
+    { id: "customers",   label: "Fetch customer sales rows" },
+    { id: "targets",     label: "Fetch monthly sales targets" },
+    { id: "weeklyDb",    label: "Fetch weekly sales rows" },
+    { id: "brands",      label: "Fetch brand sales rows (largest)" },
+    { id: "reload",      label: "Refresh every dashboard chart" },
   ];
   const [recalculating, setRecalculating] = useState(false);
   const [lastRecalcAt, setLastRecalcAt] = useState(null);
@@ -234,7 +239,29 @@ export default function DataTab({ data, onRefresh }) {
         return `${n} active file${n === 1 ? "" : "s"}`;
       });
 
-      // 2. Invoice → weekly sync (idempotent). Skip cleanly when no invoice
+      // 2. Push customer files → customers_data. This is the missing link that
+      // makes uploaded workbooks actually change the charts: for each (sp, year)
+      // the newest uploaded customer file replaces every row in customers_data
+      // for that scope. Re-uploading a file with the same name just makes it
+      // the newest and it wins.
+      await runStage("pushCust", async () => {
+        const res = await syncCustomersFromFiles(list);
+        if (res.scopes === 0) return "no customer files to push";
+        const preview = res.scopeLabels.slice(0, 3).join(", ");
+        const more = res.scopeLabels.length > 3 ? ` +${res.scopeLabels.length - 3} more` : "";
+        return `${res.rows.toLocaleString()} rows across ${res.scopes} scope${res.scopes === 1 ? "" : "s"} (${preview}${more})`;
+      });
+
+      // 3. Push brand files → brand_sales_data (same shape as step 2).
+      await runStage("pushBrand", async () => {
+        const res = await syncBrandsFromFiles(list);
+        if (res.scopes === 0) return "no brand files to push";
+        const preview = res.scopeLabels.slice(0, 3).join(", ");
+        const more = res.scopeLabels.length > 3 ? ` +${res.scopeLabels.length - 3} more` : "";
+        return `${res.rows.toLocaleString()} rows across ${res.scopes} scope${res.scopes === 1 ? "" : "s"} (${preview}${more})`;
+      });
+
+      // 4. Invoice → weekly sync (idempotent). Skip cleanly when no invoice
       // files are present, but still mark the step "done" so the checklist
       // reads as complete rather than stuck.
       const invoiceCount = invoiceFilesFrom(list).length;
@@ -479,14 +506,44 @@ export default function DataTab({ data, onRefresh }) {
     const okCount = valid.length - failures.length;
     if (okCount > 0) setNotice(`Uploaded ${okCount} file${okCount === 1 ? "" : "s"}.`);
     const list = await refresh();
-    // If any successfully-uploaded file was an invoice listing, carry its
-    // numbers straight through to the Weekly Sales board — that is the whole
-    // point of uploading one, and it used to require a second manual step.
-    const uploadedInvoice = valid.some(
-      (f) => parseFilename(f.name)?.kind === "Customer Invoice Listing"
-    );
-    if (uploadedInvoice && okCount > 0 && list) {
-      await runWeeklySync(list, { silent: true });
+    // Push the freshly-uploaded workbooks into the fact tables the charts read
+    // from. This is what makes an upload change what visitors see — before this,
+    // customer/brand files only archived to data_files and every chart stayed
+    // frozen. Best-effort: a sync failure surfaces as an inline error but does
+    // not undo the upload itself.
+    if (okCount > 0 && list) {
+      const kinds = new Set(valid.map((f) => parseFilename(f.name)?.kind));
+      const syncErrors = [];
+      try {
+        if (kinds.has("Sales Analysis by customer")) {
+          const r = await syncCustomersFromFiles(list);
+          if (r.scopes > 0) setNotice(
+            `Uploaded ${okCount} file${okCount === 1 ? "" : "s"} · pushed ${r.rows.toLocaleString()} customer rows to the dashboard.`
+          );
+        }
+      } catch (e) { syncErrors.push(`customer sync: ${e.message || e}`); }
+      try {
+        if ([...kinds].some((k) => /Stock Sales/i.test(k || ""))) {
+          const r = await syncBrandsFromFiles(list);
+          if (r.scopes > 0) setNotice(
+            `Uploaded ${okCount} file${okCount === 1 ? "" : "s"} · pushed ${r.rows.toLocaleString()} brand rows to the dashboard.`
+          );
+        }
+      } catch (e) { syncErrors.push(`brand sync: ${e.message || e}`); }
+      if (kinds.has("Customer Invoice Listing")) {
+        await runWeeklySync(list, { silent: true });
+      }
+      if (syncErrors.length) {
+        setError(
+          `Files uploaded, but pushing to the charts hit an error. ` +
+          `Click Recalculate to retry.\n${syncErrors.join("\n")}`
+        );
+      } else {
+        // Force every chart on every tab to recompute against the freshly
+        // pushed fact-table rows. Without this the upload lands but the
+        // dashboard keeps rendering the previous fetch.
+        onRefresh?.();
+      }
     }
   };
 
@@ -515,10 +572,19 @@ export default function DataTab({ data, onRefresh }) {
       const nextFiles = files.map(f => (f.id === updated.id ? updated : f));
       setFiles(nextFiles);
       setNotice(`"${updated.name}" replaced.`);
-      // Replacing an invoice listing changes the weekly numbers it feeds, so
-      // rebuild the board from the updated set.
-      if (updated.kind === "invoice") {
-        await runWeeklySync(nextFiles, { silent: true });
+      // Replacing a workbook is the whole point of the Update button — the
+      // dashboard must reflect the newer numbers immediately. Route each kind
+      // through its fact-table sync, then nudge every chart to recompute.
+      try {
+        if (updated.kind === "customer") await syncCustomersFromFiles(nextFiles);
+        if (updated.kind === "brand")    await syncBrandsFromFiles(nextFiles);
+        if (updated.kind === "invoice")  await runWeeklySync(nextFiles, { silent: true });
+        onRefresh?.();
+      } catch (syncErr) {
+        setError(
+          `Replaced the file, but pushing to the charts failed. ` +
+          `Click Recalculate to retry.\n${syncErr.message || syncErr}`
+        );
       }
     } catch (err) {
       setError(err.message || String(err));
