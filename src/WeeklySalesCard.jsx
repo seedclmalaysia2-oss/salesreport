@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 // xlsx loaded on demand (see src/lib/parseXlsx.js) — only the admin's weekly
 // upload needs it, so it must not sit in the initial bundle.
 import { supabase } from "./lib/supabase.js";
@@ -24,6 +24,29 @@ const fmtDate = (d) => {
   const mon = String(dt.getMonth() + 1).padStart(2, "0");
   return `${day}/${mon}`;
 };
+
+// Weeks are Monday-Sunday (Malaysian ops convention). Given any ISO date
+// string, return {start, end} for the containing week.
+function weekBounds(isoDate) {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const dow = dt.getUTCDay() || 7; // Sun=0 -> 7
+  const monday = new Date(dt); monday.setUTCDate(dt.getUTCDate() - dow + 1);
+  const sunday = new Date(monday); sunday.setUTCDate(monday.getUTCDate() + 6);
+  const iso = (x) => x.toISOString().slice(0, 10);
+  return { start: iso(monday), end: iso(sunday) };
+}
+
+// A week belongs to the month that contains its Monday. Keeps a week from
+// showing under two different month buckets in the UI navigator.
+function monthKeyFromWeekStart(startIso) {
+  return startIso.slice(0, 7); // "YYYY-MM"
+}
+
+function monthLabel(monthKey) {
+  const [y, m] = monthKey.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleString("en-US", { month: "long", year: "numeric" });
+}
 
 function ProgressBar({ pct, color }) {
   const clamped = Math.min(Math.max(pct, 0), 1.5);
@@ -143,29 +166,77 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
   const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
   const [uploadOpen, setUploadOpen] = useState(false);
 
-  // Latest period
-  const { latestPeriod, periodRows } = useMemo(() => {
-    if (!weeklySales || weeklySales.length === 0) return { latestPeriod: null, periodRows: [] };
-    const latestEnd = weeklySales.reduce(
-      (max, w) => (!max || w.periodEnd > max ? w.periodEnd : max), null
-    );
-    const rows = weeklySales.filter(w => w.periodEnd === latestEnd);
-    const periodStart = rows[0]?.periodStart;
-    return {
-      latestPeriod: { start: periodStart, end: latestEnd, uploadedAt: rows[0]?.uploadedAt },
-      periodRows: rows,
-    };
+  // Build the month + week navigation index. periodsByMonth is an ordered map
+  // of "YYYY-MM" -> [{ start, end, rows, uploadedAt }, ...] with weeks sorted
+  // oldest-first. Empty weeklySales collapses everything to null downstream.
+  const { periodsByMonth, monthKeys } = useMemo(() => {
+    const map = new Map();
+    if (!weeklySales) return { periodsByMonth: map, monthKeys: [] };
+    // Group all rows into unique (start,end) periods first.
+    const periodMap = new Map(); // "start|end" -> { start, end, rows, uploadedAt }
+    for (const w of weeklySales) {
+      if (!w.periodStart || !w.periodEnd) continue;
+      const key = `${w.periodStart}|${w.periodEnd}`;
+      if (!periodMap.has(key)) periodMap.set(key, { start: w.periodStart, end: w.periodEnd, rows: [], uploadedAt: w.uploadedAt });
+      periodMap.get(key).rows.push(w);
+      const cur = periodMap.get(key).uploadedAt;
+      if (w.uploadedAt && (!cur || w.uploadedAt > cur)) periodMap.get(key).uploadedAt = w.uploadedAt;
+    }
+    for (const p of periodMap.values()) {
+      const mk = monthKeyFromWeekStart(p.start);
+      if (!map.has(mk)) map.set(mk, []);
+      map.get(mk).push(p);
+    }
+    for (const arr of map.values()) arr.sort((a, b) => a.start.localeCompare(b.start));
+    const keys = [...map.keys()].sort();
+    return { periodsByMonth: map, monthKeys: keys };
   }, [weeklySales]);
 
-  // Pull May 2026 (or latest) target from sales_targets
+  const latestMonthKey = monthKeys[monthKeys.length - 1] || null;
+  const [selectedMonth, setSelectedMonth] = useState(null);
+  const [selectedWeekIndex, setSelectedWeekIndex] = useState(0);
+  const activeMonth = selectedMonth && periodsByMonth.has(selectedMonth) ? selectedMonth : latestMonthKey;
+  const weeksInMonth = activeMonth ? periodsByMonth.get(activeMonth) : [];
+  // Reset the week index when the visible month changes, so switching months
+  // never leaves us pointing past the end of the new month's weeks.
+  const boundedWeekIndex = weeksInMonth.length
+    ? Math.min(selectedWeekIndex, weeksInMonth.length - 1)
+    : 0;
+  const selectedPeriod = weeksInMonth[boundedWeekIndex] || null;
+  const periodRows = selectedPeriod ? selectedPeriod.rows : [];
+  const latestPeriod = selectedPeriod
+    ? { start: selectedPeriod.start, end: selectedPeriod.end, uploadedAt: selectedPeriod.uploadedAt }
+    : null;
+
+  const goMonth = (delta) => {
+    if (!monthKeys.length) return;
+    const currentIdx = Math.max(0, monthKeys.indexOf(activeMonth));
+    const next = monthKeys[Math.max(0, Math.min(monthKeys.length - 1, currentIdx + delta))];
+    setSelectedMonth(next);
+    // Land on the last week of the new month, mirroring "latest first" default.
+    setSelectedWeekIndex(periodsByMonth.get(next).length - 1);
+  };
+  const canGoPrev = monthKeys.indexOf(activeMonth) > 0;
+  const canGoNext = monthKeys.indexOf(activeMonth) < monthKeys.length - 1;
+
+  // Default the view to the latest week of the latest month, and re-anchor
+  // when new data arrives (e.g. the user just uploaded a fresh month).
+  useEffect(() => {
+    if (!latestMonthKey) return;
+    if (selectedMonth == null) {
+      setSelectedMonth(latestMonthKey);
+      const arr = periodsByMonth.get(latestMonthKey) || [];
+      setSelectedWeekIndex(Math.max(0, arr.length - 1));
+    }
+  }, [latestMonthKey, selectedMonth, periodsByMonth]);
+
+  // Pull the monthly team target for the currently selected month.
   const monthlyTarget = useMemo(() => {
-    if (!latestPeriod || !targets) return 0;
-    const d = new Date(latestPeriod.end);
-    const year = d.getUTCFullYear();
-    const month = d.getUTCMonth() + 1;
+    if (!activeMonth || !targets) return 0;
+    const [year, month] = activeMonth.split("-").map(Number);
     const t = targets.find(t => t.year === year && t.month === month && t.sp === "_TEAM");
     return t ? t.target : 0;
-  }, [latestPeriod, targets]);
+  }, [activeMonth, targets]);
 
   if (!latestPeriod) {
     return (
@@ -254,6 +325,76 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
         />
       )}
 
+      {/* Month + week navigator. Prev/next hop between months that actually
+          have data; the pill row lists every week of the active month, latest
+          on the right, so 4-5 pills per month is the normal shape. */}
+      {monthKeys.length > 0 && (
+        <div style={{marginBottom:18,padding:"12px 14px",background:"rgba(var(--tint),0.02)",border:"1px solid rgba(var(--tint),0.06)",borderRadius:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:10}}>
+            <button
+              onClick={() => goMonth(-1)}
+              disabled={!canGoPrev}
+              style={{
+                background:"transparent",border:"1px solid rgba(var(--tint),0.15)",
+                color: canGoPrev ? "var(--text)" : "rgba(var(--tint),0.25)",
+                borderRadius:6,padding:"5px 12px",fontSize:12,
+                cursor: canGoPrev ? "pointer" : "not-allowed",fontFamily:"'DM Sans',sans-serif",
+              }}>◀ Prev month</button>
+            <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",textTransform:"uppercase",letterSpacing:1.5,fontWeight:600}}>Viewing</div>
+            <select
+              value={activeMonth || ""}
+              onChange={(e) => { setSelectedMonth(e.target.value); setSelectedWeekIndex((periodsByMonth.get(e.target.value) || []).length - 1); }}
+              style={{
+                background:"rgba(var(--tint),0.05)",border:"1px solid rgba(var(--tint),0.12)",
+                color:"var(--text)",borderRadius:6,padding:"5px 10px",fontSize:13,fontWeight:600,
+                fontFamily:"'DM Sans',sans-serif",cursor:"pointer",
+              }}>
+              {monthKeys.map(k => (
+                <option key={k} value={k}>{monthLabel(k)} ({periodsByMonth.get(k).length} wk)</option>
+              ))}
+            </select>
+            <button
+              onClick={() => goMonth(1)}
+              disabled={!canGoNext}
+              style={{
+                background:"transparent",border:"1px solid rgba(var(--tint),0.15)",
+                color: canGoNext ? "var(--text)" : "rgba(var(--tint),0.25)",
+                borderRadius:6,padding:"5px 12px",fontSize:12,
+                cursor: canGoNext ? "pointer" : "not-allowed",fontFamily:"'DM Sans',sans-serif",
+              }}>Next month ▶</button>
+            <div style={{marginLeft:"auto",fontSize:11,color:"rgba(var(--tint),0.4)",fontFamily:"'Space Mono',monospace"}}>
+              {monthKeys.length} month{monthKeys.length===1?"":"s"} on record
+            </div>
+          </div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {weeksInMonth.map((w, i) => {
+              const total = w.rows.reduce((a, r) => a + (r.amount || 0), 0);
+              const active = i === boundedWeekIndex;
+              return (
+                <button
+                  key={w.start}
+                  onClick={() => setSelectedWeekIndex(i)}
+                  title={`${w.start} → ${w.end} · RM ${Math.round(total).toLocaleString("en-MY")}`}
+                  style={{
+                    background: active ? "rgba(232,99,59,0.15)" : "rgba(var(--tint),0.04)",
+                    color: active ? "var(--st-accent)" : "rgba(var(--tint),0.75)",
+                    border: `1px solid ${active ? "rgba(232,99,59,0.5)" : "rgba(var(--tint),0.08)"}`,
+                    borderRadius: 20, padding: "5px 14px", fontSize: 11,
+                    fontWeight: active ? 700 : 500, cursor: "pointer",
+                    fontFamily: "'Space Mono',monospace",
+                    display:"flex",alignItems:"center",gap:8,
+                  }}>
+                  W{i+1}: {fmtDate(w.start)}–{fmtDate(w.end)}
+                  <span style={{fontSize:10,opacity:0.7,fontWeight:500}}>
+                    RM {Math.round(total).toLocaleString("en-MY")}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Two columns side by side */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(260px,100%), 1fr))", gap: 16 }}>
         <ScopeColumn
@@ -309,6 +450,10 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
   const fileRef = useRef(null);
+  // When a Customer Invoice Listing spans more than one Mon-Sun week we split
+  // it into per-week buckets and upload each independently. buckets is null
+  // for the single-week (manual or short-file) path.
+  const [buckets, setBuckets] = useState(null);
 
   const onFile = async (file) => {
     setError(null); setInfo(null);
@@ -369,20 +514,27 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
             if (a && b) { detectedStart = a; detectedEnd = b; break; }
           }
         }
-        // Aggregate line amounts by rep. Also widen the period from actual
-        // invoice dates in case the header cell was missing/blurred.
-        let minDate = detectedStart, maxDate = detectedEnd;
+        // Bucket every invoice line by the Mon-Sun week that contains its date.
+        // Each bucket becomes its own weekly_sales row per rep on submit — so a
+        // full-month Customer Invoice Listing turns into 4-5 weekly entries.
+        const weekBuckets = new Map(); // "YYYY-MM-DD" (Monday) -> { end, byRep }
         let lineCount = 0;
+        let minDate = detectedStart, maxDate = detectedEnd;
         for (const row of grid) {
           if (!row) continue;
           const amount = row[23];
           const sp = canon(row[30]);
           if (typeof amount !== "number" || !sp) continue;
           const iso = typeof row[2] === "string" ? parseDMY(row[2]) : null;
-          if (iso) {
-            if (!minDate || iso < minDate) minDate = iso;
-            if (!maxDate || iso > maxDate) maxDate = iso;
-          }
+          if (!iso) continue;
+          const { start, end } = weekBounds(iso);
+          if (!weekBuckets.has(start)) weekBuckets.set(start, { end, byRep: {} });
+          const b = weekBuckets.get(start);
+          b.byRep[sp] = (b.byRep[sp] || 0) + amount;
+          if (!minDate || iso < minDate) minDate = iso;
+          if (!maxDate || iso > maxDate) maxDate = iso;
+          // Also feed the flat 'found' totals so the single-week preview still
+          // shows sensible numbers if the file only spans one week.
           found[sp] = (found[sp] || 0) + amount;
           lineCount += 1;
         }
@@ -391,6 +543,25 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
           return;
         }
         detectedStart = minDate; detectedEnd = maxDate;
+
+        // Materialise the buckets in chronological order for the preview + submit.
+        const sortedKeys = [...weekBuckets.keys()].sort();
+        if (sortedKeys.length > 1) {
+          const materialised = sortedKeys.map(start => {
+            const { end, byRep } = weekBuckets.get(start);
+            const rows = ["Alan","Dino","Khen","Sakinah","Wani","Simon","Seed Malaysia"]
+              .map(sp => ({ sp, amount: Math.round((byRep[sp] || 0) * 100) / 100 }));
+            return { start, end, rows };
+          });
+          setBuckets(materialised);
+          setPeriodStart(detectedStart);
+          setPeriodEnd(detectedEnd);
+          setInfo(`Invoice Listing: ${lineCount} lines across ${sortedKeys.length} week${sortedKeys.length===1?"":"s"} · ${detectedStart} → ${detectedEnd}`);
+          setMode("multi");
+          return;
+        }
+        // Single-week file: fall through to the normal preview path.
+        setBuckets(null);
       } else {
         // Legacy per-rep summary format (e.g. "01/05 -08/05" period header,
         // one row per rep in column A with the total in the last numeric cell).
@@ -454,14 +625,33 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
   const submit = async () => {
     setBusy(true); setError(null);
     try {
-      const payload = rows
-        .filter(r => r.sp && Number.isFinite(Number(r.amount)))
-        .map(r => ({
-          period_start: periodStart,
-          period_end: periodEnd,
-          sp: r.sp,
-          amount: Number(r.amount),
-        }));
+      // Multi-week upload from a Customer Invoice Listing: flatten every
+      // bucket's rows into one upsert. Same conflict key handles reruns.
+      let payload;
+      let label;
+      if (buckets && buckets.length > 0) {
+        payload = buckets.flatMap(b =>
+          b.rows
+            .filter(r => r.sp && Number.isFinite(Number(r.amount)) && Number(r.amount) !== 0)
+            .map(r => ({
+              period_start: b.start,
+              period_end: b.end,
+              sp: r.sp,
+              amount: Number(r.amount),
+            }))
+        );
+        label = `${payload.length} rows across ${buckets.length} weeks`;
+      } else {
+        payload = rows
+          .filter(r => r.sp && Number.isFinite(Number(r.amount)))
+          .map(r => ({
+            period_start: periodStart,
+            period_end: periodEnd,
+            sp: r.sp,
+            amount: Number(r.amount),
+          }));
+        label = `${payload.length} rows for ${periodStart} → ${periodEnd}`;
+      }
       if (!payload.length) throw new Error("No rows to save");
 
       const { error } = await supabase
@@ -469,7 +659,7 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
         .upsert(payload, { onConflict: "period_start,period_end,sp" });
       if (error) throw error;
 
-      setInfo(`Saved ${payload.length} rows for ${periodStart} → ${periodEnd}`);
+      setInfo(`Saved ${label}`);
       setTimeout(() => onUploaded?.(), 600);
     } catch (e) {
       setError(e.message);
@@ -483,19 +673,26 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
       background: "rgba(0,0,0,0.3)", border: "1px solid rgba(var(--tint),0.08)",
       borderRadius: 12, padding: 20, marginBottom: 16, marginTop: 4,
     }}>
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <button onClick={() => setMode("xlsx")} style={{
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap:"wrap" }}>
+        <button onClick={() => { setMode("xlsx"); setBuckets(null); }} style={{
           background: mode === "xlsx" ? "rgba(232,99,59,0.2)" : "transparent",
           color: mode === "xlsx" ? "var(--st-accent)" : "rgba(var(--tint),0.5)",
           border: mode === "xlsx" ? "1px solid rgba(232,99,59,0.5)" : "1px solid rgba(var(--tint),0.1)",
           borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
         }}>📄 Upload xlsx</button>
-        <button onClick={() => setMode("manual")} style={{
+        <button onClick={() => { setMode("manual"); setBuckets(null); }} style={{
           background: mode === "manual" ? "rgba(232,99,59,0.2)" : "transparent",
           color: mode === "manual" ? "var(--st-accent)" : "rgba(var(--tint),0.5)",
           border: mode === "manual" ? "1px solid rgba(232,99,59,0.5)" : "1px solid rgba(var(--tint),0.1)",
           borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
         }}>✏️ Manual entry</button>
+        {buckets && buckets.length > 1 && (
+          <div style={{
+            marginLeft:"auto",fontSize:11,color:"var(--st-accent)",fontWeight:600,
+            padding:"6px 12px",borderRadius:6,background:"rgba(232,99,59,0.08)",
+            border:"1px solid rgba(232,99,59,0.25)",fontFamily:"'Space Mono',monospace",
+          }}>{buckets.length} weeks detected</div>
+        )}
       </div>
 
       {mode === "xlsx" && (
@@ -514,6 +711,64 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
           </div>
           <input ref={fileRef} type="file" accept=".xlsx" style={{ display: "none" }}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
+        </div>
+      )}
+
+      {mode === "multi" && buckets && (
+        <div style={{border:"1px solid rgba(232,99,59,0.2)",borderRadius:10,overflow:"hidden"}}>
+          <div style={{padding:"10px 14px",background:"rgba(232,99,59,0.06)",fontSize:12,color:"rgba(var(--tint),0.75)",borderBottom:"1px solid rgba(232,99,59,0.15)"}}>
+            File spans <strong>{buckets.length} weeks</strong>. Each week below will upload as its own <code style={{fontFamily:"'Space Mono',monospace",fontSize:11}}>weekly_sales</code> entry. Re-uploading is safe — same (start, end, rep) rows are overwritten.
+          </div>
+          <div style={{maxHeight:340,overflowY:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:"'Space Mono',monospace"}}>
+              <thead style={{position:"sticky",top:0,background:"rgba(15,15,20,0.95)",backdropFilter:"blur(8px)"}}>
+                <tr>
+                  <th style={{textAlign:"left",padding:"8px 12px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.5)",borderBottom:"1px solid rgba(var(--tint),0.08)"}}>Week</th>
+                  {["Alan","Dino","Khen","Sakinah","Wani","Simon","Seed Malaysia"].map(sp => (
+                    <th key={sp} style={{textAlign:"right",padding:"8px 10px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.5)",borderBottom:"1px solid rgba(var(--tint),0.08)"}}>{sp.split(" ")[0]}</th>
+                  ))}
+                  <th style={{textAlign:"right",padding:"8px 12px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"var(--st-accent)",borderBottom:"1px solid rgba(var(--tint),0.08)"}}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {buckets.map(b => {
+                  const total = b.rows.reduce((a, r) => a + Number(r.amount || 0), 0);
+                  return (
+                    <tr key={b.start} style={{borderBottom:"1px solid rgba(var(--tint),0.04)"}}>
+                      <td style={{padding:"8px 12px",whiteSpace:"nowrap"}}>{fmtDate(b.start)} – {fmtDate(b.end)}</td>
+                      {["Alan","Dino","Khen","Sakinah","Wani","Simon","Seed Malaysia"].map(sp => {
+                        const v = b.rows.find(r => r.sp === sp)?.amount || 0;
+                        return (
+                          <td key={sp} style={{padding:"8px 10px",textAlign:"right",color: v > 0 ? "var(--text)" : "rgba(var(--tint),0.3)"}}>
+                            {v > 0 ? Number(v).toLocaleString("en-MY",{maximumFractionDigits:0}) : "—"}
+                          </td>
+                        );
+                      })}
+                      <td style={{padding:"8px 12px",textAlign:"right",fontWeight:700,color:"var(--st-accent)"}}>
+                        {Number(total).toLocaleString("en-MY",{maximumFractionDigits:0})}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr style={{background:"rgba(var(--tint),0.03)"}}>
+                  <td style={{padding:"10px 12px",fontSize:11,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.6)",fontWeight:700}}>Grand total</td>
+                  {["Alan","Dino","Khen","Sakinah","Wani","Simon","Seed Malaysia"].map(sp => {
+                    const v = buckets.reduce((s, b) => s + (b.rows.find(r => r.sp === sp)?.amount || 0), 0);
+                    return (
+                      <td key={sp} style={{padding:"10px 10px",textAlign:"right",fontWeight:700,color: v > 0 ? "var(--text)" : "rgba(var(--tint),0.3)"}}>
+                        {v > 0 ? Number(v).toLocaleString("en-MY",{maximumFractionDigits:0}) : "—"}
+                      </td>
+                    );
+                  })}
+                  <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:"var(--st-accent)"}}>
+                    {buckets.reduce((s, b) => s + b.rows.reduce((a, r) => a + Number(r.amount || 0), 0), 0).toLocaleString("en-MY",{maximumFractionDigits:0})}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       )}
 
