@@ -230,6 +230,91 @@ export async function syncCustomersFromFiles(files) {
   };
 }
 
+// Restore fact-table rows from a baseline snapshot (typically the bundled
+// src/data.json). For every (sp, year) present in the snapshot's customers
+// and brandSales arrays, groups the rows and calls the same replace RPCs.
+// This is the manual recovery path when an earlier sync wiped scopes and no
+// current file can re-populate them (e.g. the 2026 scopes lost after the
+// initial RLS-blocked sync). Progress reports per scope so the checklist
+// can render each write.
+export async function restoreFromBaseline(baseline, onProgress) {
+  const report = (patch) => { try { onProgress?.(patch); } catch {} };
+
+  // Group customer rows by (sp, year). Each group becomes one RPC call.
+  const custByScope = new Map();
+  for (const r of baseline?.customers || []) {
+    if (!r?.sp || !Number.isFinite(r.year)) continue;
+    const key = `${r.sp}|${r.year}`;
+    if (!custByScope.has(key)) custByScope.set(key, []);
+    custByScope.get(key).push({
+      customer: r.customer,
+      months: Array.isArray(r.months) && r.months.length === 12
+        ? r.months.map((m) => Number(m) || 0)
+        : new Array(12).fill(0),
+      total: Number(r.total) || 0,
+    });
+  }
+  const brandByScope = new Map();
+  for (const r of baseline?.brandSales || []) {
+    if (!r?.sp || !Number.isFinite(r.year)) continue;
+    const key = `${r.sp}|${r.year}`;
+    if (!brandByScope.has(key)) brandByScope.set(key, []);
+    brandByScope.get(key).push({
+      customer: r.customer,
+      brand: r.brand,
+      amt: Number(r.amt) || 0,
+      qty: Number(r.qty) || 0,
+    });
+  }
+
+  const totalScopes = custByScope.size + brandByScope.size;
+  let index = 0;
+  let custRows = 0, brandRows = 0;
+  const scopeLabels = [];
+  const errors = [];
+
+  for (const [key, rows] of custByScope) {
+    const [sp, yearStr] = key.split("|");
+    const year = Number(yearStr);
+    report({ index, total: totalScopes, table: "customers_data", scope: `${sp} ${year}` });
+    if (rows.length === 0) { index += 1; continue; }
+    const { data, error } = await supabase.rpc("replace_customers_data", {
+      p_sp: sp, p_year: year, p_rows: rows,
+    });
+    if (error) {
+      errors.push(`customers ${sp} ${year}: ${error.message}`);
+    } else {
+      custRows += data?.[0]?.inserted ?? rows.length;
+      scopeLabels.push(`${sp} ${year} (cust)`);
+    }
+    index += 1;
+  }
+  for (const [key, rows] of brandByScope) {
+    const [sp, yearStr] = key.split("|");
+    const year = Number(yearStr);
+    report({ index, total: totalScopes, table: "brand_sales_data", scope: `${sp} ${year}` });
+    if (rows.length === 0) { index += 1; continue; }
+    const { data, error } = await supabase.rpc("replace_brand_sales_data", {
+      p_sp: sp, p_year: year, p_rows: rows,
+    });
+    if (error) {
+      errors.push(`brands ${sp} ${year}: ${error.message}`);
+    } else {
+      brandRows += data?.[0]?.inserted ?? rows.length;
+      scopeLabels.push(`${sp} ${year} (brand)`);
+    }
+    index += 1;
+  }
+
+  return {
+    scopes: scopeLabels.length,
+    customerRows: custRows,
+    brandRows: brandRows,
+    errors,
+    scopeLabels,
+  };
+}
+
 // Same shape for brand_sales_data, delegated to replace_brand_sales_data. Same
 // empty-row skip so a stray zero-row file can't erase a scope.
 export async function syncBrandsFromFiles(files) {
