@@ -168,10 +168,42 @@ export default function DataTab({ data }) {
     });
   }, [files, sort, query]);
 
-  // Group active files by upload month. Order: newest month first, "Unknown"
-  // last. Each group keeps the current sort order for the files inside it.
+  // How the list is bucketed. 'type' groups by file kind (customer / brand /
+  // invoice) which is what most admins want when scanning the library; 'month'
+  // groups by upload date. Sticky per browser so admins don't have to re-pick
+  // on every visit.
+  const [groupBy, setGroupBy] = useState(() => {
+    try { return localStorage.getItem("dataTab.groupBy") || "type"; } catch { return "type"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("dataTab.groupBy", groupBy); } catch {}
+  }, [groupBy]);
+
+  // Group active files by the selected axis. Each group keeps the current
+  // sort order for the files inside it.
   const grouped = useMemo(() => {
     const buckets = new Map();
+    if (groupBy === "type") {
+      const KIND_ORDER = { customer: 0, brand: 1, invoice: 2 };
+      for (const entry of active) {
+        const key = entry.kind || "other";
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(entry);
+      }
+      const keys = [...buckets.keys()].sort((a, b) => {
+        const ai = KIND_ORDER[a] ?? 99;
+        const bi = KIND_ORDER[b] ?? 99;
+        return ai - bi || a.localeCompare(b);
+      });
+      return keys.map(key => ({
+        key,
+        label: detectedLabel(key),
+        color: kindColor(key),
+        entries: buckets.get(key),
+        totalSize: buckets.get(key).reduce((s, e) => s + (e.sizeBytes || 0), 0),
+      }));
+    }
+    // groupBy === "month"
     for (const entry of active) {
       const key = monthKeyFor(entry.uploadedAt);
       if (!buckets.has(key)) buckets.set(key, []);
@@ -185,45 +217,52 @@ export default function DataTab({ data }) {
     return keys.map(key => ({
       key,
       label: monthLabelFor(key),
+      color: "rgba(var(--tint),0.55)",
       entries: buckets.get(key),
       totalSize: buckets.get(key).reduce((s, e) => s + (e.sizeBytes || 0), 0),
     }));
-  }, [active]);
+  }, [active, groupBy]);
 
-  // Which month sections are expanded. Default: only the most recent month.
-  // The user's clicks stick, but new months auto-open when they first appear.
-  const [openMonths, setOpenMonths] = useState(() => new Set());
-  const [seenMonths, setSeenMonths] = useState(() => new Set());
+  // Which group sections are expanded. Keys include the group-by axis so
+  // switching between Type and Month keeps each layout's open state separate.
+  const [openGroups, setOpenGroups] = useState(() => new Set());
+  const [seenGroups, setSeenGroups] = useState(() => new Set());
   useEffect(() => {
     if (!grouped.length) return;
-    const fresh = grouped.map(g => g.key).filter(k => !seenMonths.has(k));
+    const scoped = grouped.map(g => `${groupBy}:${g.key}`);
+    const fresh = scoped.filter(k => !seenGroups.has(k));
     if (!fresh.length) return;
-    setSeenMonths(prev => {
-      const next = new Set(prev);
-      fresh.forEach(k => next.add(k));
-      return next;
+    setSeenGroups(prev => {
+      const next = new Set(prev); fresh.forEach(k => next.add(k)); return next;
     });
-    setOpenMonths(prev => {
-      // First render: open only the newest bucket. After that: open new arrivals.
-      if (prev.size === 0 && seenMonths.size === 0) {
-        return new Set([grouped[0].key]);
-      }
-      const next = new Set(prev);
-      fresh.forEach(k => next.add(k));
-      return next;
+    setOpenGroups(prev => {
+      // First render for this axis: open the first (most-relevant) group only.
+      const anyForAxis = [...prev].some(k => k.startsWith(`${groupBy}:`));
+      if (!anyForAxis) return new Set([...prev, scoped[0]]);
+      const next = new Set(prev); fresh.forEach(k => next.add(k)); return next;
     });
-  }, [grouped, seenMonths]);
+  }, [grouped, seenGroups, groupBy]);
 
-  const toggleMonth = (key) => {
-    setOpenMonths(prev => {
+  const groupKey = (k) => `${groupBy}:${k}`;
+  const toggleGroup = (key) => {
+    setOpenGroups(prev => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      const scoped = groupKey(key);
+      if (next.has(scoped)) next.delete(scoped);
+      else next.add(scoped);
       return next;
     });
   };
-  const expandAllMonths = () => setOpenMonths(new Set(grouped.map(g => g.key)));
-  const collapseAllMonths = () => setOpenMonths(new Set());
+  const expandAllGroups = () => setOpenGroups(prev => {
+    const next = new Set(prev);
+    grouped.forEach(g => next.add(groupKey(g.key)));
+    return next;
+  });
+  const collapseAllGroups = () => setOpenGroups(prev => {
+    const next = new Set(prev);
+    grouped.forEach(g => next.delete(groupKey(g.key)));
+    return next;
+  });
 
   const liveCount = useMemo(() => files.filter(f => !f.deletedAt).length, [files]);
   const trashed = useMemo(
@@ -439,10 +478,28 @@ export default function DataTab({ data }) {
                 )}
               </div>
             )}
+            {liveCount > 0 && (
+              <div style={{
+                display:"flex",alignItems:"center",gap:0,
+                border:"1px solid rgba(var(--tint),0.12)",borderRadius:8,overflow:"hidden",
+              }}>
+                <span style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.5)",padding:"0 10px",fontWeight:600}}>Group by</span>
+                {["type","month"].map((g, i) => (
+                  <button key={g} onClick={() => setGroupBy(g)} style={{
+                    background: groupBy === g ? "rgba(232,99,59,0.15)" : "transparent",
+                    color: groupBy === g ? "var(--st-accent)" : "rgba(var(--tint),0.65)",
+                    border:"none",
+                    borderLeft: i === 0 ? "1px solid rgba(var(--tint),0.12)" : "1px solid rgba(var(--tint),0.12)",
+                    padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer",
+                    fontFamily:"'DM Sans',sans-serif",textTransform:"capitalize",
+                  }}>{g}</button>
+                ))}
+              </div>
+            )}
             {grouped.length > 1 && (
               <>
-                <button onClick={expandAllMonths} style={actionBtn("rgba(255,255,255,0.5)")} title="Expand every month">Expand all</button>
-                <button onClick={collapseAllMonths} style={actionBtn("rgba(255,255,255,0.5)")} title="Collapse every month">Collapse all</button>
+                <button onClick={expandAllGroups} style={actionBtn("rgba(255,255,255,0.5)")} title="Expand every group">Expand all</button>
+                <button onClick={collapseAllGroups} style={actionBtn("rgba(255,255,255,0.5)")} title="Collapse every group">Collapse all</button>
               </>
             )}
             <button onClick={refresh} style={actionBtn("#3B82F6")}>↻ Refresh</button>
@@ -486,21 +543,22 @@ export default function DataTab({ data }) {
               </thead>
               <tbody>
                 {grouped.map(group => {
-                  const isOpen = openMonths.has(group.key);
+                  const isOpen = openGroups.has(groupKey(group.key));
                   return (
                     <Fragment key={group.key}>
-                      <tr onClick={() => toggleMonth(group.key)}
-                          style={{cursor:"pointer",background:"rgba(var(--tint),0.045)"}}>
+                      <tr onClick={() => toggleGroup(group.key)}
+                          style={{cursor:"pointer",background:`${group.color}12`}}>
                         <td colSpan={5} style={{
                           padding:"9px 14px",
-                          borderTop:"1px solid rgba(var(--tint),0.06)",
-                          borderBottom: isOpen ? "1px solid rgba(var(--tint),0.06)" : "none",
+                          borderTop:`1px solid ${group.color}33`,
+                          borderLeft:`3px solid ${group.color}`,
+                          borderBottom: isOpen ? `1px solid ${group.color}33` : "none",
                           fontSize:12,fontWeight:600,
                         }}>
                           <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                            <span style={{color:"rgba(var(--tint),0.55)",width:12,display:"inline-block",fontFamily:"'Space Mono',monospace"}}>{isOpen ? "▾" : "▸"}</span>
-                            <span>{group.label}</span>
-                            <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:11,fontFamily:"'Space Mono',monospace"}}>
+                            <span style={{color: group.color,width:12,display:"inline-block",fontFamily:"'Space Mono',monospace"}}>{isOpen ? "▾" : "▸"}</span>
+                            <span style={{color: group.color}}>{group.label}</span>
+                            <span style={{color:"rgba(var(--tint),0.5)",fontWeight:400,fontSize:11,fontFamily:"'Space Mono',monospace"}}>
                               · {group.entries.length} file{group.entries.length===1?"":"s"} · {fmtSize(group.totalSize)}
                             </span>
                           </div>
@@ -508,11 +566,11 @@ export default function DataTab({ data }) {
                       </tr>
                       {isOpen && group.entries.map(entry => (
                         <tr key={entry.id}>
-                          <td style={{...tdStyle,maxWidth:280}}>
+                          <td style={{...tdStyle,minWidth:280}}>
                             <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
                               <span style={{color: kindColor(entry.kind),fontSize:14,marginTop:1,flexShrink:0}}>📄</span>
-                              <div style={{minWidth:0}}>
-                                <div style={{fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:260}}>{entry.name}</div>
+                              <div style={{minWidth:0,flex:1}}>
+                                <div title={entry.name} style={{fontWeight:500,wordBreak:"break-word",lineHeight:1.35}}>{entry.name}</div>
                                 <div style={{fontSize:10,color:"rgba(var(--tint),0.45)",fontFamily:"'Space Mono',monospace",marginTop:2}}>
                                   {entry.sp || "—"} · {entry.year || "—"} · {entry.rowCount} rows
                                 </div>
