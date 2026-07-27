@@ -104,7 +104,9 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
   return (
     <div style={{
       background: "rgba(var(--tint),0.02)",
-      border: `1px solid ${accentColor}40`,
+      // accentColor is a CSS var, so tint it via color-mix — appending an alpha
+      // suffix to a var() is invalid CSS and silently drops the border.
+      border: `1px solid color-mix(in srgb, ${accentColor} 26%, transparent)`,
       borderRadius: 14,
       padding: 20,
       display: "flex",
@@ -129,7 +131,9 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
           {target > 0 && (
             <div style={{
               fontSize: 15, fontWeight: 700, fontFamily: "'Space Mono',monospace", color,
-              padding: "3px 11px", borderRadius: 14, background: `${color}22`, border: `1px solid ${color}66`,
+              padding: "3px 11px", borderRadius: 14,
+              background: `color-mix(in srgb, ${color} 16%, transparent)`,
+              border: `1px solid color-mix(in srgb, ${color} 48%, transparent)`,
             }}>
               {fmtPct(pct)}
             </div>
