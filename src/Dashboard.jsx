@@ -413,6 +413,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [topCustomersBySpView, setTopCustomersBySpView] = useState("grid");
+  // "all" or a year in YEARS. Defaults to all-time so the existing view is
+  // unchanged until the admin picks a year.
+  const [topCustomersBySpYear, setTopCustomersBySpYear] = useState("all");
   const [themeKey, setThemeKey] = useState(() => {
     try { return migrateThemeKey(localStorage.getItem("seedTheme")); } catch { return "slate"; }
   });
@@ -627,9 +630,15 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
   const topCustomersBySP = useMemo(() => {
     const out = {};
+    // "all" sums every year in the dataset; a specific year narrows to that
+    // year's customer rows only. Uses the SP's monthly-total column, so a
+    // year with only Q1 data still ranks that quarter's largest customers.
+    const yearFilter = topCustomersBySpYear === "all"
+      ? () => true
+      : (r) => r.year === topCustomersBySpYear;
     SALESPEOPLE.forEach(sp => {
       const map = new Map();
-      CUSTOMERS.filter(r => r.sp === sp && r.total > 0).forEach(r => {
+      CUSTOMERS.filter(r => r.sp === sp && r.total > 0 && yearFilter(r)).forEach(r => {
         map.set(r.customer, (map.get(r.customer) || 0) + r.total);
       });
       out[sp] = [...map.entries()]
@@ -638,7 +647,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         .slice(0, 10);
     });
     return out;
-  }, [data]);
+  }, [data, topCustomersBySpYear]);
 
   const filteredCustomerList = useMemo(() => {
     if (!customerSearch) return customerIndex.slice(0, 200);
@@ -1373,7 +1382,24 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
             <div style={{marginTop:32,marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
               <div style={{fontSize:15,fontWeight:700,color:"rgba(var(--tint),0.9)"}}>Top 10 Customers by Sales Team</div>
-              <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                {/* Year picker — All time by default, or any year in the
+                    dataset. Recomputes the top-10 per rep from just that
+                    year's customer rows. */}
+                <div style={{display:"inline-flex",background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.06)",borderRadius:8,padding:2,flexWrap:"wrap"}}>
+                  {[{key:"all",label:"All time"}, ...YEARS.map(y => ({key:y,label:String(y)}))].map(opt => {
+                    const active = topCustomersBySpYear === opt.key;
+                    return (
+                      <button key={opt.key} onClick={() => setTopCustomersBySpYear(opt.key)} style={{
+                        background: active ? "rgba(232,99,59,0.2)" : "transparent",
+                        color:      active ? STATUS.accent : "rgba(var(--tint),0.55)",
+                        border:"none",borderRadius:6,padding:"6px 12px",fontSize:12,
+                        fontWeight: active ? 700 : 500, cursor:"pointer",
+                        fontFamily:"'DM Sans',sans-serif",
+                      }}>{opt.label}</button>
+                    );
+                  })}
+                </div>
                 <div style={{display:"inline-flex",background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.06)",borderRadius:8,padding:2}}>
                   <button onClick={()=>setTopCustomersBySpView("grid")} style={{
                     background: topCustomersBySpView === "grid" ? "rgba(232,99,59,0.2)" : "transparent",
@@ -1386,7 +1412,11 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"
                   }}>≡ List</button>
                 </div>
-                <div style={{fontSize:11,color:"rgba(var(--tint),0.4)"}}>All-time · {YEARS[0]}–{YEARS[YEARS.length-1]}</div>
+                <div style={{fontSize:11,color:"rgba(var(--tint),0.4)"}}>
+                  {topCustomersBySpYear === "all"
+                    ? `All-time · ${YEARS[0]}–${YEARS[YEARS.length-1]}`
+                    : `Year ${topCustomersBySpYear}`}
+                </div>
               </div>
             </div>
 
