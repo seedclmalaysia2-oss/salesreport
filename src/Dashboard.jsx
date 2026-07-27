@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, lazy, Suspense } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, ReferenceLine } from "recharts";
 import WeeklySalesCard from "./WeeklySalesCard.jsx";
+import { aggregateProductSales, CATEGORY_COLORS, CATEGORY_ORDER } from "./lib/productCategories.js";
 // Admin-only panels. Only one account can open these, so there is no reason
 // for everyone else to download them — and DataTab drags in the xlsx parser.
 const DataTab = lazy(() => import("./DataTab.jsx"));
@@ -985,6 +986,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           <TabButton tabKey="yoy" active={tab==="yoy"} onClick={()=>setTab("yoy")}>Year-over-Year</TabButton>
           <TabButton tabKey="drilldown" active={tab==="drilldown"} onClick={()=>setTab("drilldown")}>Customer Drill-down</TabButton>
           <TabButton tabKey="brands" active={tab==="brands"} onClick={()=>setTab("brands")}>Brand Performance</TabButton>
+          <TabButton tabKey="products" active={tab==="products"} onClick={()=>setTab("products")}>Product Sales</TabButton>
           <TabButton tabKey="cohort" active={tab==="cohort"} onClick={()=>setTab("cohort")}>New vs Lost</TabButton>
           <TabButton tabKey="heatmap" active={tab==="heatmap"} onClick={()=>setTab("heatmap")}>Customer × Brand</TabButton>
           {user?.isAdmin && (
@@ -1867,6 +1869,19 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           </>
         )}
 
+        {tab === "products" && (
+          <ProductSalesTab
+            year={selectedYear}
+            years={YEARS}
+            salespeople={SALESPEOPLE}
+            brandSales={BRAND_SALES}
+            colors={COLORS}
+            tk={tk}
+            reduceMotion={reduceMotion}
+            isMobile={isMobile}
+          />
+        )}
+
         {tab === "cohort" && (
           <>
             <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
@@ -2213,5 +2228,231 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         SEED Malaysia Sales Dashboard · {CUSTOMERS.length.toLocaleString()} customer-year rows · {BRAND_SALES.length.toLocaleString()} brand-sale rows · signed in as {user?.email || "—"}
       </div>
     </div>
+  );
+}
+
+// ============================================================
+// Product Sales tab — per-rep breakdown by product category.
+// Categories (Japan / Ultravision / Disop / Wohlk / Other) come from the
+// brand-code prefix rules in src/lib/productCategories.js — edit that file
+// to move a brand into a different bucket.
+// ============================================================
+function ProductSalesTab({ year, years, salespeople, brandSales, colors, tk, reduceMotion, isMobile }) {
+  const [selectedYear, setSelectedYear] = useState(year);
+  const [metric, setMetric]             = useState("amt"); // 'amt' | 'qty'
+
+  // Restrict to the selected year (or "all" -> every year) before we hand the
+  // rows to the aggregator. Salespeople parameter preserves the app's canonical
+  // rep order in charts.
+  const rows = useMemo(() => (
+    selectedYear === "all"
+      ? brandSales
+      : brandSales.filter(r => r.year === selectedYear)
+  ), [brandSales, selectedYear]);
+
+  const agg = useMemo(
+    () => aggregateProductSales(rows, { salespeople }),
+    [rows, salespeople]
+  );
+
+  // Chart-friendly shape: one row per rep with each category as a series.
+  const chartData = useMemo(() => (
+    agg.spOrder.map(sp => {
+      const row = { sp };
+      let total = 0;
+      for (const c of agg.categoriesUsed) {
+        const v = agg.totalsBySp[sp]?.[c]?.[metric] || 0;
+        row[c] = v;
+        total += v;
+      }
+      row._total = total;
+      return row;
+    })
+  ), [agg, metric]);
+
+  const grandTotal = useMemo(() => (
+    agg.categoriesUsed.reduce((s, c) => s + (agg.totalsByCategory[c]?.[metric] || 0), 0)
+  ), [agg, metric]);
+
+  const fmtVal = (v) =>
+    metric === "amt" ? fmtFull(v) : `${Number(v).toLocaleString("en-MY")} units`;
+  const fmtShort = (v) => metric === "amt" ? `RM ${fmt(v)}` : `${Number(v).toLocaleString("en-MY")}`;
+
+  return (
+    <>
+      {/* Toolbar: year picker + metric toggle + summary caption */}
+      <Card style={{marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,marginBottom:2}}>📦 Product Sales by Salesperson</div>
+            <div style={{fontSize:12,color:"rgba(var(--tint),0.55)"}}>
+              Rows aggregated from brand codes via <code style={{fontFamily:"'Space Mono',monospace",fontSize:11}}>src/lib/productCategories.js</code>. Edit that file to reclassify a brand.
+            </div>
+          </div>
+          <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+            {/* Metric toggle */}
+            <div style={{display:"inline-flex",background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.06)",borderRadius:8,padding:2}}>
+              {[{k:"amt",label:"Revenue (RM)"},{k:"qty",label:"Quantity (units)"}].map(o => {
+                const active = metric === o.k;
+                return (
+                  <button key={o.k} onClick={() => setMetric(o.k)} style={{
+                    background: active ? "rgba(232,99,59,0.2)" : "transparent",
+                    color:      active ? "#E8633B" : "rgba(var(--tint),0.55)",
+                    border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,
+                    fontWeight: active ? 700 : 500, cursor:"pointer",
+                    fontFamily:"'DM Sans',sans-serif",
+                  }}>{o.label}</button>
+                );
+              })}
+            </div>
+            {/* Year picker */}
+            <div style={{display:"inline-flex",background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.06)",borderRadius:8,padding:2,flexWrap:"wrap"}}>
+              {[{k:"all",label:"All time"}, ...years.map(y => ({k:y,label:String(y)}))].map(o => {
+                const active = selectedYear === o.k;
+                return (
+                  <button key={o.k} onClick={() => setSelectedYear(o.k)} style={{
+                    background: active ? "rgba(232,99,59,0.2)" : "transparent",
+                    color:      active ? "#E8633B" : "rgba(var(--tint),0.55)",
+                    border:"none",borderRadius:6,padding:"6px 12px",fontSize:12,
+                    fontWeight: active ? 700 : 500, cursor:"pointer",
+                    fontFamily:"'DM Sans',sans-serif",
+                  }}>{o.label}</button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Category KPI strip */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(min(180px,100%), 1fr))",gap:12,marginBottom:20}}>
+        {CATEGORY_ORDER.map(cat => {
+          const v = agg.totalsByCategory[cat]?.[metric] || 0;
+          const share = grandTotal > 0 ? (v / grandTotal) * 100 : 0;
+          const color = CATEGORY_COLORS[cat];
+          return (
+            <div key={cat} style={{
+              background: `${color}0d`, border: `1px solid ${color}33`,
+              borderRadius: 12, padding: "14px 16px",
+            }}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                <span style={{width:10,height:10,borderRadius:3,background:color,flexShrink:0}} />
+                <span style={{fontSize:11,textTransform:"uppercase",letterSpacing:1,fontWeight:600,color}}>{cat}</span>
+              </div>
+              <div style={{fontSize:20,fontWeight:700,fontFamily:"'Space Mono',monospace",color:"var(--text)"}}>
+                {fmtShort(v)}
+              </div>
+              <div style={{fontSize:11,color:"rgba(var(--tint),0.5)",marginTop:2,fontFamily:"'Space Mono',monospace"}}>
+                {share.toFixed(1)}% of {metric === "amt" ? "revenue" : "units"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Stacked bars: one bar per rep, colour = category */}
+      <Card style={{marginBottom:20}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}>
+          <div style={{fontSize:14,fontWeight:600}}>
+            By salesperson — {selectedYear === "all" ? `all time (${years[0]}–${years[years.length-1]})` : `year ${selectedYear}`}
+          </div>
+          <div style={{fontSize:11,color:"rgba(var(--tint),0.4)"}}>
+            {metric === "amt" ? `Total ${fmtFull(grandTotal)}` : `Total ${Number(grandTotal).toLocaleString("en-MY")} units`}
+          </div>
+        </div>
+        {chartData.length === 0 ? (
+          <div style={{padding:"60px 0",textAlign:"center",color:"rgba(var(--tint),0.4)"}}>
+            No brand-sale rows for this year. Try All time.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 60)}>
+            <BarChart data={chartData} layout="vertical" margin={{left:100, right:80}}>
+              <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} horizontal={false} />
+              <XAxis type="number" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmtShort} />
+              <YAxis type="category" dataKey="sp" tick={{fill:tk.chartTickFillDim,fontSize:12,fontWeight:600}} axisLine={false} width={95} />
+              <Tooltip
+                formatter={(v, name) => [fmtVal(v), name]}
+                contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}}
+                labelStyle={{color:tk.text,fontWeight:600,marginBottom:4}}
+                itemStyle={{color:tk.tooltipText}}
+              />
+              <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.75)",fontSize:11}}>{v}</span>} />
+              {agg.categoriesUsed.map((cat, i) => (
+                <Bar
+                  isAnimationActive={!reduceMotion}
+                  key={cat}
+                  dataKey={cat}
+                  stackId="cats"
+                  fill={CATEGORY_COLORS[cat]}
+                  radius={i === agg.categoriesUsed.length - 1 ? [0,4,4,0] : [0,0,0,0]}
+                />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </Card>
+
+      {/* Detailed table: rep × category with totals */}
+      <Card>
+        <div style={{fontSize:14,fontWeight:600,marginBottom:12}}>Breakdown table</div>
+        <div style={{overflowX:"auto",border:"1px solid rgba(var(--tint),0.05)",borderRadius:10}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:640}}>
+            <thead>
+              <tr style={{background:"rgba(var(--tint),0.04)"}}>
+                <th style={{textAlign:"left",padding:"10px 14px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.55)",fontWeight:600,borderBottom:"1px solid rgba(var(--tint),0.08)"}}>Salesperson</th>
+                {agg.categoriesUsed.map(cat => (
+                  <th key={cat} style={{textAlign:"right",padding:"10px 14px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:CATEGORY_COLORS[cat],fontWeight:600,borderBottom:"1px solid rgba(var(--tint),0.08)",whiteSpace:"nowrap"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6,justifyContent:"flex-end"}}>
+                      <span style={{width:8,height:8,borderRadius:2,background:CATEGORY_COLORS[cat]}} />
+                      {cat.replace(" Product","")}
+                    </span>
+                  </th>
+                ))}
+                <th style={{textAlign:"right",padding:"10px 14px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#E8633B",fontWeight:700,borderBottom:"1px solid rgba(var(--tint),0.08)",whiteSpace:"nowrap"}}>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chartData.map(row => (
+                <tr key={row.sp} style={{borderBottom:"1px solid rgba(var(--tint),0.04)"}}>
+                  <td style={{padding:"10px 14px",fontWeight:600}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
+                      <span style={{width:10,height:10,borderRadius:3,background:colors[row.sp]||"#888",flexShrink:0}} />
+                      {row.sp}
+                    </span>
+                  </td>
+                  {agg.categoriesUsed.map(cat => {
+                    const v = row[cat] || 0;
+                    return (
+                      <td key={cat} style={{padding:"10px 14px",textAlign:"right",fontFamily:"'Space Mono',monospace",color: v > 0 ? "var(--text)" : "rgba(var(--tint),0.3)",whiteSpace:"nowrap"}}>
+                        {v > 0 ? fmtShort(v) : "—"}
+                      </td>
+                    );
+                  })}
+                  <td style={{padding:"10px 14px",textAlign:"right",fontFamily:"'Space Mono',monospace",fontWeight:700,color:"#E8633B",whiteSpace:"nowrap"}}>
+                    {fmtShort(row._total)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{background:"rgba(var(--tint),0.03)"}}>
+                <td style={{padding:"12px 14px",fontSize:11,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.55)",fontWeight:700}}>Grand total</td>
+                {agg.categoriesUsed.map(cat => {
+                  const v = agg.totalsByCategory[cat]?.[metric] || 0;
+                  return (
+                    <td key={cat} style={{padding:"12px 14px",textAlign:"right",fontFamily:"'Space Mono',monospace",fontWeight:700,color:CATEGORY_COLORS[cat],whiteSpace:"nowrap"}}>
+                      {v > 0 ? fmtShort(v) : "—"}
+                    </td>
+                  );
+                })}
+                <td style={{padding:"12px 14px",textAlign:"right",fontFamily:"'Space Mono',monospace",fontWeight:700,color:"#E8633B",whiteSpace:"nowrap"}}>
+                  {fmtShort(grandTotal)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </Card>
+    </>
   );
 }
