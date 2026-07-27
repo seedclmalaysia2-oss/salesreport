@@ -175,6 +175,52 @@ export default function DataTab({ data, onRefresh }) {
 
   const invoiceFileCount = useMemo(() => invoiceFilesFrom(files).length, [files]);
 
+  // The single "do everything" recalculate. Reloads the file registry, replays
+  // every invoice listing into weekly_sales (idempotent), then nudges the parent
+  // so every tab picks up the fresh customers/brand/targets/weekly reads. One
+  // click covers the three round-trips an admin used to have to remember.
+  const [recalculating, setRecalculating] = useState(false);
+  const [lastRecalcAt, setLastRecalcAt] = useState(null);
+  const recalcAll = async () => {
+    setRecalculating(true);
+    setError(null);
+    setNotice(null);
+    const summary = [];
+    try {
+      const list = await refresh();
+      if (!list) {
+        setRecalculating(false);
+        return;
+      }
+      summary.push(`${list.filter(f => !f.deletedAt).length} file${list.filter(f => !f.deletedAt).length===1?"":"s"} reloaded`);
+
+      const hasInvoices = invoiceFilesFrom(list).length > 0;
+      if (hasInvoices) {
+        try {
+          const res = await syncWeeklyFromFiles(list);
+          if (res.rows > 0) {
+            summary.push(`${res.weeks} week${res.weeks===1?"":"s"} synced (${res.periodStart} → ${res.periodEnd})`);
+          } else {
+            summary.push("weekly board already in sync");
+          }
+        } catch (e) {
+          // Don't abort the whole recalc if only the weekly sync fails — the
+          // dashboard refresh below is still useful.
+          summary.push(`weekly sync failed (${e.message || e})`);
+        }
+      }
+
+      onRefresh?.();
+      summary.push("dashboard reloaded");
+      setLastRecalcAt(Date.now());
+      setNotice(`Recalculated · ${summary.join(" · ")}.`);
+    } catch (e) {
+      setError(`Recalculate failed: ${e.message || e}`);
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
   // Live (non-trashed) files, narrowed by the search box and ordered by the
   // current sort. Sorting on 'kind' uses the label shown in the Type column so
   // A->Z matches what the eye reads, not the internal 'customer'/'brand' value.
@@ -473,11 +519,60 @@ export default function DataTab({ data, onRefresh }) {
 
   return (
     <>
-      <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:16,marginBottom:16,flexWrap:"wrap"}}>
         <KPI label="Uploaded files" value={active.length} sub="admin-only · not visible to users" color="#E8633B" />
         <KPI label="Customer-year rows" value={data.customers?.length.toLocaleString() ?? "0"} sub="loaded into the dashboard" color="#34D399" />
         <KPI label="Brand-sale rows" value={data.brandSales?.length.toLocaleString() ?? "0"} sub={`across ${(data.brands || []).length} brands`} color="#A855F7" />
         <KPI label="Years covered" value={(data.years || []).join(", ") || "—"} sub={`${(data.salespeople || []).length} salespeople`} color="#3B82F6" />
+      </div>
+
+      {/* One-click "refresh everything the dashboard reads": file registry,
+          invoice→weekly bridge, and the parent's Supabase re-fetch. Sits above
+          the file library so admins can trigger it without hunting for a
+          smaller Refresh in the toolbar. */}
+      <div style={{
+        display:"flex",alignItems:"center",gap:14,flexWrap:"wrap",marginBottom:20,
+        padding:"12px 16px",borderRadius:12,
+        background:"linear-gradient(135deg, rgba(232,99,59,0.08), rgba(59,130,246,0.06))",
+        border:"1px solid rgba(232,99,59,0.28)",
+      }}>
+        <div style={{fontSize:22,lineHeight:1,flexShrink:0}} aria-hidden="true">🔄</div>
+        <div style={{flex:"1 1 260px",minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--text)",marginBottom:2}}>
+            Recalculate dashboard
+          </div>
+          <div style={{fontSize:12,color:"rgba(var(--tint),0.65)",lineHeight:1.5}}>
+            Reload the file library, replay invoice listings into the Weekly Sales board, and refresh every chart on every tab. Safe to run any time.
+          </div>
+        </div>
+        {lastRecalcAt && !recalculating && (
+          <div style={{fontSize:11,color:"rgba(var(--tint),0.5)",fontFamily:"'Space Mono',monospace",whiteSpace:"nowrap"}}>
+            Last run {fmtDate(lastRecalcAt)}
+          </div>
+        )}
+        <button
+          onClick={recalcAll}
+          disabled={recalculating}
+          style={{
+            display:"inline-flex",alignItems:"center",gap:8,
+            background: recalculating ? "rgba(232,99,59,0.15)" : "#E8633B",
+            color: recalculating ? "rgba(232,99,59,0.9)" : "#fff",
+            border: recalculating ? "1px solid rgba(232,99,59,0.4)" : "none",
+            borderRadius:8,padding:"10px 20px",fontSize:13,fontWeight:700,
+            cursor: recalculating ? "wait" : "pointer",
+            fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
+          }}>
+          {recalculating ? (
+            <>
+              <span style={{
+                width:13,height:13,borderRadius:"50%",display:"inline-block",
+                border:"2px solid rgba(232,99,59,0.35)",borderTopColor:"#E8633B",
+                animation:"seedspin 0.8s linear infinite",
+              }} />
+              Recalculating…
+            </>
+          ) : "🔄 Recalculate now"}
+        </button>
       </div>
 
       {/* The link between this tab and the Weekly Sales board. Uploading an
