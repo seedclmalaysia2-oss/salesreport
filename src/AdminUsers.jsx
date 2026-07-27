@@ -32,7 +32,14 @@ const selectStyle = {
   background:"rgba(var(--tint),0.04)", border:"1px solid rgba(var(--tint),0.1)",
   color:"var(--text)", borderRadius:6, padding:"5px 8px", fontSize:11,
   fontFamily:"'DM Sans',sans-serif", cursor:"pointer",
+  // Signal to the browser that our page is dark-friendly, so the OS-drawn
+  // dropdown list uses matching contrast instead of pale-on-pale text.
+  colorScheme:"dark light",
 };
+// Explicit hex on the individual <option> elements — the OS-native dropdown
+// list ignores CSS variables from the parent select, so styling the closed
+// box alone leaves the open list unreadable on dark theme.
+const optionStyle = { background:"#0A0A0F", color:"#fff" };
 
 export default function AdminUsers({ user }) {
   const [rows, setRows] = useState([]);
@@ -188,8 +195,8 @@ export default function AdminUsers({ user }) {
                         disabled={busyId === row.user_id}
                         onChange={(e) => onChangeSp(row, e.target.value)}
                         style={selectStyle}>
-                        {!SP_OPTIONS.includes(row.sp) && row.sp && <option value={row.sp}>{row.sp}</option>}
-                        {SP_OPTIONS.map(sp => <option key={sp} value={sp}>{sp}</option>)}
+                        {!SP_OPTIONS.includes(row.sp) && row.sp && <option value={row.sp} style={optionStyle}>{row.sp}</option>}
+                        {SP_OPTIONS.map(sp => <option key={sp} value={sp} style={optionStyle}>{sp}</option>)}
                       </select>
                     </td>
                     <td style={tdStyle}>

@@ -459,9 +459,17 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
                 flex: "1 1 auto", background: "rgba(var(--tint),0.05)", border: "1px solid rgba(var(--tint),0.15)",
                 color: "var(--text)", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontWeight: 700,
                 fontFamily: "'DM Sans',sans-serif", cursor: "pointer",
+                // colorScheme tells Chromium/Edge to render the OPEN dropdown
+                // in the same theme as the page (otherwise it uses OS light).
+                colorScheme: "dark light",
               }}>
               {monthKeys.map(k => (
-                <option key={k} value={k}>{monthLabel(k)} · {periodsByMonth.get(k).length} wk</option>
+                // Explicit hex on the option elements — the OS-native dropdown
+                // list ignores CSS variables, so the earlier styling only
+                // affected the closed select box, not the open list.
+                <option key={k} value={k} style={{background:"#0A0A0F",color:"#fff"}}>
+                  {monthLabel(k)} · {periodsByMonth.get(k).length} wk
+                </option>
               ))}
             </select>
             <button
