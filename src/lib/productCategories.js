@@ -8,82 +8,94 @@
 //
 // Categories are rendered in the order defined here — reorder to change the
 // column order on the page.
+//
+// Mapping updated 2026-07-27 from the reviewed brand_categories_review.xlsx:
+// Disop was renamed Spain (Disop's parent company is Spanish), Taiwan added
+// as a new bucket for the MC/MNSF families, and the old EC/MHF/MTPR/2UWK
+// families were reclassified as Japan.
 
 export const CATEGORY_ORDER = [
   "Japan Product",
+  "Spain Product",
+  "Taiwan Product",
   "Ultravision Product",
-  "Disop Product",
   "Wohlk Product",
   "Other Product",
 ];
 
 // Distinct accent per category, used for chart bars and the pill legend.
 export const CATEGORY_COLORS = {
-  "Japan Product":       "#E8633B", // Signal Orange — Seed's brand accent
-  "Ultravision Product": "#3B82F6", // Info Blue
-  "Disop Product":       "#34D399", // Ok Green
-  "Wohlk Product":       "#A855F7", // Region Purple
+  "Japan Product":       "#E8633B", // Signal Orange — Seed / Japan
+  "Spain Product":       "#34D399", // Ok Green — Disop
+  "Taiwan Product":      "#EAB308", // Amber — Taiwanese lens maker
+  "Ultravision Product": "#3B82F6", // Info Blue — UK
+  "Wohlk Product":       "#A855F7", // Region Purple — Germany
   "Other Product":       "#94A3B8", // Neutral slate
 };
 
 // Order-preserving prefix rules. Each entry is [prefixOrRegex, category].
 // - Prefix strings match case-insensitively at the start of the brand code.
-// - RegExp entries are tested as-is (anchor them yourself with ^ if you
-//   want a prefix match).
+// - RegExp entries are tested as-is (anchor with ^ for a true prefix match).
 //
-// Ordered longest-first so 'SDDSP' wins over 'SD' for the same code.
+// SORTED_RULES below sorts these longest-first at load time so that e.g.
+// 'SDDSPEY' beats 'SDDSP' beats 'SD' for the same code.
 const PREFIX_RULES = [
-  // ---- Japan Product (Seed and Seed-branded lines) --------------------
-  // SEED contact lens families: 1-Day Pure, 2-Weekly, Fresh, etc.
-  ["SDDSP",   "Japan Product"],
-  ["SDEYEDSP","Japan Product"],
-  ["SDSOL",   "Japan Product"],
-  ["SDBRH",   "Japan Product"],
-  ["SDASL",   "Japan Product"],
-  ["SDDSCL",  "Japan Product"],
-  ["SDIRS",   "Japan Product"],
-  ["SDUV",    "Japan Product"],
-  ["SD02",    "Japan Product"],
-  ["SD",      "Japan Product"], // catch-all for any other SD*
-  ["1DPT",    "Japan Product"], // 1-Day Pure Toric (SEED)
-  ["1DPE",    "Japan Product"],
-  ["1DPR",    "Japan Product"],
-  ["1DPS",    "Japan Product"],
-  ["1DPV",    "Japan Product"],
-  ["1MS",     "Japan Product"], // 1-Month Silicone (SEED line)
-  ["2MS",     "Japan Product"],
-  ["PRMSD",   "Japan Product"], // Premium SEED SKUs
-  ["ACCSDCASE", "Japan Product"],
-  ["SEVA",    "Japan Product"],
+  // ---- Other Product (specific SEED-branded promotional/accessory SKUs
+  //      that the reviewer sits under Other, not Japan). These MUST be
+  //      declared so the longer-prefix sort catches them before the
+  //      generic 'SD*' / 'ACC*' fallthroughs.
+  ["PRMSD",      "Other Product"],
+  ["ACCSDCASE",  "Other Product"],
+  ["SEVA",       "Other Product"],
 
-  // ---- Ultravision Product -------------------------------------------
-  ["UV",      "Ultravision Product"], // UVAPS, UVBDSP, UVDW*, UVHYS, UVKR*, UVSPL
+  // ---- Spain Product (Disop-distributed) -----------------------------
+  ["SDDSCL",     "Spain Product"],
+  ["SDDSPEY",    "Spain Product"], // more specific than SDDSP
+  ["SDDSP",      "Spain Product"],
+  ["SDEYEDSP",   "Spain Product"],
+  ["SDIRS",      "Spain Product"],
+  ["SDSOL",      "Spain Product"],
 
-  // ---- Wohlk Product -------------------------------------------------
-  ["WHK",     "Wohlk Product"],
-  ["2UWK",    "Wohlk Product"], // 2-Weekly Wohlk
+  // ---- Taiwan Product (MC + MNSF families) ---------------------------
+  ["MC",         "Taiwan Product"],
+  ["MNSF",       "Taiwan Product"],
 
-  // ---- Disop Product -------------------------------------------------
-  // Best-guess prefixes for Disop-distributed lines. Rewrite these if any
-  // of the EC*/MC*/MHF*/MTP*/MNSF* codes should live elsewhere.
-  ["EC",      "Disop Product"],
-  ["MC",      "Disop Product"],
-  ["MHF",     "Disop Product"],
-  ["MTPR",    "Disop Product"],
-  ["MNSF",    "Disop Product"],
+  // ---- Ultravision Product (UK) --------------------------------------
+  ["UV",         "Ultravision Product"],
 
-  // Anything else (JS*, PRM* other than PRMSD, ACC* other than SEED cases,
-  // CL, MARKETING, ODOCS) falls through to Other Product.
+  // ---- Wohlk Product (Germany) --- only WHKES survives here after
+  //      the reviewer moved the 2UWK family to Japan.
+  ["WHK",        "Wohlk Product"],
+
+  // ---- Japan Product (Seed lines + everything the reviewer marked
+  //      Japan). Any SD* code not caught by the Spain rules above
+  //      falls through to the generic 'SD' below.
+  ["SD02",       "Japan Product"],
+  ["SDASL",      "Japan Product"],
+  ["SDBRH",      "Japan Product"],
+  ["SDUV",       "Japan Product"],
+  ["SD",         "Japan Product"], // catch-all for any remaining SD*
+  ["1DPT",       "Japan Product"], // 1-Day Pure Toric (SEED)
+  ["1DPE",       "Japan Product"],
+  ["1DPR",       "Japan Product"],
+  ["1DPS",       "Japan Product"],
+  ["1DPV",       "Japan Product"],
+  ["1MS",        "Japan Product"],
+  ["2MS",        "Japan Product"],
+  ["2UWK",       "Japan Product"], // reclassified from Wohlk
+  ["EC",         "Japan Product"], // reclassified from Disop
+  ["MHF",        "Japan Product"], // reclassified from Disop
+  ["MTPR",       "Japan Product"], // reclassified from Disop
+
+  // Anything else (JS*, PRM* other than PRMSD, ACC* other than the SEED
+  // case above, CL, MARKETING, ODOCS) falls through to Other Product.
 ];
 
-// Normalise the code once so lookups are cheap and case-insensitive.
 function normalise(code) {
   return String(code || "").trim().toUpperCase();
 }
 
-// Sort rules by prefix length descending so a longer, more specific prefix
-// wins over its shorter parent (e.g. 'SDDSP' before 'SD'). Precomputed at
-// module load — nothing at render time re-sorts.
+// Precomputed at module load — nothing at render time re-sorts.
 const SORTED_RULES = [...PREFIX_RULES]
   .filter(r => typeof r[0] === "string")
   .sort((a, b) => b[0].length - a[0].length)
