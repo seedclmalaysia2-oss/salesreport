@@ -110,7 +110,19 @@ export async function uploadFile(file, parsed, { visibility = VISIBILITY.PRIVATE
     .single();
 
   if (error) {
+    // Roll the storage object back so the bucket doesn't fill with orphans
+    // that no data_files row points at. Then surface a specific message for
+    // the check-constraint failure so the admin knows a migration is missing
+    // instead of blaming the file.
     await supabase.storage.from(BUCKET).remove([path]).catch(() => {});
+    const isKindCheck =
+      /data_files_kind_check|violates check constraint.*kind/i.test(error.message || "");
+    if (isKindCheck) {
+      throw new Error(
+        `Saving ${file.name} failed: the database is on an older migration that only allows kind='customer' or 'brand'. ` +
+        `Apply supabase/migrations/0009_add_invoice_kind.sql in the SQL Editor, then try the upload again.`
+      );
+    }
     throw new Error(`Saving ${file.name} failed: ${error.message}`);
   }
   return rowToEntry(data);
