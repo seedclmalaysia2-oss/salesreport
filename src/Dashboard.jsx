@@ -1865,12 +1865,21 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     <div style={{fontSize:11,color:"rgba(var(--tint),0.4)"}}>{col.list.length} customers</div>
                   </div>
                   <div style={{fontSize:10,color:"rgba(var(--tint),0.35)",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>{col.valueLabel}</div>
-                  <div style={{maxHeight:480,overflowY:"auto"}}>
+                  <div style={{
+                    maxHeight:480,
+                    overflowY:"auto",
+                    // Reserve a fixed gutter for the scrollbar so it doesn't
+                    // overlap the right-aligned revenue amounts. scrollbar-
+                    // gutter handles it on modern browsers; the paddingRight
+                    // is the fallback for anything that ignores the gutter.
+                    scrollbarGutter:"stable",
+                    paddingRight:6,
+                  }}>
                     {col.list.length === 0 && <div style={{color:"rgba(var(--tint),0.3)",fontSize:13,padding:"20px 0"}}>None</div>}
-                    {col.list.slice(0, 50).map((c, i) => (
-                      <div key={c.customer} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid rgba(var(--tint),0.04)",fontSize:12}}>
-                        <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginRight:8}}>{c.customer}</span>
-                        <span style={{fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)"}}>{fmt(c[col.valueKey])}</span>
+                    {col.list.slice(0, 50).map((c) => (
+                      <div key={c.customer} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,padding:"6px 0",borderBottom:"1px solid rgba(var(--tint),0.04)",fontSize:12}}>
+                        <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.customer}</span>
+                        <span style={{fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",flexShrink:0,textAlign:"right",minWidth:44}}>{fmt(c[col.valueKey])}</span>
                       </div>
                     ))}
                     {col.list.length > 50 && <div style={{fontSize:11,color:"rgba(var(--tint),0.3)",paddingTop:8}}>+ {col.list.length - 50} more</div>}
