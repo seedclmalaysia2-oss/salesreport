@@ -1017,6 +1017,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               targets={TARGETS}
               isAdmin={!!user?.isAdmin}
               onUploaded={onRefresh}
+              onRefresh={onRefresh}
               seriesColors={COLORS}
             />
             <div style={{display:"flex",gap:16,marginBottom:28,flexWrap:"wrap"}}>
@@ -2151,7 +2152,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             so a non-admin who forced this state client-side still sees nothing. */}
         {tab === "data" && (user?.isAdmin
           ? <Suspense fallback={<Card><div style={{fontSize:13,color:"rgba(var(--tint),0.5)"}}>Loading file manager…</div></Card>}>
-              <DataTab user={user} data={data} />
+              <DataTab user={user} data={data} onRefresh={onRefresh} />
             </Suspense>
           : <Card><div style={{fontSize:13,color:"rgba(var(--tint),0.5)"}}>Admins only.</div></Card>
         )}

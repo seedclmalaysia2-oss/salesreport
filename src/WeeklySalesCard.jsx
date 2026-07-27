@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState, useRef } from "react";
 // xlsx loaded on demand (see src/lib/parseXlsx.js) — only the admin's weekly
 // upload needs it, so it must not sit in the initial bundle.
 import { supabase } from "./lib/supabase.js";
+// weekBounds + the rep order are shared with the Data-tab → weekly sync so both
+// paths bucket dates into the exact same Mon–Sun weeks.
+import { weekBounds, REP_ORDER } from "./lib/weekly.js";
 
 // Retail Sales Team = the three reps who count toward the "Sales Team" column.
 // Everyone else only contributes to the "Seed Malaysia" total.
@@ -15,27 +18,13 @@ const SP_COLORS_FALLBACK = {
 };
 
 const fmtRM = (v) => `RM ${Number(v).toLocaleString("en-MY", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-const fmtRM2 = (v) => `RM ${Number(v).toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmtPct = (v) => `${(v * 100).toFixed(2)}%`;
-const fmtDate = (d) => {
+const fmtPct = (v) => `${(v * 100).toFixed(1)}%`;
+// Short "day month" for humans — "6 Jul" reads faster than "06/07".
+const fmtDay = (d) => {
   if (!d) return "—";
-  const dt = typeof d === "string" ? new Date(d) : d;
-  const day = String(dt.getDate()).padStart(2, "0");
-  const mon = String(dt.getMonth() + 1).padStart(2, "0");
-  return `${day}/${mon}`;
+  const dt = typeof d === "string" ? new Date(d + (d.length === 10 ? "T00:00:00" : "")) : d;
+  return dt.toLocaleString("en-GB", { day: "numeric", month: "short" });
 };
-
-// Weeks are Monday-Sunday (Malaysian ops convention). Given any ISO date
-// string, return {start, end} for the containing week.
-function weekBounds(isoDate) {
-  const [y, m, d] = isoDate.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  const dow = dt.getUTCDay() || 7; // Sun=0 -> 7
-  const monday = new Date(dt); monday.setUTCDate(dt.getUTCDate() - dow + 1);
-  const sunday = new Date(monday); sunday.setUTCDate(monday.getUTCDate() + 6);
-  const iso = (x) => x.toISOString().slice(0, 10);
-  return { start: iso(monday), end: iso(sunday) };
-}
 
 // A week belongs to the month that contains its Monday. Keeps a week from
 // showing under two different month buckets in the UI navigator.
@@ -48,12 +37,48 @@ function monthLabel(monthKey) {
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleString("en-US", { month: "long", year: "numeric" });
 }
 
-function ProgressBar({ pct, color }) {
+function monthLabelShort(monthKey) {
+  const [y, m] = monthKey.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleString("en-US", { month: "short", year: "numeric" });
+}
+
+function ProgressBar({ pct, color, height = 8 }) {
   const clamped = Math.min(Math.max(pct, 0), 1.5);
   return (
-    <div style={{ width: "100%", height: 6, background: "rgba(var(--tint),0.06)", borderRadius: 3, overflow: "hidden" }}>
-      <div style={{ width: `${clamped * 100}%`, height: "100%", background: color, transition: "width 0.4s" }} />
+    <div style={{ width: "100%", height, background: "rgba(var(--tint),0.08)", borderRadius: height / 2, overflow: "hidden" }}>
+      <div style={{ width: `${clamped * 100}%`, height: "100%", background: color, borderRadius: height / 2, transition: "width 0.4s ease-out" }} />
     </div>
+  );
+}
+
+// Shared button vocabulary. Info-blue outline for non-destructive controls
+// (Refresh), Signal Orange fill for the one primary action (Upload).
+function actionButton(variant, { active = false } = {}) {
+  const base = {
+    display: "inline-flex", alignItems: "center", gap: 7,
+    borderRadius: 8, padding: "8px 15px", fontSize: 13, fontWeight: 600,
+    cursor: "pointer", fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap",
+    lineHeight: 1, transition: "background 0.15s, border-color 0.15s",
+  };
+  if (variant === "primary") {
+    return { ...base, fontWeight: 700,
+      background: active ? "rgba(232,99,59,0.16)" : "var(--st-accent)",
+      color: active ? "var(--st-accent)" : "#fff",
+      border: active ? "1px solid rgba(232,99,59,0.5)" : "1px solid transparent" };
+  }
+  // "info" ghost — Refresh
+  return { ...base,
+    background: "rgba(59,130,246,0.10)", color: "var(--st-info)",
+    border: "1px solid rgba(59,130,246,0.35)" };
+}
+
+function Spinner({ size = 13, color = "var(--st-info)" }) {
+  return (
+    <span style={{
+      width: size, height: size, borderRadius: "50%", display: "inline-block", flexShrink: 0,
+      border: `2px solid ${color}40`, borderTopColor: color,
+      animation: "seedspin 0.8s linear infinite",
+    }} />
   );
 }
 
@@ -65,15 +90,23 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
   const bal65 = Math.max(min65 - total, 0);
   const bal80 = Math.max(min80 - total, 0);
   const bal100 = Math.max(target - total, 0);
-  const aboveTarget = total >= target;
+  const aboveTarget = target > 0 && total >= target;
   const color = aboveTarget ? "var(--st-ok)" : pct >= 0.8 ? "var(--st-watch)" : pct >= 0.65 ? "#EAB308" : "var(--st-bad)";
+
+  // One plain-language line stating where this scope stands — the answer the
+  // reader opened the card for, before any table.
+  const statusLine = target <= 0
+    ? "No monthly target set"
+    : aboveTarget
+      ? `Target reached · ${fmtRM(total - target)} over`
+      : `${fmtRM(bal100)} left to hit target`;
 
   return (
     <div style={{
       background: "rgba(var(--tint),0.02)",
-      border: `1px solid ${accentColor}33`,
+      border: `1px solid ${accentColor}40`,
       borderRadius: 14,
-      padding: 24,
+      padding: 20,
       display: "flex",
       flexDirection: "column",
       gap: 18,
@@ -81,51 +114,57 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
       {/* Header */}
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <div style={{ width: 4, height: 18, background: accentColor, borderRadius: 2 }} />
-          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5, color: accentColor, fontWeight: 700 }}>{title}</div>
+          <div style={{ width: 4, height: 16, background: accentColor, borderRadius: 2 }} />
+          <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, color: accentColor, fontWeight: 700 }}>{title}</div>
         </div>
-        <div style={{ fontSize: 11, color: "rgba(var(--tint),0.4)", marginLeft: 12 }}>{subtitle}</div>
+        <div style={{ fontSize: 12, color: "rgba(var(--tint),0.6)", marginLeft: 12 }}>{subtitle}</div>
       </div>
 
       {/* Big number + progress */}
       <div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 32, fontWeight: 700, fontFamily: "'Space Mono',monospace", color: "var(--text)" }}>
+          <div style={{ fontSize: 34, fontWeight: 700, fontFamily: "'Space Mono',monospace", color: "var(--text)", lineHeight: 1.05 }}>
             {fmtRM(total)}
           </div>
-          <div style={{
-            fontSize: 14, fontWeight: 700, fontFamily: "'Space Mono',monospace", color,
-            padding: "3px 10px", borderRadius: 14, background: `${color}22`, border: `1px solid ${color}55`,
-          }}>
-            {fmtPct(pct)}
-          </div>
+          {target > 0 && (
+            <div style={{
+              fontSize: 15, fontWeight: 700, fontFamily: "'Space Mono',monospace", color,
+              padding: "3px 11px", borderRadius: 14, background: `${color}22`, border: `1px solid ${color}66`,
+            }}>
+              {fmtPct(pct)}
+            </div>
+          )}
         </div>
-        <div style={{ fontSize: 11, color: "rgba(var(--tint),0.5)", marginTop: 4 }}>
-          of <span style={{ fontFamily: "'Space Mono',monospace", color: "rgba(var(--tint),0.7)" }}>{fmtRM(target)}</span> monthly target
+        <div style={{ fontSize: 12, color: "rgba(var(--tint),0.65)", marginTop: 6 }}>
+          of <span style={{ fontFamily: "'Space Mono',monospace", color: "var(--text)", fontWeight: 600 }}>{fmtRM(target)}</span> monthly target
         </div>
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 12 }}>
           <ProgressBar pct={pct} color={color} />
+        </div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color, marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
+          {statusLine}
         </div>
       </div>
 
       {/* Per-rep table */}
       <div>
-        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1.5, color: "rgba(var(--tint),0.4)", marginBottom: 8, fontWeight: 600 }}>
-          By Salesperson · {period}
+        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "rgba(var(--tint),0.55)", marginBottom: 10, fontWeight: 600 }}>
+          By salesperson · {period}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {rows.length === 0 ? (
-            <div style={{ color: "rgba(var(--tint),0.4)", fontSize: 12, padding: "12px 0", textAlign: "center" }}>No data</div>
+            <div style={{ color: "rgba(var(--tint),0.5)", fontSize: 13, padding: "12px 0", textAlign: "center" }}>No sales recorded this week</div>
           ) : rows.map((r) => {
             const repPct = total > 0 ? r.amount / total : 0;
             return (
               <div key={r.sp} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
-                <div style={{ width: 8, height: 8, borderRadius: 2, background: SP_COLORS[r.sp] || "#888" }} />
-                <div style={{ flex: 1, color: "rgba(var(--tint),0.85)" }}>{r.sp}</div>
-                <div style={{ flex: 2 }}>
-                  <ProgressBar pct={repPct} color={SP_COLORS[r.sp] || "#888"} />
+                <div style={{ width: 9, height: 9, borderRadius: 3, background: SP_COLORS[r.sp] || "#888", flexShrink: 0 }} />
+                <div style={{ width: 62, color: "rgba(var(--tint),0.85)", flexShrink: 0 }}>{r.sp}</div>
+                <div style={{ flex: 1, minWidth: 40 }}>
+                  <ProgressBar pct={repPct} color={SP_COLORS[r.sp] || "#888"} height={6} />
                 </div>
-                <div style={{ width: 90, textAlign: "right", fontFamily: "'Space Mono',monospace", color: "var(--text)", fontWeight: 600 }}>
+                <div style={{ width: 96, textAlign: "right", fontFamily: "'Space Mono',monospace", color: "var(--text)", fontWeight: 700 }}>
                   {fmtRM(r.amount)}
                 </div>
               </div>
@@ -135,36 +174,51 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
       </div>
 
       {/* Threshold balances */}
-      <div style={{
-        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(90px,100%), 1fr))", gap: 8,
-        paddingTop: 12, borderTop: "1px solid rgba(var(--tint),0.05)",
-      }}>
-        {[
-          { label: "65% Min", target: min65, balance: bal65, color: "#EAB308" },
-          { label: "80% Min", target: min80, balance: bal80, color: "var(--st-watch)" },
-          { label: "100%", target: target, balance: bal100, color: "var(--st-ok)" },
-        ].map((t, i) => (
-          <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: 1.2, color: t.color, fontWeight: 700 }}>{t.label}</div>
-            <div style={{ fontSize: 11, color: "rgba(var(--tint),0.5)", fontFamily: "'Space Mono',monospace" }}>
-              {fmtRM(t.target)}
+      {target > 0 && (
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10,
+          paddingTop: 14, borderTop: "1px solid rgba(var(--tint),0.08)",
+        }}>
+          {[
+            { label: "65% floor", target: min65, balance: bal65, color: "#EAB308" },
+            { label: "80% floor", target: min80, balance: bal80, color: "var(--st-watch)" },
+            { label: "100% target", target: target, balance: bal100, color: "var(--st-ok)" },
+          ].map((t, i) => (
+            <div key={i} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.5, color: t.color, fontWeight: 700 }}>{t.label}</div>
+              <div style={{ fontSize: 11, color: "rgba(var(--tint),0.55)", fontFamily: "'Space Mono',monospace" }}>
+                {fmtRM(t.target)}
+              </div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, fontFamily: "'Space Mono',monospace", color: t.balance > 0 ? "var(--st-bad)" : "var(--st-ok)" }}>
+                {t.balance > 0 ? `−${fmtRM(t.balance)}` : "✓ hit"}
+              </div>
             </div>
-            <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "'Space Mono',monospace", color: t.balance > 0 ? "var(--st-bad)" : "var(--st-ok)" }}>
-              {t.balance > 0 ? `−${fmtRM(t.balance)}` : "✓ hit"}
-            </div>
-            <div style={{ fontSize: 9, color: "rgba(var(--tint),0.35)" }}>
-              {t.balance > 0 ? "to go" : ""}
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploaded, seriesColors }) {
+export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploaded, onRefresh, seriesColors }) {
   const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Clear the refreshing spinner once fresh data actually arrives (App hands
+  // down a new weeklySales reference after the refetch). The failsafe timer in
+  // handleRefresh guarantees it never spins forever if nothing comes back.
+  useEffect(() => {
+    if (refreshing) setRefreshing(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weeklySales]);
+
+  const handleRefresh = () => {
+    if (refreshing || !onRefresh) return;
+    setRefreshing(true);
+    onRefresh();
+    setTimeout(() => setRefreshing(false), 6000);
+  };
 
   // Build the month + week navigation index. periodsByMonth is an ordered map
   // of "YYYY-MM" -> [{ start, end, rows, uploadedAt }, ...] with weeks sorted
@@ -238,33 +292,55 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
     return t ? t.target : 0;
   }, [activeMonth, targets]);
 
+  // Refresh + Upload live in the header of both the empty and populated states.
+  const HeaderActions = (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      {onRefresh && (
+        <button onClick={handleRefresh} disabled={refreshing} title="Reload the latest weekly numbers"
+          style={{ ...actionButton("info"), cursor: refreshing ? "wait" : "pointer" }}>
+          {refreshing ? <Spinner /> : <span style={{ fontSize: 14, lineHeight: 1 }}>↻</span>}
+          {refreshing ? "Refreshing…" : "Refresh"}
+        </button>
+      )}
+      {isAdmin && (
+        <button onClick={() => setUploadOpen(v => !v)}
+          style={actionButton("primary", { active: uploadOpen })}>
+          {uploadOpen ? "Cancel" : "⬆ Upload"}
+        </button>
+      )}
+    </div>
+  );
+
+  const Eyebrow = (
+    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--st-accent)", textTransform: "uppercase", letterSpacing: 1.5 }}>
+      📊 Weekly Sales
+    </div>
+  );
+
+  const shellStyle = {
+    background: "linear-gradient(135deg, rgba(232,99,59,0.06), rgba(59,130,246,0.04))",
+    border: "1px solid rgba(var(--tint),0.1)", borderRadius: 14, padding: 20, marginBottom: 24,
+  };
+
   if (!latestPeriod) {
     return (
-      <div style={{
-        background: "linear-gradient(135deg, rgba(232,99,59,0.06), rgba(59,130,246,0.04))",
-        border: "1px solid rgba(var(--tint),0.08)", borderRadius: 14, padding: 24, marginBottom: 24,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+      <div style={shellStyle}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--st-accent)", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 4 }}>
-              📊 Weekly Sales Update
-            </div>
-            <div style={{ fontSize: 13, color: "rgba(var(--tint),0.5)" }}>
-              No weekly data yet.{isAdmin ? " Use the upload button to add this week's numbers." : " Waiting for admin to upload."}
+            {Eyebrow}
+            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginTop: 6 }}>No weekly data yet</div>
+            <div style={{ fontSize: 13, color: "rgba(var(--tint),0.65)", marginTop: 4, maxWidth: 520, lineHeight: 1.6 }}>
+              {isAdmin
+                ? "Upload a Customer Invoice Listing on the Data tab (it syncs here automatically), use ⬆ Upload for a one-off week, or hit Refresh if you just added one."
+                : "Waiting for the admin to upload this week's numbers. Pull to refresh once they have."}
             </div>
           </div>
-          {isAdmin && (
-            <button onClick={() => setUploadOpen(true)} style={{
-              background: "#E8633B", color: "#fff", border: "none", borderRadius: 8,
-              padding: "10px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-              fontFamily: "'DM Sans',sans-serif",
-            }}>
-              ⬆ Upload Weekly Update
-            </button>
-          )}
+          {HeaderActions}
         </div>
         {uploadOpen && (
-          <UploadPanel onClose={() => setUploadOpen(false)} onUploaded={onUploaded} seriesColors={SP_COLORS} />
+          <div style={{ marginTop: 16 }}>
+            <UploadPanel onClose={() => setUploadOpen(false)} onUploaded={onUploaded} seriesColors={SP_COLORS} />
+          </div>
         )}
       </div>
     );
@@ -279,40 +355,26 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
     .sort((a, b) => b.amount - a.amount);
   const teamTotal = teamRows.reduce((a, b) => a + b.amount, 0);
   const allTotal = allRows.reduce((a, b) => a + b.amount, 0);
-  const periodLabel = `${fmtDate(latestPeriod.start)} – ${fmtDate(latestPeriod.end)}`;
-  const monthName = new Date(latestPeriod.end).toLocaleString("en-US", { month: "long", year: "numeric" });
+  const periodLabel = `${fmtDay(latestPeriod.start)} – ${fmtDay(latestPeriod.end)}`;
+  const monthName = new Date(latestPeriod.end + "T00:00:00").toLocaleString("en-US", { month: "long", year: "numeric" });
 
   return (
-    <div style={{
-      background: "linear-gradient(135deg, rgba(232,99,59,0.06), rgba(59,130,246,0.04))",
-      border: "1px solid rgba(var(--tint),0.08)", borderRadius: 14, padding: 24, marginBottom: 24,
-    }}>
+    <div style={shellStyle}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--st-accent)", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 4 }}>
-            📊 Weekly Sales Update
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", letterSpacing: -0.3 }}>
-            {periodLabel} <span style={{ fontSize: 14, fontWeight: 400, color: "rgba(var(--tint),0.5)" }}>· {monthName}</span>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
+        <div style={{ minWidth: 0 }}>
+          {Eyebrow}
+          <div style={{ fontSize: 24, fontWeight: 700, color: "var(--text)", letterSpacing: -0.3, marginTop: 6, display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+            {periodLabel}
+            <span style={{ fontSize: 14, fontWeight: 500, color: "rgba(var(--tint),0.6)" }}>{monthName}</span>
           </div>
           {latestPeriod.uploadedAt && (
-            <div style={{ fontSize: 11, color: "rgba(var(--tint),0.35)", marginTop: 4 }}>
-              Last updated {new Date(latestPeriod.uploadedAt).toLocaleString()}
+            <div style={{ fontSize: 11.5, color: "rgba(var(--tint),0.5)", marginTop: 4 }}>
+              Last updated {new Date(latestPeriod.uploadedAt).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
             </div>
           )}
         </div>
-        {isAdmin && (
-          <button onClick={() => setUploadOpen(!uploadOpen)} style={{
-            background: uploadOpen ? "rgba(232,99,59,0.2)" : "var(--st-accent)",
-            color: uploadOpen ? "var(--st-accent)" : "var(--text)",
-            border: uploadOpen ? "1px solid rgba(232,99,59,0.5)" : "none",
-            borderRadius: 8, padding: "10px 20px", fontSize: 13, fontWeight: 600,
-            cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
-          }}>
-            {uploadOpen ? "Cancel" : "⬆ Update"}
-          </button>
-        )}
+        {HeaderActions}
       </div>
 
       {uploadOpen && (
@@ -327,46 +389,48 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
 
       {/* Month + week navigator. Prev/next hop between months that actually
           have data; the pill row lists every week of the active month, latest
-          on the right, so 4-5 pills per month is the normal shape. */}
+          on the right. */}
       {monthKeys.length > 0 && (
-        <div style={{marginBottom:18,padding:"12px 14px",background:"rgba(var(--tint),0.02)",border:"1px solid rgba(var(--tint),0.06)",borderRadius:10}}>
-          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:10}}>
+        <div style={{ marginBottom: 18, padding: 14, background: "rgba(var(--tint),0.03)", border: "1px solid rgba(var(--tint),0.08)", borderRadius: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
             <button
               onClick={() => goMonth(-1)}
               disabled={!canGoPrev}
+              aria-label="Previous month"
               style={{
-                background:"transparent",border:"1px solid rgba(var(--tint),0.15)",
-                color: canGoPrev ? "var(--text)" : "rgba(var(--tint),0.25)",
-                borderRadius:6,padding:"5px 12px",fontSize:12,
-                cursor: canGoPrev ? "pointer" : "not-allowed",fontFamily:"'DM Sans',sans-serif",
-              }}>◀ Prev month</button>
-            <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",textTransform:"uppercase",letterSpacing:1.5,fontWeight:600}}>Viewing</div>
+                background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.15)",
+                color: canGoPrev ? "var(--text)" : "rgba(var(--tint),0.3)",
+                borderRadius: 8, padding: "7px 12px", fontSize: 13,
+                cursor: canGoPrev ? "pointer" : "not-allowed", fontFamily: "'DM Sans',sans-serif",
+              }}>◀</button>
             <select
               value={activeMonth || ""}
               onChange={(e) => { setSelectedMonth(e.target.value); setSelectedWeekIndex((periodsByMonth.get(e.target.value) || []).length - 1); }}
+              aria-label="Select month"
               style={{
-                background:"rgba(var(--tint),0.05)",border:"1px solid rgba(var(--tint),0.12)",
-                color:"var(--text)",borderRadius:6,padding:"5px 10px",fontSize:13,fontWeight:600,
-                fontFamily:"'DM Sans',sans-serif",cursor:"pointer",
+                flex: "1 1 auto", background: "rgba(var(--tint),0.05)", border: "1px solid rgba(var(--tint),0.15)",
+                color: "var(--text)", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontWeight: 700,
+                fontFamily: "'DM Sans',sans-serif", cursor: "pointer",
               }}>
               {monthKeys.map(k => (
-                <option key={k} value={k}>{monthLabel(k)} ({periodsByMonth.get(k).length} wk)</option>
+                <option key={k} value={k}>{monthLabel(k)} · {periodsByMonth.get(k).length} wk</option>
               ))}
             </select>
             <button
               onClick={() => goMonth(1)}
               disabled={!canGoNext}
+              aria-label="Next month"
               style={{
-                background:"transparent",border:"1px solid rgba(var(--tint),0.15)",
-                color: canGoNext ? "var(--text)" : "rgba(var(--tint),0.25)",
-                borderRadius:6,padding:"5px 12px",fontSize:12,
-                cursor: canGoNext ? "pointer" : "not-allowed",fontFamily:"'DM Sans',sans-serif",
-              }}>Next month ▶</button>
-            <div style={{marginLeft:"auto",fontSize:11,color:"rgba(var(--tint),0.4)",fontFamily:"'Space Mono',monospace"}}>
-              {monthKeys.length} month{monthKeys.length===1?"":"s"} on record
+                background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.15)",
+                color: canGoNext ? "var(--text)" : "rgba(var(--tint),0.3)",
+                borderRadius: 8, padding: "7px 12px", fontSize: 13,
+                cursor: canGoNext ? "pointer" : "not-allowed", fontFamily: "'DM Sans',sans-serif",
+              }}>▶</button>
+            <div style={{ marginLeft: "auto", fontSize: 11.5, color: "rgba(var(--tint),0.55)", fontFamily: "'Space Mono',monospace" }}>
+              {monthKeys.length} month{monthKeys.length === 1 ? "" : "s"} · {monthLabelShort(monthKeys[0])}–{monthLabelShort(monthKeys[monthKeys.length - 1])}
             </div>
           </div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          <div className="seed-scroll-x" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {weeksInMonth.map((w, i) => {
               const total = w.rows.reduce((a, r) => a + (r.amount || 0), 0);
               const active = i === boundedWeekIndex;
@@ -374,19 +438,20 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
                 <button
                   key={w.start}
                   onClick={() => setSelectedWeekIndex(i)}
-                  title={`${w.start} → ${w.end} · RM ${Math.round(total).toLocaleString("en-MY")}`}
+                  title={`${w.start} → ${w.end}`}
                   style={{
-                    background: active ? "rgba(232,99,59,0.15)" : "rgba(var(--tint),0.04)",
-                    color: active ? "var(--st-accent)" : "rgba(var(--tint),0.75)",
-                    border: `1px solid ${active ? "rgba(232,99,59,0.5)" : "rgba(var(--tint),0.08)"}`,
-                    borderRadius: 20, padding: "5px 14px", fontSize: 11,
-                    fontWeight: active ? 700 : 500, cursor: "pointer",
-                    fontFamily: "'Space Mono',monospace",
-                    display:"flex",alignItems:"center",gap:8,
+                    background: active ? "rgba(232,99,59,0.16)" : "rgba(var(--tint),0.05)",
+                    color: active ? "var(--st-accent)" : "rgba(var(--tint),0.8)",
+                    border: `1px solid ${active ? "rgba(232,99,59,0.55)" : "rgba(var(--tint),0.12)"}`,
+                    borderRadius: 10, padding: "8px 13px", cursor: "pointer",
+                    fontFamily: "'DM Sans',sans-serif", textAlign: "left",
+                    display: "flex", flexDirection: "column", gap: 2, minWidth: 96,
                   }}>
-                  W{i+1}: {fmtDate(w.start)}–{fmtDate(w.end)}
-                  <span style={{fontSize:10,opacity:0.7,fontWeight:500}}>
-                    RM {Math.round(total).toLocaleString("en-MY")}
+                  <span style={{ fontSize: 12, fontWeight: active ? 700 : 600 }}>
+                    Week {i + 1} <span style={{ fontWeight: 500, opacity: 0.75 }}>· {fmtDay(w.start)}–{fmtDay(w.end)}</span>
+                  </span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, fontFamily: "'Space Mono',monospace" }}>
+                    {fmtRM(total)}
                   </span>
                 </button>
               );
@@ -396,7 +461,7 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
       )}
 
       {/* Two columns side by side */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(260px,100%), 1fr))", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(280px,100%), 1fr))", gap: 16 }}>
         <ScopeColumn
           seriesColors={SP_COLORS}
           title="Retail Sales Team"
@@ -437,15 +502,7 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
   const toISO = (d) => d.toISOString().slice(0, 10);
   const [periodStart, setPeriodStart] = useState(defaultStart || toISO(monday));
   const [periodEnd, setPeriodEnd] = useState(defaultEnd || toISO(sunday));
-  const [rows, setRows] = useState([
-    { sp: "Alan", amount: 0 },
-    { sp: "Dino", amount: 0 },
-    { sp: "Khen", amount: 0 },
-    { sp: "Sakinah", amount: 0 },
-    { sp: "Wani", amount: 0 },
-    { sp: "Simon", amount: 0 },
-    { sp: "Seed Malaysia", amount: 0 },
-  ]);
+  const [rows, setRows] = useState(REP_ORDER.map(sp => ({ sp, amount: 0 })));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
@@ -549,8 +606,7 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
         if (sortedKeys.length > 1) {
           const materialised = sortedKeys.map(start => {
             const { end, byRep } = weekBuckets.get(start);
-            const rows = ["Alan","Dino","Khen","Sakinah","Wani","Simon","Seed Malaysia"]
-              .map(sp => ({ sp, amount: Math.round((byRep[sp] || 0) * 100) / 100 }));
+            const rows = REP_ORDER.map(sp => ({ sp, amount: Math.round((byRep[sp] || 0) * 100) / 100 }));
             return { start, end, rows };
           });
           setBuckets(materialised);
@@ -605,8 +661,7 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
         return;
       }
 
-      const newRows = ["Alan", "Dino", "Khen", "Sakinah", "Wani", "Simon", "Seed Malaysia"]
-        .map(sp => ({ sp, amount: Math.round((found[sp] || 0) * 100) / 100 }));
+      const newRows = REP_ORDER.map(sp => ({ sp, amount: Math.round((found[sp] || 0) * 100) / 100 }));
 
       setRows(newRows);
       setPeriodStart(detectedStart);
@@ -670,20 +725,20 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
 
   return (
     <div style={{
-      background: "rgba(0,0,0,0.3)", border: "1px solid rgba(var(--tint),0.08)",
+      background: "rgba(0,0,0,0.28)", border: "1px solid rgba(var(--tint),0.1)",
       borderRadius: 12, padding: 20, marginBottom: 16, marginTop: 4,
     }}>
       <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap:"wrap" }}>
         <button onClick={() => { setMode("xlsx"); setBuckets(null); }} style={{
           background: mode === "xlsx" ? "rgba(232,99,59,0.2)" : "transparent",
-          color: mode === "xlsx" ? "var(--st-accent)" : "rgba(var(--tint),0.5)",
-          border: mode === "xlsx" ? "1px solid rgba(232,99,59,0.5)" : "1px solid rgba(var(--tint),0.1)",
+          color: mode === "xlsx" ? "var(--st-accent)" : "rgba(var(--tint),0.65)",
+          border: mode === "xlsx" ? "1px solid rgba(232,99,59,0.5)" : "1px solid rgba(var(--tint),0.12)",
           borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
         }}>📄 Upload xlsx</button>
         <button onClick={() => { setMode("manual"); setBuckets(null); }} style={{
           background: mode === "manual" ? "rgba(232,99,59,0.2)" : "transparent",
-          color: mode === "manual" ? "var(--st-accent)" : "rgba(var(--tint),0.5)",
-          border: mode === "manual" ? "1px solid rgba(232,99,59,0.5)" : "1px solid rgba(var(--tint),0.1)",
+          color: mode === "manual" ? "var(--st-accent)" : "rgba(var(--tint),0.65)",
+          border: mode === "manual" ? "1px solid rgba(232,99,59,0.5)" : "1px solid rgba(var(--tint),0.12)",
           borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
         }}>✏️ Manual entry</button>
         {buckets && buckets.length > 1 && (
@@ -701,13 +756,13 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) onFile(f); }}
           style={{
-            border: "2px dashed rgba(var(--tint),0.15)", borderRadius: 10,
-            padding: "30px 20px", textAlign: "center", cursor: "pointer", background: "rgba(var(--tint),0.01)",
+            border: "2px dashed rgba(var(--tint),0.18)", borderRadius: 10,
+            padding: "30px 20px", textAlign: "center", cursor: "pointer", background: "rgba(var(--tint),0.02)",
           }}>
-          <div style={{ fontSize: 22, marginBottom: 6, opacity: 0.4 }}>⤴</div>
+          <div style={{ fontSize: 22, marginBottom: 6, opacity: 0.5 }}>⤴</div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>Drop weekly xlsx here</div>
-          <div style={{ fontSize: 11, color: "rgba(var(--tint),0.4)", marginTop: 4 }}>
-            or click to browse · file should match the standard Sales Update layout
+          <div style={{ fontSize: 12, color: "rgba(var(--tint),0.55)", marginTop: 4 }}>
+            or click to browse · Customer Invoice Listing or the standard Sales Update layout
           </div>
           <input ref={fileRef} type="file" accept=".xlsx" style={{ display: "none" }}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
@@ -716,30 +771,30 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
 
       {mode === "multi" && buckets && (
         <div style={{border:"1px solid rgba(232,99,59,0.2)",borderRadius:10,overflow:"hidden"}}>
-          <div style={{padding:"10px 14px",background:"rgba(232,99,59,0.06)",fontSize:12,color:"rgba(var(--tint),0.75)",borderBottom:"1px solid rgba(232,99,59,0.15)"}}>
-            File spans <strong>{buckets.length} weeks</strong>. Each week below will upload as its own <code style={{fontFamily:"'Space Mono',monospace",fontSize:11}}>weekly_sales</code> entry. Re-uploading is safe — same (start, end, rep) rows are overwritten.
+          <div style={{padding:"10px 14px",background:"rgba(232,99,59,0.06)",fontSize:12,color:"rgba(var(--tint),0.8)",borderBottom:"1px solid rgba(232,99,59,0.15)"}}>
+            File spans <strong>{buckets.length} weeks</strong>. Each week below uploads as its own <code style={{fontFamily:"'Space Mono',monospace",fontSize:11}}>weekly_sales</code> entry. Re-uploading is safe — same (start, end, rep) rows are overwritten.
           </div>
           <div style={{maxHeight:340,overflowY:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:"'Space Mono',monospace"}}>
               <thead style={{position:"sticky",top:0,background:"rgba(15,15,20,0.95)",backdropFilter:"blur(8px)"}}>
                 <tr>
-                  <th style={{textAlign:"left",padding:"8px 12px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.5)",borderBottom:"1px solid rgba(var(--tint),0.08)"}}>Week</th>
-                  {["Alan","Dino","Khen","Sakinah","Wani","Simon","Seed Malaysia"].map(sp => (
-                    <th key={sp} style={{textAlign:"right",padding:"8px 10px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.5)",borderBottom:"1px solid rgba(var(--tint),0.08)"}}>{sp.split(" ")[0]}</th>
+                  <th style={{textAlign:"left",padding:"8px 12px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.6)",borderBottom:"1px solid rgba(var(--tint),0.1)"}}>Week</th>
+                  {REP_ORDER.map(sp => (
+                    <th key={sp} style={{textAlign:"right",padding:"8px 10px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.6)",borderBottom:"1px solid rgba(var(--tint),0.1)"}}>{sp.split(" ")[0]}</th>
                   ))}
-                  <th style={{textAlign:"right",padding:"8px 12px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"var(--st-accent)",borderBottom:"1px solid rgba(var(--tint),0.08)"}}>Total</th>
+                  <th style={{textAlign:"right",padding:"8px 12px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"var(--st-accent)",borderBottom:"1px solid rgba(var(--tint),0.1)"}}>Total</th>
                 </tr>
               </thead>
               <tbody>
                 {buckets.map(b => {
                   const total = b.rows.reduce((a, r) => a + Number(r.amount || 0), 0);
                   return (
-                    <tr key={b.start} style={{borderBottom:"1px solid rgba(var(--tint),0.04)"}}>
-                      <td style={{padding:"8px 12px",whiteSpace:"nowrap"}}>{fmtDate(b.start)} – {fmtDate(b.end)}</td>
-                      {["Alan","Dino","Khen","Sakinah","Wani","Simon","Seed Malaysia"].map(sp => {
+                    <tr key={b.start} style={{borderBottom:"1px solid rgba(var(--tint),0.05)"}}>
+                      <td style={{padding:"8px 12px",whiteSpace:"nowrap"}}>{fmtDay(b.start)} – {fmtDay(b.end)}</td>
+                      {REP_ORDER.map(sp => {
                         const v = b.rows.find(r => r.sp === sp)?.amount || 0;
                         return (
-                          <td key={sp} style={{padding:"8px 10px",textAlign:"right",color: v > 0 ? "var(--text)" : "rgba(var(--tint),0.3)"}}>
+                          <td key={sp} style={{padding:"8px 10px",textAlign:"right",color: v > 0 ? "var(--text)" : "rgba(var(--tint),0.35)"}}>
                             {v > 0 ? Number(v).toLocaleString("en-MY",{maximumFractionDigits:0}) : "—"}
                           </td>
                         );
@@ -752,12 +807,12 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
                 })}
               </tbody>
               <tfoot>
-                <tr style={{background:"rgba(var(--tint),0.03)"}}>
-                  <td style={{padding:"10px 12px",fontSize:11,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.6)",fontWeight:700}}>Grand total</td>
-                  {["Alan","Dino","Khen","Sakinah","Wani","Simon","Seed Malaysia"].map(sp => {
+                <tr style={{background:"rgba(var(--tint),0.04)"}}>
+                  <td style={{padding:"10px 12px",fontSize:11,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.7)",fontWeight:700}}>Grand total</td>
+                  {REP_ORDER.map(sp => {
                     const v = buckets.reduce((s, b) => s + (b.rows.find(r => r.sp === sp)?.amount || 0), 0);
                     return (
-                      <td key={sp} style={{padding:"10px 10px",textAlign:"right",fontWeight:700,color: v > 0 ? "var(--text)" : "rgba(var(--tint),0.3)"}}>
+                      <td key={sp} style={{padding:"10px 10px",textAlign:"right",fontWeight:700,color: v > 0 ? "var(--text)" : "rgba(var(--tint),0.35)"}}>
                         {v > 0 ? Number(v).toLocaleString("en-MY",{maximumFractionDigits:0}) : "—"}
                       </td>
                     );
@@ -775,27 +830,27 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
       {mode === "manual" && (
         <>
           <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "rgba(var(--tint),0.5)" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "rgba(var(--tint),0.6)" }}>
               Period start
               <input type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)}
-                style={{ background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.08)", color: "var(--text)", borderRadius: 6, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }} />
+                style={{ background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.1)", color: "var(--text)", borderRadius: 6, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }} />
             </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "rgba(var(--tint),0.5)" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "rgba(var(--tint),0.6)" }}>
               Period end
               <input type="date" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)}
-                style={{ background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.08)", color: "var(--text)", borderRadius: 6, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }} />
+                style={{ background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.1)", color: "var(--text)", borderRadius: 6, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }} />
             </label>
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
-              <tr style={{ borderBottom: "1px solid rgba(var(--tint),0.08)" }}>
-                <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, color: "rgba(var(--tint),0.4)", fontWeight: 500, textTransform: "uppercase", letterSpacing: 1 }}>Salesperson</th>
-                <th style={{ textAlign: "right", padding: "8px 10px", fontSize: 11, color: "rgba(var(--tint),0.4)", fontWeight: 500, textTransform: "uppercase", letterSpacing: 1 }}>Amount (RM)</th>
+              <tr style={{ borderBottom: "1px solid rgba(var(--tint),0.1)" }}>
+                <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, color: "rgba(var(--tint),0.55)", fontWeight: 500, textTransform: "uppercase", letterSpacing: 1 }}>Salesperson</th>
+                <th style={{ textAlign: "right", padding: "8px 10px", fontSize: 11, color: "rgba(var(--tint),0.55)", fontWeight: 500, textTransform: "uppercase", letterSpacing: 1 }}>Amount (RM)</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
-                <tr key={r.sp} style={{ borderBottom: "1px solid rgba(var(--tint),0.04)" }}>
+                <tr key={r.sp} style={{ borderBottom: "1px solid rgba(var(--tint),0.05)" }}>
                   <td style={{ padding: "8px 10px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ width: 8, height: 8, borderRadius: 2, background: SP_COLORS[r.sp] || "#888" }} />
@@ -812,7 +867,7 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
                         setRows(newRows);
                       }}
                       style={{
-                        background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.08)",
+                        background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.1)",
                         color: "var(--text)", borderRadius: 6, padding: "6px 10px", fontSize: 13,
                         fontFamily: "'Space Mono',monospace", textAlign: "right", width: 140,
                       }}
@@ -832,7 +887,7 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
           cursor: busy ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
         }}>{busy ? "Saving…" : "Save weekly update"}</button>
         <button onClick={onClose} style={{
-          background: "transparent", color: "rgba(var(--tint),0.5)", border: "1px solid rgba(var(--tint),0.1)",
+          background: "transparent", color: "rgba(var(--tint),0.6)", border: "1px solid rgba(var(--tint),0.12)",
           borderRadius: 8, padding: "10px 22px", fontSize: 13, cursor: "pointer",
         }}>Cancel</button>
         {info && <div style={{ fontSize: 12, color: "var(--st-ok)" }}>✓ {info}</div>}

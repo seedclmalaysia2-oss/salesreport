@@ -13,6 +13,7 @@ import {
   listFiles, uploadFile, replaceFile,
   softDeleteFile, restoreFile, purgeFile, downloadUrl,
 } from "./lib/files.js";
+import { syncWeeklyFromFiles, invoiceFilesFrom } from "./lib/weekly.js";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -95,7 +96,7 @@ function actionBtn(color, disabled = false) {
   };
 }
 
-export default function DataTab({ data }) {
+export default function DataTab({ data, onRefresh }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -103,6 +104,7 @@ export default function DataTab({ data }) {
   const [busyId, setBusyId] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [showTrash, setShowTrash] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -128,16 +130,50 @@ export default function DataTab({ data }) {
   const refresh = async () => {
     setLoading(true);
     try {
-      setFiles(await listFiles());
+      const list = await listFiles();
+      setFiles(list);
       setError(null);
+      return list;
     } catch (e) {
       setError(`Could not load files: ${e.message || e}`);
+      return null;
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => { refresh(); }, []);
+
+  // Push the invoice-listing numbers into the weekly_sales board. This is the
+  // link that makes an upload on this tab actually show up on the Weekly Sales
+  // view — before, the two were disconnected. Idempotent, so the manual button
+  // can also backfill files uploaded before this existed. `silent` suppresses
+  // the "nothing to sync" note during the automatic post-upload run.
+  const runWeeklySync = async (list, { silent = false } = {}) => {
+    setSyncing(true);
+    setError(null);
+    try {
+      const res = await syncWeeklyFromFiles(list ?? files);
+      if (res.rows > 0) {
+        setNotice(
+          `Weekly Sales updated — ${res.weeks} week${res.weeks === 1 ? "" : "s"} ` +
+          `synced from ${res.files} invoice file${res.files === 1 ? "" : "s"} ` +
+          `(${res.periodStart} → ${res.periodEnd}). Open the Overview tab to see it.`
+        );
+        onRefresh?.();
+      } else if (!silent) {
+        setNotice("No invoice rows to sync yet — upload a Customer Invoice Listing first.");
+      }
+      return res;
+    } catch (e) {
+      setError(`Weekly sync failed: ${e.message || e}`);
+      return null;
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const invoiceFileCount = useMemo(() => invoiceFilesFrom(files).length, [files]);
 
   // Live (non-trashed) files, narrowed by the search box and ordered by the
   // current sort. Sorting on 'kind' uses the label shown in the Type column so
@@ -327,7 +363,16 @@ export default function DataTab({ data }) {
     if (failures.length) setError(`${failures.length} file(s) failed:\n${failures.join("\n")}`);
     const okCount = valid.length - failures.length;
     if (okCount > 0) setNotice(`Uploaded ${okCount} file${okCount === 1 ? "" : "s"}.`);
-    await refresh();
+    const list = await refresh();
+    // If any successfully-uploaded file was an invoice listing, carry its
+    // numbers straight through to the Weekly Sales board — that is the whole
+    // point of uploading one, and it used to require a second manual step.
+    const uploadedInvoice = valid.some(
+      (f) => parseFilename(f.name)?.kind === "Customer Invoice Listing"
+    );
+    if (uploadedInvoice && okCount > 0 && list) {
+      await runWeeklySync(list, { silent: true });
+    }
   };
 
   const onUpdateFile = (entry) => {
@@ -352,8 +397,14 @@ export default function DataTab({ data }) {
         return;
       }
       const updated = await replaceFile(target, file, parsed);
-      setFiles(prev => prev.map(f => (f.id === updated.id ? updated : f)));
+      const nextFiles = files.map(f => (f.id === updated.id ? updated : f));
+      setFiles(nextFiles);
       setNotice(`"${updated.name}" replaced.`);
+      // Replacing an invoice listing changes the weekly numbers it feeds, so
+      // rebuild the board from the updated set.
+      if (updated.kind === "invoice") {
+        await runWeeklySync(nextFiles, { silent: true });
+      }
     } catch (err) {
       setError(err.message || String(err));
     } finally {
@@ -428,6 +479,50 @@ export default function DataTab({ data }) {
         <KPI label="Brand-sale rows" value={data.brandSales?.length.toLocaleString() ?? "0"} sub={`across ${(data.brands || []).length} brands`} color="#A855F7" />
         <KPI label="Years covered" value={(data.years || []).join(", ") || "—"} sub={`${(data.salespeople || []).length} salespeople`} color="#3B82F6" />
       </div>
+
+      {/* The link between this tab and the Weekly Sales board. Uploading an
+          invoice listing now feeds the board automatically, but this button
+          also rebuilds it from every invoice file already in the library — the
+          one click that backfills weeks uploaded before that link existed. */}
+      {invoiceFileCount > 0 && (
+        <div style={{
+          display:"flex",alignItems:"center",gap:16,flexWrap:"wrap",marginBottom:20,
+          padding:"14px 18px",borderRadius:14,
+          background:"rgba(59,130,246,0.06)",border:"1px solid rgba(59,130,246,0.28)",
+        }}>
+          <div style={{fontSize:22,lineHeight:1,flexShrink:0}} aria-hidden="true">📊</div>
+          <div style={{flex:"1 1 260px",minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--text)",marginBottom:2}}>
+              Weekly Sales board
+            </div>
+            <div style={{fontSize:12,color:"rgba(var(--tint),0.65)",lineHeight:1.5}}>
+              {invoiceFileCount} invoice listing{invoiceFileCount===1?"":"s"} in the library feed the weekly view.
+              New uploads sync on their own — use this to rebuild every week from the current files.
+            </div>
+          </div>
+          <button
+            onClick={() => runWeeklySync(files)}
+            disabled={syncing}
+            style={{
+              display:"inline-flex",alignItems:"center",gap:8,
+              background: syncing ? "rgba(59,130,246,0.12)" : "#3B82F6",
+              color: syncing ? "rgba(59,130,246,0.9)" : "#fff",
+              border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,
+              cursor: syncing ? "wait" : "pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
+            }}>
+            {syncing ? (
+              <>
+                <span style={{
+                  width:13,height:13,borderRadius:"50%",display:"inline-block",
+                  border:"2px solid rgba(59,130,246,0.35)",borderTopColor:"#3B82F6",
+                  animation:"seedspin 0.8s linear infinite",
+                }} />
+                Syncing…
+              </>
+            ) : "↻ Sync Weekly Sales"}
+          </button>
+        </div>
+      )}
 
       {error && (
         <div style={{marginBottom:16,padding:"10px 14px",background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:8,fontSize:12,color:"#F87171",whiteSpace:"pre-wrap"}}>
