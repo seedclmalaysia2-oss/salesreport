@@ -221,13 +221,16 @@ export default function DataTab({ data, onRefresh }) {
       }
     };
 
-    let list;
+    let list = [];
     try {
-      // 1. File library
-      list = await runStage("files", async () => {
-        const l = await listFiles();
-        setFiles(l);
-        const n = l.filter(f => !f.deletedAt).length;
+      // 1. File library. runStage returns the DETAIL string for the UI, so we
+      // capture the real list into the outer scope for later stages instead of
+      // reusing the return value (which would leave `list` as the detail text
+      // — the "(s || []).filter is not a function" bug).
+      await runStage("files", async () => {
+        list = await listFiles();
+        setFiles(list);
+        const n = list.filter(f => !f.deletedAt).length;
         return `${n} active file${n === 1 ? "" : "s"}`;
       });
 
