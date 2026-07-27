@@ -63,17 +63,57 @@ export function invoiceFilesFrom(files) {
   );
 }
 
-// Rebuild weekly_sales from every invoice file currently visible. Idempotent:
-// re-running with the same files overwrites the same (period, rep) rows via the
-// unique-key upsert, so it is always safe to run again. Purely additive — weeks
-// with no invoice file (e.g. a manual entry) are left untouched, never deleted.
-// Returns a small summary for the UI to report.
+// Collapse the invoice lines from every file down to one entry per real
+// invoice, so overlapping uploads never double-count.
+//
+// This is what makes a daily workflow safe: exporting a fresh "1st → today"
+// Customer Invoice Listing every day means each day's file re-contains all the
+// earlier days' invoices. Naively summing the files would count 1–15 Jul again
+// in the "1–16 Jul" upload. Instead we key every line by its invoice number,
+// sum the lines within each invoice, and let the newest-uploaded file win for
+// any invoice that appears in more than one — so an invoice counts exactly once
+// at its latest figure, on its own date. Lines with no invoice number (rare on
+// this report) fall back to a content key so identical duplicates still merge.
+export function dedupeInvoiceUnits(files) {
+  const invoiceFiles = [...invoiceFilesFrom(files)].sort(
+    (a, b) => (a.uploadedAt || 0) - (b.uploadedAt || 0) // oldest first; newest overwrites
+  );
+  const units = new Map(); // key -> { date, sp, amount }
+  for (const f of invoiceFiles) {
+    // Fold this one file first, so an invoice's multiple lines sum together
+    // before it competes with the same invoice in another file.
+    const perFile = new Map();
+    for (const r of f.rows || []) {
+      if (!r || !r.date || !r.sp) continue;
+      const amount = Number(r.amount);
+      if (!Number.isFinite(amount)) continue;
+      if (r.invoice) {
+        const key = `inv|${r.invoice}`;
+        const cur = perFile.get(key);
+        if (cur) cur.amount += amount;
+        else perFile.set(key, { date: r.date, sp: r.sp, amount });
+      } else {
+        const key = `raw|${r.date}|${r.sp}|${r.customer || ""}|${amount}`;
+        perFile.set(key, { date: r.date, sp: r.sp, amount });
+      }
+    }
+    for (const [key, unit] of perFile) units.set(key, unit); // newer file wins
+  }
+  return [...units.values()];
+}
+
+// Rebuild weekly_sales from every invoice file currently visible. Idempotent
+// and duplicate-proof: invoices are de-duplicated across files first (see
+// dedupeInvoiceUnits), then bucketed into Mon–Sun weeks and upserted on the
+// unique (period, rep) key — so running it daily, or re-uploading the same
+// month repeatedly, always converges on the correct totals. Purely additive:
+// weeks with no invoice file (e.g. a manual entry) are left untouched.
 export async function syncWeeklyFromFiles(files) {
   const invoiceFiles = invoiceFilesFrom(files);
-  const rows = invoiceFiles.flatMap((f) => f.rows || []);
-  const payload = invoiceRowsToWeekly(rows);
+  const units = dedupeInvoiceUnits(files);
+  const payload = invoiceRowsToWeekly(units);
   if (!payload.length) {
-    return { files: invoiceFiles.length, weeks: 0, rows: 0, periodStart: null, periodEnd: null };
+    return { files: invoiceFiles.length, invoices: units.length, weeks: 0, rows: 0, periodStart: null, periodEnd: null };
   }
   const { error } = await supabase
     .from("weekly_sales")
@@ -83,6 +123,7 @@ export async function syncWeeklyFromFiles(files) {
   const ends = payload.map((p) => p.period_end).sort();
   return {
     files: invoiceFiles.length,
+    invoices: units.length,
     weeks: new Set(payload.map((p) => p.period_start)).size,
     rows: payload.length,
     periodStart: starts[0],
