@@ -101,6 +101,26 @@ function actionBtn(color, disabled = false) {
   };
 }
 
+// Stringify anything we might `throw` in this file — plain strings, Error
+// instances, Supabase PostgrestError objects ({message, details, hint, code}),
+// or bare objects that used to fall through to the useless "[object Object]".
+// Prefer whichever field carries the human-readable text.
+function fmtErr(e) {
+  if (e == null) return "unknown error";
+  if (typeof e === "string") return e;
+  const parts = [];
+  if (e.message) parts.push(e.message);
+  if (e.details) parts.push(`(${e.details})`);
+  if (e.hint)    parts.push(`hint: ${e.hint}`);
+  if (e.code && !parts.length) parts.push(`code ${e.code}`);
+  if (parts.length) return parts.join(" ");
+  try {
+    const j = JSON.stringify(e);
+    if (j && j !== "{}") return j;
+  } catch { /* fall through */ }
+  return String(e);
+}
+
 export default function DataTab({ data, onRefresh }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -140,7 +160,7 @@ export default function DataTab({ data, onRefresh }) {
       setError(null);
       return list;
     } catch (e) {
-      setError(`Could not load files: ${e.message || e}`);
+      setError(`Could not load files: ${fmtErr(e)}`);
       return null;
     } finally {
       setLoading(false);
@@ -171,7 +191,7 @@ export default function DataTab({ data, onRefresh }) {
       }
       return res;
     } catch (e) {
-      setError(`Weekly sync failed: ${e.message || e}`);
+      setError(`Weekly sync failed: ${fmtErr(e)}`);
       return null;
     } finally {
       setSyncing(false);
@@ -256,7 +276,7 @@ export default function DataTab({ data, onRefresh }) {
       }
       onRefresh?.();
     } catch (e) {
-      setError(`Reprocess failed: ${e.message || e}`);
+      setError(`Reprocess failed: ${fmtErr(e)}`);
     } finally {
       setReprocessing(false);
       setReprocessProgress(null);
@@ -274,6 +294,7 @@ export default function DataTab({ data, onRefresh }) {
     setRecalcSteps(Object.fromEntries(RECALC_STAGES.map(s => [s.id, { status: "pending" }])));
 
     let failed = false;
+    const softErrors = [];
     const runStage = async (id, task) => {
       setStep(id, { status: "running" });
       const t0 = performance.now();
@@ -283,9 +304,29 @@ export default function DataTab({ data, onRefresh }) {
         setStep(id, { status: "done", detail, ms });
         return detail;
       } catch (e) {
-        setStep(id, { status: "error", detail: e.message || String(e) });
+        setStep(id, { status: "error", detail: fmtErr(e) });
         failed = true;
         throw e;
+      }
+    };
+    // Soft variant used for the fetch stages: report the failure on the row
+    // but keep going, so a downstream fetch or the parent-refresh at the end
+    // still runs. Steps that already wrote to the DB (customer/brand push,
+    // weekly sync) MUST remain hard runStage — those failing means the DB
+    // isn't in the state we're about to render.
+    const runStageSoft = async (id, task) => {
+      setStep(id, { status: "running" });
+      const t0 = performance.now();
+      try {
+        const detail = await task();
+        const ms = Math.round(performance.now() - t0);
+        setStep(id, { status: "done", detail, ms });
+        return detail;
+      } catch (e) {
+        const msg = fmtErr(e);
+        setStep(id, { status: "error", detail: msg });
+        softErrors.push(`${id}: ${msg}`);
+        return null;
       }
     };
 
@@ -350,21 +391,23 @@ export default function DataTab({ data, onRefresh }) {
       }
 
       // 3-6. Pull each dashboard table directly so the row counts are visible
-      // per source. onRefresh below will re-fire the same reads, but this way
-      // the checklist shows real numbers, not a spinning icon.
-      await runStage("customers", async () => {
+      // per source. Wrapped in runStageSoft so a fetch failure (e.g. an RLS
+      // permission slip) doesn't skip the parent-refresh below — the writes
+      // above already landed, and the parent must still be told to re-render
+      // or every chart stays on pre-Recalculate data.
+      await runStageSoft("customers", async () => {
         const rows = await fetchAll("customers_data", "sp,year,customer,months,total");
         return `${rows.length.toLocaleString()} rows`;
       });
-      await runStage("targets", async () => {
+      await runStageSoft("targets", async () => {
         const rows = await fetchAll("sales_targets", "year,month,sp,target_amt");
         return `${rows.length.toLocaleString()} rows`;
       });
-      await runStage("weeklyDb", async () => {
+      await runStageSoft("weeklyDb", async () => {
         const rows = await fetchAll("weekly_sales", "period_start,period_end,sp,amount,uploaded_at");
         return `${rows.length.toLocaleString()} rows`;
       });
-      await runStage("brands", async () => {
+      await runStageSoft("brands", async () => {
         const rows = await fetchAll("brand_sales_data", "sp,year,customer,brand,amt,qty");
         return `${rows.length.toLocaleString()} rows`;
       });
@@ -379,12 +422,26 @@ export default function DataTab({ data, onRefresh }) {
       });
 
       setLastRecalcAt(Date.now());
-      const ok = RECALC_STAGES.filter(s => recalcSteps[s.id]?.status !== "error").length;
-      setNotice(`Recalculated · ${ok}/${RECALC_STAGES.length} steps · dashboard now shows the latest data.`);
+      if (softErrors.length) {
+        // Writes went through but at least one fetch step erred (typically the
+        // RLS grants on current_user_is_admin / current_user_visible_sps are
+        // missing — see supabase/migrations/0013_grant_execute_on_helpers.sql).
+        // Surface the actual message so it isn't a mystery.
+        setError(
+          `Recalculate finished with ${softErrors.length} fetch step${softErrors.length === 1 ? "" : "s"} failing:\n` +
+          softErrors.join("\n") +
+          `\n\nThe writes above succeeded; the missing piece is usually a Supabase RLS grant. Run supabase/migrations/0013_grant_execute_on_helpers.sql in the SQL editor.`
+        );
+        setNotice(
+          `Writes completed, dashboard reload attempted despite fetch errors — reload the page (Ctrl+Shift+R) if charts still look stale.`
+        );
+      } else {
+        setNotice(`Recalculated · all ${RECALC_STAGES.length} steps green · dashboard now shows the latest data.`);
+      }
     } catch (e) {
       // The step that threw has already been marked "error"; leave the rest as
       // "pending" so the admin can see where it stopped.
-      setError(`Recalculate stopped: ${e.message || e}`);
+      setError(`Recalculate stopped: ${fmtErr(e)}`);
     } finally {
       setRecalculating(false);
     }
@@ -533,7 +590,7 @@ export default function DataTab({ data, onRefresh }) {
       a.click();
       document.body.removeChild(a);
     } catch (e) {
-      setError(e.message || String(e));
+      setError(fmtErr(e));
     } finally {
       setBusyId(null);
     }
@@ -569,7 +626,7 @@ export default function DataTab({ data, onRefresh }) {
         if (!parsed.ok) failures.push(`${file.name}: ${parsed.error}`);
         else await uploadFile(file, parsed);
       } catch (e) {
-        failures.push(`${file.name}: ${e.message || e}`);
+        failures.push(`${file.name}: ${fmtErr(e)}`);
       }
       done += 1;
     }
@@ -595,7 +652,7 @@ export default function DataTab({ data, onRefresh }) {
             `Uploaded ${okCount} file${okCount === 1 ? "" : "s"} · pushed ${r.rows.toLocaleString()} customer rows to the dashboard.`
           );
         }
-      } catch (e) { syncErrors.push(`customer sync: ${e.message || e}`); }
+      } catch (e) { syncErrors.push(`customer sync: ${fmtErr(e)}`); }
       try {
         if ([...kinds].some((k) => /Stock Sales/i.test(k || ""))) {
           const r = await syncBrandsFromFiles(list);
@@ -603,7 +660,7 @@ export default function DataTab({ data, onRefresh }) {
             `Uploaded ${okCount} file${okCount === 1 ? "" : "s"} · pushed ${r.rows.toLocaleString()} brand rows to the dashboard.`
           );
         }
-      } catch (e) { syncErrors.push(`brand sync: ${e.message || e}`); }
+      } catch (e) { syncErrors.push(`brand sync: ${fmtErr(e)}`); }
       if (kinds.has("Customer Invoice Listing")) {
         await runWeeklySync(list, { silent: true });
       }
@@ -674,7 +731,7 @@ export default function DataTab({ data, onRefresh }) {
       const updated = await softDeleteFile(entry);
       setFiles(prev => prev.map(f => (f.id === updated.id ? updated : f)));
     } catch (e) {
-      setError(e.message || String(e));
+      setError(fmtErr(e));
     } finally {
       setBusyId(null);
     }
@@ -686,7 +743,7 @@ export default function DataTab({ data, onRefresh }) {
       const updated = await restoreFile(entry);
       setFiles(prev => prev.map(f => (f.id === updated.id ? updated : f)));
     } catch (e) {
-      setError(e.message || String(e));
+      setError(fmtErr(e));
     } finally {
       setBusyId(null);
     }
@@ -699,7 +756,7 @@ export default function DataTab({ data, onRefresh }) {
       await purgeFile(entry);
       setFiles(prev => prev.filter(f => f.id !== entry.id));
     } catch (e) {
-      setError(e.message || String(e));
+      setError(fmtErr(e));
     } finally {
       setBusyId(null);
     }
