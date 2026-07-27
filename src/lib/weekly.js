@@ -176,92 +176,85 @@ function latestFilePerScope(files, kind) {
   return [...winners.values()];
 }
 
-// Replay every "latest per (sp, year)" customer file into customers_data.
-// Each scope is a DELETE-by-(sp,year) followed by a chunked INSERT. Returns
-// a summary the checklist can render.
+// Replay every "latest per (sp, year)" customer file into customers_data via
+// the replace_customers_data RPC, which does the DELETE + INSERT atomically as
+// SECURITY DEFINER. That sidesteps every "why did DELETE work but INSERT fail"
+// RLS-write-policy puzzle we hit with row-by-row client writes — the admin
+// check runs inside the function.
 export async function syncCustomersFromFiles(files) {
   const winners = latestFilePerScope(files, "customer");
   if (!winners.length) {
     return { files: 0, scopes: 0, rows: 0, scopeLabels: [] };
   }
-  let totalRows = 0;
+  let totalInserted = 0;
   const scopeLabels = [];
   for (const f of winners) {
-    // 1) Clear the previous rows for this scope.
-    const { error: delErr } = await supabase
-      .from("customers_data")
-      .delete()
-      .eq("sp", f.sp)
-      .eq("year", f.year);
-    if (delErr) throw new Error(`Clearing ${f.sp} ${f.year} failed: ${delErr.message}`);
-
-    // 2) Insert the file's rows, in chunks so a large file doesn't stall on
-    //    a single 5 MB payload.
     const rows = (f.rows || [])
       .filter((r) => r && r.customer)
       .map((r) => ({
-        sp: f.sp,
-        year: f.year,
         customer: r.customer,
-        months: Array.isArray(r.months) && r.months.length === 12
-          ? r.months.map((m) => Number(m) || 0)
-          : new Array(12).fill(0),
+        months:
+          Array.isArray(r.months) && r.months.length === 12
+            ? r.months.map((m) => Number(m) || 0)
+            : new Array(12).fill(0),
         total: Number(r.total) || 0,
       }));
-    if (rows.length) {
-      const CHUNK = 500;
-      for (let i = 0; i < rows.length; i += CHUNK) {
-        const { error: insErr } = await supabase
-          .from("customers_data")
-          .insert(rows.slice(i, i + CHUNK));
-        if (insErr) throw new Error(`Inserting ${f.sp} ${f.year} failed: ${insErr.message}`);
-      }
+    const { data, error } = await supabase.rpc("replace_customers_data", {
+      p_sp: f.sp,
+      p_year: f.year,
+      p_rows: rows,
+    });
+    if (error) {
+      throw new Error(`Replacing ${f.sp} ${f.year} failed: ${error.message}`);
     }
-    totalRows += rows.length;
+    // The RPC returns [{ deleted, inserted }]; use inserted for the summary.
+    const inserted = data?.[0]?.inserted ?? rows.length;
+    totalInserted += inserted;
     scopeLabels.push(`${f.sp} ${f.year}`);
   }
-  return { files: winners.length, scopes: winners.length, rows: totalRows, scopeLabels };
+  return {
+    files: winners.length,
+    scopes: winners.length,
+    rows: totalInserted,
+    scopeLabels,
+  };
 }
 
-// Same shape for brand_sales_data. Brand rows carry (customer, brand, amt, qty)
-// rather than the monthly customer breakdown, but the sync strategy is
-// identical: newest file per (sp, year) wins, DELETE-then-INSERT for that scope.
+// Same shape for brand_sales_data, delegated to the replace_brand_sales_data
+// RPC. Brand rows carry (customer, brand, amt, qty) rather than the monthly
+// customer breakdown, but the whole-scope swap semantics are identical.
 export async function syncBrandsFromFiles(files) {
   const winners = latestFilePerScope(files, "brand");
   if (!winners.length) {
     return { files: 0, scopes: 0, rows: 0, scopeLabels: [] };
   }
-  let totalRows = 0;
+  let totalInserted = 0;
   const scopeLabels = [];
   for (const f of winners) {
-    const { error: delErr } = await supabase
-      .from("brand_sales_data")
-      .delete()
-      .eq("sp", f.sp)
-      .eq("year", f.year);
-    if (delErr) throw new Error(`Clearing ${f.sp} ${f.year} failed: ${delErr.message}`);
-
     const rows = (f.rows || [])
       .filter((r) => r && r.customer && r.brand)
       .map((r) => ({
-        sp: f.sp,
-        year: f.year,
         customer: r.customer,
         brand: r.brand,
         amt: Number(r.amt) || 0,
         qty: Number(r.qty) || 0,
       }));
-    if (rows.length) {
-      const CHUNK = 500;
-      for (let i = 0; i < rows.length; i += CHUNK) {
-        const { error: insErr } = await supabase
-          .from("brand_sales_data")
-          .insert(rows.slice(i, i + CHUNK));
-        if (insErr) throw new Error(`Inserting ${f.sp} ${f.year} failed: ${insErr.message}`);
-      }
+    const { data, error } = await supabase.rpc("replace_brand_sales_data", {
+      p_sp: f.sp,
+      p_year: f.year,
+      p_rows: rows,
+    });
+    if (error) {
+      throw new Error(`Replacing ${f.sp} ${f.year} failed: ${error.message}`);
     }
-    totalRows += rows.length;
+    const inserted = data?.[0]?.inserted ?? rows.length;
+    totalInserted += inserted;
     scopeLabels.push(`${f.sp} ${f.year}`);
   }
-  return { files: winners.length, scopes: winners.length, rows: totalRows, scopeLabels };
+  return {
+    files: winners.length,
+    scopes: winners.length,
+    rows: totalInserted,
+    scopeLabels,
+  };
 }
