@@ -57,7 +57,72 @@ function sheetToRows(XLSX, sheet) {
   return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true, blankrows: true });
 }
 
+// The Autocount "Sales Analysis by Customer" export shipped in TWO layouts:
+//   * 2022–2025 (tight): header at row 5, customer at col 4, months at
+//     fixed cols 6/8/10/…/28.
+//   * 2026+ (wide):      header ~row 7, "Customer Name" at col 3, months
+//     on irregular offsets (col 15/21/28/34/40/46/53/58/63/68/73/78 for
+//     the header labels; the amount cell is one column LEFT of each label).
+// Rather than gate on filename year, scan for the header row and derive
+// the customer column + per-month amount columns from the "MMM YY" labels.
+// Falls back to the legacy fixed offsets if the auto-detect finds no
+// header (i.e. plain older files with no visible month row).
+const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function detectCustomerLayout(rows) {
+  for (let r = 0; r < Math.min(rows.length, 30); r++) {
+    const row = rows[r]; if (!row) continue;
+    let customerCol = -1;
+    const monthCols = new Array(12).fill(-1);
+    for (let c = 0; c < row.length; c++) {
+      const v = row[c];
+      if (typeof v !== "string") continue;
+      const s = v.trim();
+      if (s === "Customer Name" || s === "Customer") customerCol = c;
+      const m = s.match(/^([A-Za-z]{3})\b/);
+      if (m) {
+        const canon = m[1][0].toUpperCase() + m[1].slice(1, 3).toLowerCase();
+        const idx = MONTH_ABBR.indexOf(canon);
+        if (idx >= 0 && monthCols[idx] < 0) monthCols[idx] = c;
+      }
+    }
+    const monthsFound = monthCols.filter(c => c >= 0).length;
+    // 6+ months is enough to be confident this is the header row.
+    if (customerCol >= 0 && monthsFound >= 6) {
+      // Amount cell sits one column LEFT of the month label on both layouts.
+      const amountCols = monthCols.map(c => c > 0 ? c - 1 : -1);
+      return { headerRow: r, customerCol, amountCols };
+    }
+  }
+  return null;
+}
+
 function parseCustomerRows(rows) {
+  const layout = detectCustomerLayout(rows);
+  if (layout) {
+    const { headerRow, customerCol, amountCols } = layout;
+    const out = [];
+    for (let i = headerRow + 1; i < rows.length; i++) {
+      const r = rows[i]; if (!r) continue;
+      const name = r[customerCol];
+      if (name == null || name === "") continue;
+      if (typeof name === "string" && /^\s*total/i.test(name)) break;
+      if (typeof name !== "string") continue;
+      const months = amountCols.map(c => (c >= 0 && typeof r[c] === "number" ? r[c] : 0));
+      const total = months.reduce((a, b) => a + b, 0);
+      // Skip padding/spacer rows the export inserts between customers.
+      if (total === 0 && months.every(m => m === 0)) continue;
+      out.push({
+        customer: String(name).trim(),
+        months,
+        total: Math.round(total * 100) / 100,
+      });
+    }
+    return out;
+  }
+
+  // Fallback: legacy fixed-offset layout (2022-2025 exports without an
+  // explicit MMM YY header row.)
   const out = [];
   for (let i = 5; i < rows.length; i++) {
     const r = rows[i];
@@ -69,10 +134,7 @@ function parseCustomerRows(rows) {
     if (!Number.isFinite(noNum)) continue;
     const name = r[4];
     if (!name) continue;
-    const months = MONTH_COLS_0.map(c => {
-      const v = r[c];
-      return typeof v === "number" ? v : 0;
-    });
+    const months = MONTH_COLS_0.map(c => (typeof r[c] === "number" ? r[c] : 0));
     const total = months.reduce((a, b) => a + b, 0);
     out.push({
       customer: String(name).trim(),
