@@ -8,7 +8,7 @@
 // back, because the database, not the browser, decides what is visible.
 
 import { supabase } from "./supabase.js";
-import { aggregate } from "./parseXlsx.js";
+import { aggregate, parseFile } from "./parseXlsx.js";
 
 const BUCKET = "data-files";
 
@@ -222,6 +222,77 @@ export async function downloadUrl(entry) {
     .createSignedUrl(entry.storagePath, 60, { download: entry.name });
   if (error) throw new Error(`Could not prepare download: ${error.message}`);
   return data.signedUrl;
+}
+
+// Re-parse an archived workbook straight from the storage bucket and write the
+// freshly-parsed rows back into data_files.rows_json. This is the recovery
+// path for entries that were uploaded before rows_json existed (or that got
+// stored as null for any other reason) — the file bytes are still in the
+// bucket, we just missed capturing the parsed data at upload time.
+export async function reprocessFile(entry) {
+  if (!entry?.storagePath) throw new Error("No storage path on this entry");
+  const { data: signed, error: urlErr } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(entry.storagePath, 120);
+  if (urlErr) throw new Error(`Signed URL failed: ${urlErr.message}`);
+  const resp = await fetch(signed.signedUrl);
+  if (!resp.ok) throw new Error(`Download failed: HTTP ${resp.status}`);
+  const blob = await resp.blob();
+  const file = new File([blob], entry.name, {
+    type:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const parsed = await parseFile(file);
+  if (!parsed.ok) throw new Error(`Parse failed: ${parsed.error}`);
+
+  // Update the registry row so the parsed rows are available for the sync
+  // helpers on the next read. Keep the size/name/etc. as-is — reprocess is
+  // strictly about (re)filling rows_json and the derived row_count.
+  const { data, error } = await supabase
+    .from("data_files")
+    .update({
+      rows_json: parsed.rows ?? [],
+      row_count: parsed.rowCount ?? (parsed.rows?.length ?? 0),
+      // Also normalise sp/year if the older row was missing them (invoice
+      // files have no sp; leave those alone).
+      sp:   parsed.sp   ?? entry.sp,
+      year: parsed.year ?? entry.year,
+      kind: parsed.kind ?? entry.kind,
+    })
+    .eq("id", entry.id)
+    .select()
+    .single();
+  if (error) throw new Error(`Update failed: ${error.message}`);
+  return { entry: rowToEntry(data), parsed };
+}
+
+// Reprocess every live file, one at a time. Reports per-file progress so the
+// caller can render a checklist. Errors are captured per-file rather than
+// aborting the batch, so a single stubborn workbook doesn't block the rest.
+export async function reprocessAllFiles(files, onProgress) {
+  const active = (files || []).filter((f) => !f.deletedAt);
+  const updated = [];
+  const errors = [];
+  let i = 0;
+  for (const f of active) {
+    try {
+      onProgress?.({ index: i, total: active.length, name: f.name, kind: f.kind });
+    } catch {}
+    try {
+      const { entry } = await reprocessFile(f);
+      updated.push(entry);
+    } catch (e) {
+      errors.push(`${f.name}: ${e.message || e}`);
+      updated.push(f); // keep the old entry in the returned list
+    }
+    i += 1;
+  }
+  return {
+    total: active.length,
+    reprocessed: updated.length - errors.length,
+    errors,
+    files: updated,
+  };
 }
 
 // Rebuild dashboard aggregates from whatever files this user is allowed to see.

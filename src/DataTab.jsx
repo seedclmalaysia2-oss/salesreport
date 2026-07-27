@@ -12,11 +12,11 @@ import { parseFile, parseFilename } from "./lib/parseXlsx.js";
 import {
   listFiles, uploadFile, replaceFile,
   softDeleteFile, restoreFile, purgeFile, downloadUrl,
+  reprocessAllFiles,
 } from "./lib/files.js";
 import {
   syncWeeklyFromFiles, invoiceFilesFrom,
   syncCustomersFromFiles, syncBrandsFromFiles,
-  restoreFromBaseline,
 } from "./lib/weekly.js";
 import { fetchAll } from "./lib/supabase.js";
 
@@ -201,45 +201,65 @@ export default function DataTab({ data, onRefresh }) {
   const [lastRecalcAt, setLastRecalcAt] = useState(null);
   const [recalcSteps, setRecalcSteps] = useState({}); // { id: { status, detail } }
 
-  // Recovery from the bundled snapshot when the fact tables got wiped by an
-  // earlier failed sync (this is how the missing-2026 rows come back). Pulls
-  // src/data.json lazily so it doesn't sit in the main bundle.
-  const [restoring, setRestoring] = useState(false);
-  const [restoreProgress, setRestoreProgress] = useState(null); // { index, total, table, scope }
-  const restoreBaseline = async () => {
+  // Reprocess uploaded files: for every archived workbook, download the xlsx
+  // bytes from storage, re-run the parser, and write the fresh rows back into
+  // data_files.rows_json. Old uploads (from before we captured rows_json) get
+  // their rows filled in for the first time, and any file with stale/corrupt
+  // rows gets rewritten from the source of truth. Then the fact-table syncs
+  // run so the charts pick up the reprocessed data — no need to re-upload
+  // anything from disk.
+  const [reprocessing, setReprocessing] = useState(false);
+  const [reprocessProgress, setReprocessProgress] = useState(null); // { index, total, name, kind }
+  const reprocessUploaded = async () => {
     if (!confirm(
-      "Restore fact tables from the bundled baseline snapshot?\n\n" +
-      "This will REPLACE customers_data and brand_sales_data for every (sp, year) " +
-      "in the snapshot. Use this only to recover from data loss — for the normal " +
-      "flow, upload workbooks and click Recalculate instead."
+      "Reprocess every uploaded workbook?\n\n" +
+      "For each archived file this will re-download from storage, re-parse the " +
+      "xlsx, update the row data, then push customer/brand/invoice rows into " +
+      "the chart tables. Use this when charts are missing scopes (like the " +
+      "2026 wipe) — nothing on disk needs re-uploading."
     )) return;
-    setRestoring(true);
+    setReprocessing(true);
     setError(null);
     setNotice(null);
-    setRestoreProgress({ index: 0, total: 1, table: "", scope: "loading snapshot…" });
+    setReprocessProgress({ index: 0, total: 1, name: "loading file list…", kind: "" });
     try {
-      const mod = await import("./data.json");
-      const baseline = mod.default ?? mod;
-      const res = await restoreFromBaseline(baseline, (p) => setRestoreProgress(p));
+      // Always work from a fresh listFiles so we know the storage paths and
+      // ids match what's actually in the database right now.
+      const current = await listFiles();
+      setFiles(current);
+      const res = await reprocessAllFiles(current, (p) => setReprocessProgress(p));
+      setFiles(res.files);
+
+      // Now push everything to the fact tables so the charts update.
+      setReprocessProgress({ index: res.total, total: res.total, name: "pushing to customers_data…", kind: "sync" });
+      const cust = await syncCustomersFromFiles(res.files);
+      setReprocessProgress({ index: res.total, total: res.total, name: "pushing to brand_sales_data…", kind: "sync" });
+      const brand = await syncBrandsFromFiles(res.files);
+      let weekly = { rows: 0 };
+      if (invoiceFilesFrom(res.files).length > 0) {
+        setReprocessProgress({ index: res.total, total: res.total, name: "syncing weekly board…", kind: "sync" });
+        weekly = await syncWeeklyFromFiles(res.files);
+      }
+
+      const parts = [
+        `${res.reprocessed}/${res.total} file${res.total === 1 ? "" : "s"} reprocessed`,
+        `${cust.rows.toLocaleString()} customer rows across ${cust.scopes} scope${cust.scopes === 1 ? "" : "s"}`,
+        `${brand.rows.toLocaleString()} brand rows across ${brand.scopes} scope${brand.scopes === 1 ? "" : "s"}`,
+      ];
+      if (weekly.rows > 0) parts.push(`${weekly.weeks} weekly buckets`);
+      setNotice(`Reprocess complete · ${parts.join(" · ")}. Dashboard refreshing…`);
       if (res.errors.length) {
         setError(
-          `Restore finished with ${res.errors.length} error(s):\n${res.errors.slice(0, 5).join("\n")}` +
+          `${res.errors.length} file(s) could not be reprocessed:\n${res.errors.slice(0, 5).join("\n")}` +
           (res.errors.length > 5 ? `\n…and ${res.errors.length - 5} more` : "")
         );
       }
-      setNotice(
-        `Baseline restored · ${res.scopes} scope${res.scopes === 1 ? "" : "s"} · ` +
-        `${res.customerRows.toLocaleString()} customer rows · ${res.brandRows.toLocaleString()} brand rows. ` +
-        `Click Recalculate to reload the dashboard.`
-      );
-      // Refresh the dashboard immediately so 2026 charts populate without a
-      // second click.
       onRefresh?.();
     } catch (e) {
-      setError(`Restore failed: ${e.message || e}`);
+      setError(`Reprocess failed: ${e.message || e}`);
     } finally {
-      setRestoring(false);
-      setRestoreProgress(null);
+      setReprocessing(false);
+      setReprocessProgress(null);
     }
   };
 
@@ -818,55 +838,56 @@ export default function DataTab({ data, onRefresh }) {
         )}
       </div>
 
-      {/* Emergency recovery. When an earlier sync erased scopes from the fact
-          tables (the missing-2026 incident), this repopulates them from the
-          bundled src/data.json snapshot via the same RPCs. Kept visually
-          distinct from Recalculate so admins don't reach for it during normal
-          operation — the wording plus the amber trim make it clearly a
-          recovery tool. */}
+      {/* Reprocess uploaded files. The workbooks are already archived in the
+          data-files bucket; this replays every one of them (download → parse →
+          update rows_json → push to fact tables) so the dashboard picks up
+          rows the DB never got the first time. This is how the missing-2026
+          scopes come back when the files ARE uploaded but the fact tables are
+          empty. Kept visually distinct from Recalculate so admins reach for it
+          only when a chart is actually missing data. */}
       <div style={{
         display:"flex",alignItems:"center",gap:14,flexWrap:"wrap",marginBottom:20,
         padding:"12px 16px",borderRadius:12,
         background:"rgba(245,158,11,0.06)",
         border:"1px dashed rgba(245,158,11,0.4)",
       }}>
-        <div style={{fontSize:22,lineHeight:1,flexShrink:0}} aria-hidden="true">🛟</div>
+        <div style={{fontSize:22,lineHeight:1,flexShrink:0}} aria-hidden="true">🔁</div>
         <div style={{flex:"1 1 260px",minWidth:0}}>
           <div style={{fontSize:13,fontWeight:700,color:"var(--text)",marginBottom:2}}>
-            Restore baseline (recovery)
+            Reprocess uploaded files (recovery)
           </div>
           <div style={{fontSize:12,color:"rgba(var(--tint),0.65)",lineHeight:1.5}}>
-            Only if a chart shows a missing year (like the earlier 2026 wipe). Pushes the bundled snapshot back into customers_data and brand_sales_data via the same RPCs, then reloads the dashboard. Any scope you have a live uploaded file for should still be Recalculated afterwards to overwrite the baseline with your latest numbers.
+            When a chart is missing scopes despite the files being uploaded (e.g. the earlier 2026 wipe). Re-downloads every archived workbook from storage, re-parses it, and pushes fresh rows into customers_data / brand_sales_data / weekly_sales. Slower than Recalculate but self-healing — no need to re-upload from disk.
           </div>
-          {restoreProgress && (
-            <div style={{fontSize:11,color:"rgba(245,158,11,0.9)",marginTop:6,fontFamily:"'Space Mono',monospace"}}>
-              [{restoreProgress.index + 1}/{restoreProgress.total}] {restoreProgress.table} · {restoreProgress.scope}
+          {reprocessProgress && (
+            <div style={{fontSize:11,color:"rgba(245,158,11,0.9)",marginTop:6,fontFamily:"'Space Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              [{Math.min(reprocessProgress.index + 1, reprocessProgress.total)}/{reprocessProgress.total}] {reprocessProgress.kind ? `${reprocessProgress.kind} · ` : ""}{reprocessProgress.name}
             </div>
           )}
         </div>
         <button
-          onClick={restoreBaseline}
-          disabled={restoring || recalculating}
+          onClick={reprocessUploaded}
+          disabled={reprocessing || recalculating}
           style={{
             display:"inline-flex",alignItems:"center",gap:8,
-            background: restoring ? "rgba(245,158,11,0.15)" : "rgba(245,158,11,0.15)",
+            background: "rgba(245,158,11,0.15)",
             color: "#F59E0B",
             border: "1px solid rgba(245,158,11,0.55)",
             borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,
-            cursor: (restoring || recalculating) ? "not-allowed" : "pointer",
+            cursor: (reprocessing || recalculating) ? "not-allowed" : "pointer",
             fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
-            opacity: (restoring || recalculating) ? 0.75 : 1,
+            opacity: (reprocessing || recalculating) ? 0.75 : 1,
           }}>
-          {restoring ? (
+          {reprocessing ? (
             <>
               <span style={{
                 width:13,height:13,borderRadius:"50%",display:"inline-block",
                 border:"2px solid rgba(245,158,11,0.35)",borderTopColor:"#F59E0B",
                 animation:"seedspin 0.8s linear infinite",
               }} />
-              Restoring…
+              Reprocessing…
             </>
-          ) : "🛟 Restore baseline"}
+          ) : "🔁 Reprocess uploaded files"}
         </button>
       </div>
 
