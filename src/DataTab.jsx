@@ -14,6 +14,7 @@ import {
   softDeleteFile, restoreFile, purgeFile, downloadUrl,
 } from "./lib/files.js";
 import { syncWeeklyFromFiles, invoiceFilesFrom } from "./lib/weekly.js";
+import { fetchAll } from "./lib/supabase.js";
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -175,50 +176,115 @@ export default function DataTab({ data, onRefresh }) {
 
   const invoiceFileCount = useMemo(() => invoiceFilesFrom(files).length, [files]);
 
-  // The single "do everything" recalculate. Reloads the file registry, replays
-  // every invoice listing into weekly_sales (idempotent), then nudges the parent
-  // so every tab picks up the fresh customers/brand/targets/weekly reads. One
-  // click covers the three round-trips an admin used to have to remember.
+  // Step-by-step recalculate with a visible checklist. Each stage sets its own
+  // status (pending / running / done / error) plus a short numeric result so the
+  // admin can watch the work happen instead of clicking a button that "silently
+  // did something". We do the fetches directly here (via fetchAll) rather than
+  // just calling onRefresh, so every stage's row count is visible before the
+  // parent picks up the same data on its own re-fetch.
+  const RECALC_STAGES = [
+    { id: "files",     label: "Reload file library" },
+    { id: "weekly",    label: "Sync invoice listings → weekly board" },
+    { id: "customers", label: "Fetch customer sales rows" },
+    { id: "targets",   label: "Fetch monthly sales targets" },
+    { id: "weeklyDb",  label: "Fetch weekly sales rows" },
+    { id: "brands",    label: "Fetch brand sales rows (largest)" },
+    { id: "reload",    label: "Refresh every dashboard chart" },
+  ];
   const [recalculating, setRecalculating] = useState(false);
   const [lastRecalcAt, setLastRecalcAt] = useState(null);
+  const [recalcSteps, setRecalcSteps] = useState({}); // { id: { status, detail } }
+
+  const setStep = (id, patch) =>
+    setRecalcSteps(prev => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
+
   const recalcAll = async () => {
     setRecalculating(true);
     setError(null);
     setNotice(null);
-    const summary = [];
+    // Seed every stage as "pending" so the checklist renders in full from step 0.
+    setRecalcSteps(Object.fromEntries(RECALC_STAGES.map(s => [s.id, { status: "pending" }])));
+
+    let failed = false;
+    const runStage = async (id, task) => {
+      setStep(id, { status: "running" });
+      const t0 = performance.now();
+      try {
+        const detail = await task();
+        const ms = Math.round(performance.now() - t0);
+        setStep(id, { status: "done", detail, ms });
+        return detail;
+      } catch (e) {
+        setStep(id, { status: "error", detail: e.message || String(e) });
+        failed = true;
+        throw e;
+      }
+    };
+
+    let list;
     try {
-      const list = await refresh();
-      if (!list) {
-        setRecalculating(false);
-        return;
-      }
-      summary.push(`${list.filter(f => !f.deletedAt).length} file${list.filter(f => !f.deletedAt).length===1?"":"s"} reloaded`);
+      // 1. File library
+      list = await runStage("files", async () => {
+        const l = await listFiles();
+        setFiles(l);
+        const n = l.filter(f => !f.deletedAt).length;
+        return `${n} active file${n === 1 ? "" : "s"}`;
+      });
 
-      const hasInvoices = invoiceFilesFrom(list).length > 0;
-      if (hasInvoices) {
-        try {
+      // 2. Invoice → weekly sync (idempotent). Skip cleanly when no invoice
+      // files are present, but still mark the step "done" so the checklist
+      // reads as complete rather than stuck.
+      const invoiceCount = invoiceFilesFrom(list).length;
+      if (invoiceCount === 0) {
+        setStep("weekly", { status: "done", detail: "no invoice files to sync" });
+      } else {
+        await runStage("weekly", async () => {
           const res = await syncWeeklyFromFiles(list);
-          if (res.rows > 0) {
-            summary.push(`${res.weeks} week${res.weeks===1?"":"s"} synced (${res.periodStart} → ${res.periodEnd})`);
-          } else {
-            summary.push("weekly board already in sync");
-          }
-        } catch (e) {
-          // Don't abort the whole recalc if only the weekly sync fails — the
-          // dashboard refresh below is still useful.
-          summary.push(`weekly sync failed (${e.message || e})`);
-        }
+          if (res.rows === 0) return `already in sync (${invoiceCount} file${invoiceCount === 1 ? "" : "s"})`;
+          return `${res.weeks} week${res.weeks === 1 ? "" : "s"} · ${res.rows} rep-week rows`;
+        });
       }
 
-      onRefresh?.();
-      summary.push("dashboard reloaded");
+      // 3-6. Pull each dashboard table directly so the row counts are visible
+      // per source. onRefresh below will re-fire the same reads, but this way
+      // the checklist shows real numbers, not a spinning icon.
+      await runStage("customers", async () => {
+        const rows = await fetchAll("customers_data", "sp,year,customer,months,total");
+        return `${rows.length.toLocaleString()} rows`;
+      });
+      await runStage("targets", async () => {
+        const rows = await fetchAll("sales_targets", "year,month,sp,target_amt");
+        return `${rows.length.toLocaleString()} rows`;
+      });
+      await runStage("weeklyDb", async () => {
+        const rows = await fetchAll("weekly_sales", "period_start,period_end,sp,amount,uploaded_at");
+        return `${rows.length.toLocaleString()} rows`;
+      });
+      await runStage("brands", async () => {
+        const rows = await fetchAll("brand_sales_data", "sp,year,customer,brand,amt,qty");
+        return `${rows.length.toLocaleString()} rows`;
+      });
+
+      // 7. Nudge the parent to actually re-render every chart with fresh data.
+      // The parent's own useEffect will re-run these same fetches — quick since
+      // Supabase's connection is warm — and produce new object references so
+      // memoised charts recompute.
+      await runStage("reload", async () => {
+        onRefresh?.();
+        return "signalled parent refresh";
+      });
+
       setLastRecalcAt(Date.now());
-      setNotice(`Recalculated · ${summary.join(" · ")}.`);
+      const ok = RECALC_STAGES.filter(s => recalcSteps[s.id]?.status !== "error").length;
+      setNotice(`Recalculated · ${ok}/${RECALC_STAGES.length} steps · dashboard now shows the latest data.`);
     } catch (e) {
-      setError(`Recalculate failed: ${e.message || e}`);
+      // The step that threw has already been marked "error"; leave the rest as
+      // "pending" so the admin can see where it stopped.
+      setError(`Recalculate stopped: ${e.message || e}`);
     } finally {
       setRecalculating(false);
     }
+    void failed; // referenced above via setStep; suppress "unused" nag if enabled
   };
 
   // Live (non-trashed) files, narrowed by the search box and ordered by the
@@ -526,53 +592,107 @@ export default function DataTab({ data, onRefresh }) {
         <KPI label="Years covered" value={(data.years || []).join(", ") || "—"} sub={`${(data.salespeople || []).length} salespeople`} color="#3B82F6" />
       </div>
 
-      {/* One-click "refresh everything the dashboard reads": file registry,
-          invoice→weekly bridge, and the parent's Supabase re-fetch. Sits above
-          the file library so admins can trigger it without hunting for a
-          smaller Refresh in the toolbar. */}
+      {/* One-click "refresh everything the dashboard reads". Each stage renders
+          its own checklist row below so the admin can watch the fetches finish
+          instead of clicking a button that runs invisibly. */}
       <div style={{
-        display:"flex",alignItems:"center",gap:14,flexWrap:"wrap",marginBottom:20,
-        padding:"12px 16px",borderRadius:12,
+        marginBottom:20,padding:"14px 18px",borderRadius:12,
         background:"linear-gradient(135deg, rgba(232,99,59,0.08), rgba(59,130,246,0.06))",
         border:"1px solid rgba(232,99,59,0.28)",
       }}>
-        <div style={{fontSize:22,lineHeight:1,flexShrink:0}} aria-hidden="true">🔄</div>
-        <div style={{flex:"1 1 260px",minWidth:0}}>
-          <div style={{fontSize:13,fontWeight:700,color:"var(--text)",marginBottom:2}}>
-            Recalculate dashboard
+        <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+          <div style={{fontSize:22,lineHeight:1,flexShrink:0}} aria-hidden="true">🔄</div>
+          <div style={{flex:"1 1 260px",minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:"var(--text)",marginBottom:2}}>
+              Recalculate dashboard
+            </div>
+            <div style={{fontSize:12,color:"rgba(var(--tint),0.65)",lineHeight:1.5}}>
+              Reload the file library, replay invoice listings into the Weekly Sales board, and re-fetch every table on every tab. Each step below turns green as it completes.
+            </div>
           </div>
-          <div style={{fontSize:12,color:"rgba(var(--tint),0.65)",lineHeight:1.5}}>
-            Reload the file library, replay invoice listings into the Weekly Sales board, and refresh every chart on every tab. Safe to run any time.
-          </div>
+          {lastRecalcAt && !recalculating && (
+            <div style={{fontSize:11,color:"rgba(var(--tint),0.55)",fontFamily:"'Space Mono',monospace",whiteSpace:"nowrap"}}>
+              Last run {fmtDate(lastRecalcAt)}
+            </div>
+          )}
+          <button
+            onClick={recalcAll}
+            disabled={recalculating}
+            style={{
+              display:"inline-flex",alignItems:"center",gap:8,
+              background: recalculating ? "rgba(232,99,59,0.15)" : "#E8633B",
+              color: recalculating ? "rgba(232,99,59,0.9)" : "#fff",
+              border: recalculating ? "1px solid rgba(232,99,59,0.4)" : "none",
+              borderRadius:8,padding:"10px 20px",fontSize:13,fontWeight:700,
+              cursor: recalculating ? "wait" : "pointer",
+              fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
+            }}>
+            {recalculating ? (
+              <>
+                <span style={{
+                  width:13,height:13,borderRadius:"50%",display:"inline-block",
+                  border:"2px solid rgba(232,99,59,0.35)",borderTopColor:"#E8633B",
+                  animation:"seedspin 0.8s linear infinite",
+                }} />
+                Recalculating…
+              </>
+            ) : "🔄 Recalculate now"}
+          </button>
         </div>
-        {lastRecalcAt && !recalculating && (
-          <div style={{fontSize:11,color:"rgba(var(--tint),0.5)",fontFamily:"'Space Mono',monospace",whiteSpace:"nowrap"}}>
-            Last run {fmtDate(lastRecalcAt)}
-          </div>
-        )}
-        <button
-          onClick={recalcAll}
-          disabled={recalculating}
-          style={{
-            display:"inline-flex",alignItems:"center",gap:8,
-            background: recalculating ? "rgba(232,99,59,0.15)" : "#E8633B",
-            color: recalculating ? "rgba(232,99,59,0.9)" : "#fff",
-            border: recalculating ? "1px solid rgba(232,99,59,0.4)" : "none",
-            borderRadius:8,padding:"10px 20px",fontSize:13,fontWeight:700,
-            cursor: recalculating ? "wait" : "pointer",
-            fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
+
+        {Object.keys(recalcSteps).length > 0 && (
+          <ol style={{
+            listStyle:"none",padding:0,margin:"14px 0 0",
+            display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(min(280px,100%), 1fr))",gap:8,
           }}>
-          {recalculating ? (
-            <>
-              <span style={{
-                width:13,height:13,borderRadius:"50%",display:"inline-block",
-                border:"2px solid rgba(232,99,59,0.35)",borderTopColor:"#E8633B",
-                animation:"seedspin 0.8s linear infinite",
-              }} />
-              Recalculating…
-            </>
-          ) : "🔄 Recalculate now"}
-        </button>
+            {RECALC_STAGES.map((stage, idx) => {
+              const s = recalcSteps[stage.id] || { status: "pending" };
+              const glyph =
+                s.status === "done"    ? "✓" :
+                s.status === "running" ? "" :
+                s.status === "error"   ? "✕" : "○";
+              const color =
+                s.status === "done"    ? "#34D399" :
+                s.status === "running" ? "#3B82F6" :
+                s.status === "error"   ? "#F87171" : "rgba(var(--tint),0.35)";
+              return (
+                <li key={stage.id} style={{
+                  display:"flex",alignItems:"center",gap:10,
+                  padding:"8px 12px",borderRadius:8,fontSize:12,
+                  background: s.status === "pending" ? "rgba(var(--tint),0.03)" : `${color}12`,
+                  border: `1px solid ${s.status === "pending" ? "rgba(var(--tint),0.06)" : color + "40"}`,
+                }}>
+                  <span style={{
+                    display:"inline-flex",alignItems:"center",justifyContent:"center",
+                    width:20,height:20,borderRadius:"50%",flexShrink:0,
+                    background: s.status === "pending" ? "rgba(var(--tint),0.06)" : `${color}22`,
+                    color,fontSize:12,fontWeight:700,
+                    border: s.status === "running" ? "none" : `1px solid ${color}66`,
+                  }}>
+                    {s.status === "running" ? (
+                      <span style={{
+                        width:11,height:11,borderRadius:"50%",display:"inline-block",
+                        border:`2px solid ${color}40`,borderTopColor:color,
+                        animation:"seedspin 0.8s linear infinite",
+                      }} />
+                    ) : glyph}
+                  </span>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{color: s.status === "pending" ? "rgba(var(--tint),0.55)" : "var(--text)",fontWeight:500,lineHeight:1.3}}>
+                      <span style={{color:"rgba(var(--tint),0.35)",fontFamily:"'Space Mono',monospace",marginRight:6}}>{idx+1}.</span>
+                      {stage.label}
+                    </div>
+                    {s.detail && (
+                      <div style={{color, fontSize:10.5,fontFamily:"'Space Mono',monospace",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {s.detail}{s.ms != null ? ` · ${s.ms} ms` : ""}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        )}
       </div>
 
       {/* The link between this tab and the Weekly Sales board. Uploading an
