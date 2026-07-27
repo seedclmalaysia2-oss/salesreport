@@ -24,7 +24,17 @@ function fmtSize(n) {
 }
 
 function detectedLabel(kind) {
-  return kind === "customer" ? "Sales Analysis · Customer" : "Stock Sales · Brand";
+  if (kind === "customer") return "Sales Analysis · Customer";
+  if (kind === "brand") return "Stock Sales · Brand";
+  if (kind === "invoice") return "Customer Invoice Listing";
+  return kind || "Unknown";
+}
+
+function kindColor(kind) {
+  if (kind === "customer") return "#34D399";
+  if (kind === "brand") return "#A855F7";
+  if (kind === "invoice") return "#3B82F6";
+  return "#94A3B8";
 }
 
 function fmtDate(ts) {
@@ -500,7 +510,7 @@ export default function DataTab({ data }) {
                         <tr key={entry.id}>
                           <td style={{...tdStyle,maxWidth:280}}>
                             <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
-                              <span style={{color: entry.kind === "customer" ? "#34D399" : "#A855F7",fontSize:14,marginTop:1,flexShrink:0}}>📄</span>
+                              <span style={{color: kindColor(entry.kind),fontSize:14,marginTop:1,flexShrink:0}}>📄</span>
                               <div style={{minWidth:0}}>
                                 <div style={{fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:260}}>{entry.name}</div>
                                 <div style={{fontSize:10,color:"rgba(var(--tint),0.45)",fontFamily:"'Space Mono',monospace",marginTop:2}}>
@@ -510,7 +520,7 @@ export default function DataTab({ data }) {
                             </div>
                           </td>
                           <td style={tdStyle}>
-                            <span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,background:`${entry.kind === "customer" ? "#34D399" : "#A855F7"}15`,color: entry.kind === "customer" ? "#34D399" : "#A855F7",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>
+                            <span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,background:`${kindColor(entry.kind)}15`,color: kindColor(entry.kind),fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>
                               {detectedLabel(entry.kind)}
                             </span>
                           </td>
@@ -576,10 +586,22 @@ export default function DataTab({ data }) {
 
       <Card>
         <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>Upload workbooks</div>
-        <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:16,lineHeight:1.5}}>
-          Drag <strong>.xlsx</strong> files matching the naming pattern:<br/>
-          <code style={{fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",fontSize:11}}>{"<SP> <YYYY> Sales Analysis by customer.xlsx"}</code> &nbsp;or&nbsp;
-          <code style={{fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",fontSize:11}}>{"<SP> <YYYY> Stock Sales Analysis - Summary by Brand.xlsx"}</code>
+        <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:16,lineHeight:1.6}}>
+          Drag <strong>.xlsx</strong> files matching one of these naming patterns:
+          <ul style={{margin:"8px 0 0",paddingLeft:18,display:"flex",flexDirection:"column",gap:4}}>
+            <li>
+              <code style={{fontFamily:"'Space Mono',monospace",color:"#34D399",fontSize:11}}>{"<SP> <YYYY> Sales Analysis by customer.xlsx"}</code>
+              <span style={{color:"rgba(var(--tint),0.4)"}}> — yearly customer summary</span>
+            </li>
+            <li>
+              <code style={{fontFamily:"'Space Mono',monospace",color:"#A855F7",fontSize:11}}>{"<SP> <YYYY> Stock Sales Analysis - Summary by Brand.xlsx"}</code>
+              <span style={{color:"rgba(var(--tint),0.4)"}}> — yearly brand summary</span>
+            </li>
+            <li>
+              <code style={{fontFamily:"'Space Mono',monospace",color:"#3B82F6",fontSize:11}}>{"Customer Invoice Listing <period>.xlsx"}</code>
+              <span style={{color:"rgba(var(--tint),0.4)"}}> — monthly invoice detail (feeds weekly view)</span>
+            </li>
+          </ul>
         </div>
 
         <div
@@ -663,7 +685,11 @@ export default function DataTab({ data }) {
                     <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0}}>
                       <span style={{color: info ? "#34D399" : "#F87171",fontWeight:600,flexShrink:0}}>{info ? "✓" : "✗"}</span>
                       <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{f.name}</span>
-                      {info && <span style={{color:"rgba(var(--tint),0.4)",fontSize:10,fontFamily:"'Space Mono',monospace",flexShrink:0}}>{info.sp} · {info.year}</span>}
+                      {info && <span style={{color:"rgba(var(--tint),0.4)",fontSize:10,fontFamily:"'Space Mono',monospace",flexShrink:0}}>
+                        {info.kind === "Customer Invoice Listing"
+                          ? `Invoice · ${info.periodLabel || (info.year ?? "—")}`
+                          : `${info.sp} · ${info.year}`}
+                      </span>}
                     </div>
                     <button onClick={() => setSelectedFiles(prev => prev.filter(x => x.name !== f.name))} disabled={uploading} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.3)",cursor: uploading ? "not-allowed" : "pointer",fontSize:14,padding:"0 0 0 8px"}}>✕</button>
                   </div>
@@ -753,6 +779,8 @@ function FilePreviewModal({ entry, onClose }) {
   const rows = Array.isArray(entry.rows) ? entry.rows : [];
   const cols = entry.kind === "customer"
     ? ["sp","year","customer","total",...MONTH_NAMES]
+    : entry.kind === "invoice"
+    ? ["date","invoice","customer","sp","amount"]
     : ["sp","year","customer","brand","amt","qty"];
   const getCell = (r, c) => {
     if (entry.kind === "customer" && MONTH_NAMES.includes(c)) return r.months?.[MONTH_NAMES.indexOf(c)];

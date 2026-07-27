@@ -17,6 +17,12 @@ const MONTH_COLS_0 = [6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28]; // 0-indexe
 
 const FNAME_RE = /^(.+?) (\d{4}) (Sales Analysis by customer|Stock Sales Analysis - Summary by [Bb]rand)\.xlsx$/i;
 
+// The Customer Invoice Listing exports don't carry an SP or a fixed year in
+// their filename. The convention is 'Customer Invoice Listing <suffix>.xlsx'
+// where the suffix is a period stamp like '26jul2026', 'jul2026', 'July',
+// 'jun2026', etc. Any 4-digit 20xx in the suffix gives us the year.
+const INVOICE_FNAME_RE = /^Customer Invoice Listing\s+(.+?)\.xlsx$/i;
+
 // Brand IDs ending in FC (Free of Charge / boxes), T or TR (Trial Lens / pieces)
 // have no revenue and must not be counted as paid sales. Filter at parse time.
 export function isSalesBrand(brand) {
@@ -31,8 +37,20 @@ export function isSalesBrand(brand) {
 
 export function parseFilename(name) {
   const m = name.match(FNAME_RE);
-  if (!m) return null;
-  return { sp: m[1].trim(), year: parseInt(m[2], 10), kind: m[3] };
+  if (m) return { sp: m[1].trim(), year: parseInt(m[2], 10), kind: m[3] };
+  const im = name.match(INVOICE_FNAME_RE);
+  if (im) {
+    const suffix = im[1];
+    // Any 20xx in the suffix — no word boundary so "26jul2026" still matches.
+    const ym = suffix.match(/(20\d{2})/);
+    return {
+      sp: null,
+      year: ym ? parseInt(ym[1], 10) : null,
+      kind: "Customer Invoice Listing",
+      periodLabel: suffix.trim(),
+    };
+  }
+  return null;
 }
 
 function sheetToRows(XLSX, sheet) {
@@ -151,6 +169,50 @@ async function readWorkbook(file) {
   return { XLSX, wb: XLSX.read(buf, { type: "array", cellDates: false }) };
 }
 
+// Autocount 'Customer Invoice Listing' export: one row per invoice line, with
+// date, invoice number, customer and salesman on fixed column offsets. We only
+// keep the sales-line rows (numeric amount + known salesman) so the archived
+// row set is small enough to store as rows_json without blowing up the row.
+const INVOICE_SP_NAMES = {
+  "alan loh": "Alan", "alan": "Alan",
+  "dino lim": "Dino", "dino": "Dino",
+  "khen tan": "Khen", "khen": "Khen",
+  "sakinah": "Sakinah", "nor sakinah ardani": "Sakinah", "nor sakinah": "Sakinah",
+  "wani": "Wani", "nurzawani": "Wani",
+  "simon low": "Simon", "simon": "Simon",
+  "seed malaysia": "Seed Malaysia", "seed": "Seed Malaysia",
+};
+function canonInvoiceSp(raw) {
+  return INVOICE_SP_NAMES[String(raw || "").trim().toLowerCase()] || null;
+}
+function parseAutocountDate(s) {
+  const m = String(s).match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+  if (!m) return null;
+  const MON = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
+  const mm = MON[m[2].toLowerCase()]; if (!mm) return null;
+  let yy = parseInt(m[3], 10); if (yy < 100) yy += 2000;
+  return `${yy}-${String(mm).padStart(2,"0")}-${String(parseInt(m[1], 10)).padStart(2,"0")}`;
+}
+function parseInvoiceRows(rows) {
+  const out = [];
+  for (const row of rows) {
+    if (!row) continue;
+    const amount = row[23];
+    const sp = canonInvoiceSp(row[30]);
+    if (typeof amount !== "number" || !sp) continue;
+    const date = typeof row[2] === "string" ? parseAutocountDate(row[2]) : null;
+    const inv = row[11] ?? null;
+    const customer = row[18] ?? null;
+    out.push({
+      date, invoice: inv ? String(inv) : null,
+      customer: customer ? String(customer) : null,
+      amount: Math.round(amount * 100) / 100,
+      sp,
+    });
+  }
+  return out;
+}
+
 export async function parseFile(file) {
   const fnameInfo = parseFilename(file.name);
   if (!fnameInfo) {
@@ -178,6 +240,22 @@ export async function parseFile(file) {
       year: fnameInfo.year,
       rowCount: parsed.length,
       rows: parsed.map(p => ({ sp: fnameInfo.sp, year: fnameInfo.year, ...p })),
+    };
+  } else if (fnameInfo.kind === "Customer Invoice Listing") {
+    const parsed = parseInvoiceRows(rows);
+    // Derive a year from the invoice dates when the filename didn't carry one,
+    // so the entry still sorts and filters correctly in the file manager.
+    const yearFromRows = parsed
+      .map(r => r.date && parseInt(r.date.slice(0, 4), 10))
+      .find(y => Number.isFinite(y)) ?? null;
+    return {
+      ok: true,
+      file: file.name,
+      kind: "invoice",
+      sp: null,
+      year: fnameInfo.year ?? yearFromRows,
+      rowCount: parsed.length,
+      rows: parsed,
     };
   } else {
     const parsed = parseBrandRows(rows);
