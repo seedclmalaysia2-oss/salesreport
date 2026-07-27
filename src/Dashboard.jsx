@@ -969,6 +969,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           paddingBottom: isMobile ? 4 : 0,
         }}>
           <TabButton tabKey="overview" active={tab==="overview"} onClick={()=>setTab("overview")}>Overview</TabButton>
+          <TabButton tabKey="targets" active={tab==="targets"} onClick={()=>setTab("targets")}>🎯 Targets</TabButton>
           <TabButton tabKey="monthly" active={tab==="monthly"} onClick={()=>setTab("monthly")}>Monthly Trends</TabButton>
           <TabButton tabKey="team" active={tab==="team"} onClick={()=>setTab("team")}>Team Analysis</TabButton>
           <TabButton tabKey="customers" active={tab==="customers"} onClick={()=>setTab("customers")}>Top Customers</TabButton>
@@ -977,7 +978,6 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           <TabButton tabKey="brands" active={tab==="brands"} onClick={()=>setTab("brands")}>Brand Performance</TabButton>
           <TabButton tabKey="cohort" active={tab==="cohort"} onClick={()=>setTab("cohort")}>New vs Lost</TabButton>
           <TabButton tabKey="heatmap" active={tab==="heatmap"} onClick={()=>setTab("heatmap")}>Customer × Brand</TabButton>
-          <TabButton tabKey="targets" active={tab==="targets"} onClick={()=>setTab("targets")}>🎯 Targets</TabButton>
           {user?.isAdmin && (
             <TabButton tabKey="data" active={tab==="data"} onClick={()=>setTab("data")} accent>Data ⤴</TabButton>
           )}
