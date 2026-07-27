@@ -26,10 +26,15 @@ const fmtDay = (d) => {
   return dt.toLocaleString("en-GB", { day: "numeric", month: "short" });
 };
 
-// A week belongs to the month that contains its Monday. Keeps a week from
-// showing under two different month buckets in the UI navigator.
-function monthKeyFromWeekStart(startIso) {
-  return startIso.slice(0, 7); // "YYYY-MM"
+// A week belongs to the month that holds the majority of its days — i.e. the
+// month of its Thursday (the Mon–Sun midpoint). A week straddling a boundary,
+// e.g. 29 Jun–5 Jul (five of seven days in July), then files under July the way
+// a human would, so July's month-to-date includes those early days instead of
+// stranding them in June.
+function monthKeyForWeek(startIso) {
+  const [y, m, d] = startIso.split("-").map(Number);
+  const thu = new Date(Date.UTC(y, m - 1, d + 3)); // Monday + 3 = Thursday
+  return `${thu.getUTCFullYear()}-${String(thu.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 function monthLabel(monthKey) {
@@ -241,7 +246,7 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
       if (w.uploadedAt && (!cur || w.uploadedAt > cur)) periodMap.get(key).uploadedAt = w.uploadedAt;
     }
     for (const p of periodMap.values()) {
-      const mk = monthKeyFromWeekStart(p.start);
+      const mk = monthKeyForWeek(p.start);
       if (!map.has(mk)) map.set(mk, []);
       map.get(mk).push(p);
     }
@@ -253,6 +258,9 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
   const latestMonthKey = monthKeys[monthKeys.length - 1] || null;
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(0);
+  // "month" = cumulative month-to-date total (the default — this is the number
+  // ops track against the monthly target). "week" = drill into a single week.
+  const [view, setView] = useState("month");
   const activeMonth = selectedMonth && periodsByMonth.has(selectedMonth) ? selectedMonth : latestMonthKey;
   const weeksInMonth = activeMonth ? periodsByMonth.get(activeMonth) : [];
   // Reset the week index when the visible month changes, so switching months
@@ -265,6 +273,25 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
   const latestPeriod = selectedPeriod
     ? { start: selectedPeriod.start, end: selectedPeriod.end, uploadedAt: selectedPeriod.uploadedAt }
     : null;
+
+  // Month-to-date: every week in the active month summed per rep. This is the
+  // cumulative "total so far" that matches the ops Sales Update sheet — as
+  // opposed to a single week held against the whole-month target, which reads
+  // misleadingly low.
+  const monthAgg = useMemo(() => {
+    const bySp = new Map();
+    let firstStart = null, lastEnd = null, uploadedAt = null;
+    for (const w of weeksInMonth) {
+      if (!firstStart || w.start < firstStart) firstStart = w.start;
+      if (!lastEnd || w.end > lastEnd) lastEnd = w.end;
+      if (w.uploadedAt && (!uploadedAt || w.uploadedAt > uploadedAt)) uploadedAt = w.uploadedAt;
+      for (const r of w.rows) bySp.set(r.sp, (bySp.get(r.sp) || 0) + (r.amount || 0));
+    }
+    return {
+      rows: [...bySp.entries()].map(([sp, amount]) => ({ sp, amount })),
+      firstStart, lastEnd, uploadedAt, weekCount: weeksInMonth.length,
+    };
+  }, [weeksInMonth]);
 
   const goMonth = (delta) => {
     if (!monthKeys.length) return;
@@ -350,17 +377,25 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
     );
   }
 
+  // The dataset feeding the two columns: cumulative month-to-date, or the one
+  // selected week. Everything below (splits, totals, labels) reads from here.
+  const isMonthView = view === "month";
+  const sourceRows = isMonthView ? monthAgg.rows : periodRows;
+
   // Split into Sales Team (retail trio) and full Seed Malaysia
-  const teamRows = periodRows
+  const teamRows = sourceRows
     .filter(r => RETAIL_TEAM.includes(r.sp) && r.amount > 0)
     .sort((a, b) => b.amount - a.amount);
-  const allRows = periodRows
+  const allRows = sourceRows
     .filter(r => r.amount > 0)
     .sort((a, b) => b.amount - a.amount);
   const teamTotal = teamRows.reduce((a, b) => a + b.amount, 0);
   const allTotal = allRows.reduce((a, b) => a + b.amount, 0);
-  const periodLabel = `${fmtDay(latestPeriod.start)} – ${fmtDay(latestPeriod.end)}`;
-  const monthName = new Date(latestPeriod.end + "T00:00:00").toLocaleString("en-US", { month: "long", year: "numeric" });
+  const rangeStart = isMonthView ? monthAgg.firstStart : latestPeriod.start;
+  const rangeEnd = isMonthView ? monthAgg.lastEnd : latestPeriod.end;
+  const periodLabel = `${fmtDay(rangeStart)} – ${fmtDay(rangeEnd)}`;
+  const headerUploadedAt = isMonthView ? monthAgg.uploadedAt : latestPeriod.uploadedAt;
+  const monthName = new Date((rangeEnd || latestPeriod.end) + "T00:00:00").toLocaleString("en-US", { month: "long", year: "numeric" });
 
   return (
     <div style={shellStyle}>
@@ -371,10 +406,19 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
           <div style={{ fontSize: 24, fontWeight: 700, color: "var(--text)", letterSpacing: -0.3, marginTop: 6, display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
             {periodLabel}
             <span style={{ fontSize: 14, fontWeight: 500, color: "rgba(var(--tint),0.6)" }}>{monthName}</span>
+            <span style={{
+              fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8,
+              padding: "3px 9px", borderRadius: 20, alignSelf: "center",
+              color: isMonthView ? "var(--st-accent)" : "var(--st-info)",
+              background: isMonthView ? "rgba(232,99,59,0.12)" : "rgba(59,130,246,0.12)",
+              border: `1px solid ${isMonthView ? "rgba(232,99,59,0.4)" : "rgba(59,130,246,0.4)"}`,
+            }}>
+              {isMonthView ? `Month to date · ${monthAgg.weekCount} wk` : "Single week"}
+            </span>
           </div>
-          {latestPeriod.uploadedAt && (
+          {headerUploadedAt && (
             <div style={{ fontSize: 11.5, color: "rgba(var(--tint),0.5)", marginTop: 4 }}>
-              Last updated {new Date(latestPeriod.uploadedAt).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+              Last updated {new Date(headerUploadedAt).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
             </div>
           )}
         </div>
@@ -434,14 +478,33 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
               {monthKeys.length} month{monthKeys.length === 1 ? "" : "s"} · {monthLabelShort(monthKeys[0])}–{monthLabelShort(monthKeys[monthKeys.length - 1])}
             </div>
           </div>
+          {/* View toggle: cumulative month-to-date vs a single week. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+            {[{ k: "month", label: "Month to date" }, { k: "week", label: "By week" }].map(opt => {
+              const on = view === opt.k;
+              return (
+                <button key={opt.k} onClick={() => setView(opt.k)}
+                  style={{
+                    background: on ? "rgba(232,99,59,0.16)" : "rgba(var(--tint),0.05)",
+                    color: on ? "var(--st-accent)" : "rgba(var(--tint),0.75)",
+                    border: `1px solid ${on ? "rgba(232,99,59,0.55)" : "rgba(var(--tint),0.12)"}`,
+                    borderRadius: 8, padding: "7px 15px", fontSize: 12.5, fontWeight: on ? 700 : 600,
+                    cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+                  }}>{opt.label}</button>
+              );
+            })}
+            <span style={{ fontSize: 11.5, color: "rgba(var(--tint),0.5)", marginLeft: 2 }}>
+              {isMonthView ? "Every week this month, summed" : "Tap a week below to inspect it"}
+            </span>
+          </div>
           <div className="seed-scroll-x" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {weeksInMonth.map((w, i) => {
               const total = w.rows.reduce((a, r) => a + (r.amount || 0), 0);
-              const active = i === boundedWeekIndex;
+              const active = view === "week" && i === boundedWeekIndex;
               return (
                 <button
                   key={w.start}
-                  onClick={() => setSelectedWeekIndex(i)}
+                  onClick={() => { setSelectedWeekIndex(i); setView("week"); }}
                   title={`${w.start} → ${w.end}`}
                   style={{
                     background: active ? "rgba(232,99,59,0.16)" : "rgba(var(--tint),0.05)",
