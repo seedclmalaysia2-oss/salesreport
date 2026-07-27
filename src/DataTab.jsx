@@ -243,22 +243,33 @@ export default function DataTab({ data, onRefresh }) {
       // makes uploaded workbooks actually change the charts: for each (sp, year)
       // the newest uploaded customer file replaces every row in customers_data
       // for that scope. Re-uploading a file with the same name just makes it
-      // the newest and it wins.
+      // the newest and it wins. Empty files are skipped (see weekly.js) — the
+      // skip list is echoed on the checklist row so a coverage gap is visible.
       await runStage("pushCust", async () => {
         const res = await syncCustomersFromFiles(list);
-        if (res.scopes === 0) return "no customer files to push";
+        if (res.scopes === 0 && (!res.skipped || res.skipped.length === 0)) {
+          return "no customer files to push";
+        }
         const preview = res.scopeLabels.slice(0, 3).join(", ");
         const more = res.scopeLabels.length > 3 ? ` +${res.scopeLabels.length - 3} more` : "";
-        return `${res.rows.toLocaleString()} rows across ${res.scopes} scope${res.scopes === 1 ? "" : "s"} (${preview}${more})`;
+        const skip = res.skipped?.length
+          ? ` · skipped ${res.skipped.length}: ${res.skipped.slice(0, 2).join(", ")}${res.skipped.length > 2 ? "…" : ""}`
+          : "";
+        return `${res.rows.toLocaleString()} rows across ${res.scopes} scope${res.scopes === 1 ? "" : "s"} (${preview}${more})${skip}`;
       });
 
       // 3. Push brand files → brand_sales_data (same shape as step 2).
       await runStage("pushBrand", async () => {
         const res = await syncBrandsFromFiles(list);
-        if (res.scopes === 0) return "no brand files to push";
+        if (res.scopes === 0 && (!res.skipped || res.skipped.length === 0)) {
+          return "no brand files to push";
+        }
         const preview = res.scopeLabels.slice(0, 3).join(", ");
         const more = res.scopeLabels.length > 3 ? ` +${res.scopeLabels.length - 3} more` : "";
-        return `${res.rows.toLocaleString()} rows across ${res.scopes} scope${res.scopes === 1 ? "" : "s"} (${preview}${more})`;
+        const skip = res.skipped?.length
+          ? ` · skipped ${res.skipped.length}: ${res.skipped.slice(0, 2).join(", ")}${res.skipped.length > 2 ? "…" : ""}`
+          : "";
+        return `${res.rows.toLocaleString()} rows across ${res.scopes} scope${res.scopes === 1 ? "" : "s"} (${preview}${more})${skip}`;
       });
 
       // 4. Invoice → weekly sync (idempotent). Skip cleanly when no invoice

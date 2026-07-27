@@ -177,17 +177,23 @@ function latestFilePerScope(files, kind) {
 }
 
 // Replay every "latest per (sp, year)" customer file into customers_data via
-// the replace_customers_data RPC, which does the DELETE + INSERT atomically as
-// SECURITY DEFINER. That sidesteps every "why did DELETE work but INSERT fail"
-// RLS-write-policy puzzle we hit with row-by-row client writes — the admin
-// check runs inside the function.
+// the replace_customers_data RPC. The RPC does DELETE-then-INSERT atomically
+// as SECURITY DEFINER, matches sp case- and whitespace-insensitively (so
+// legacy 'SEED Malaysia' rows get cleared alongside the canonical 'Seed
+// Malaysia'), and refuses to overwrite a scope with an empty payload — which
+// stops a stray zero-row file from wiping the charts.
+//
+// The client mirrors that guard: files that parsed to zero rows are skipped
+// so we never even call the RPC for them, and the checklist reports how many
+// files were skipped so the admin sees the coverage gap.
 export async function syncCustomersFromFiles(files) {
   const winners = latestFilePerScope(files, "customer");
   if (!winners.length) {
-    return { files: 0, scopes: 0, rows: 0, scopeLabels: [] };
+    return { files: 0, scopes: 0, rows: 0, scopeLabels: [], skipped: [] };
   }
   let totalInserted = 0;
   const scopeLabels = [];
+  const skipped = [];
   for (const f of winners) {
     const rows = (f.rows || [])
       .filter((r) => r && r.customer)
@@ -199,6 +205,10 @@ export async function syncCustomersFromFiles(files) {
             : new Array(12).fill(0),
         total: Number(r.total) || 0,
       }));
+    if (rows.length === 0) {
+      skipped.push(`${f.sp} ${f.year} (0 rows)`);
+      continue;
+    }
     const { data, error } = await supabase.rpc("replace_customers_data", {
       p_sp: f.sp,
       p_year: f.year,
@@ -207,29 +217,29 @@ export async function syncCustomersFromFiles(files) {
     if (error) {
       throw new Error(`Replacing ${f.sp} ${f.year} failed: ${error.message}`);
     }
-    // The RPC returns [{ deleted, inserted }]; use inserted for the summary.
     const inserted = data?.[0]?.inserted ?? rows.length;
     totalInserted += inserted;
     scopeLabels.push(`${f.sp} ${f.year}`);
   }
   return {
     files: winners.length,
-    scopes: winners.length,
+    scopes: scopeLabels.length,
     rows: totalInserted,
     scopeLabels,
+    skipped,
   };
 }
 
-// Same shape for brand_sales_data, delegated to the replace_brand_sales_data
-// RPC. Brand rows carry (customer, brand, amt, qty) rather than the monthly
-// customer breakdown, but the whole-scope swap semantics are identical.
+// Same shape for brand_sales_data, delegated to replace_brand_sales_data. Same
+// empty-row skip so a stray zero-row file can't erase a scope.
 export async function syncBrandsFromFiles(files) {
   const winners = latestFilePerScope(files, "brand");
   if (!winners.length) {
-    return { files: 0, scopes: 0, rows: 0, scopeLabels: [] };
+    return { files: 0, scopes: 0, rows: 0, scopeLabels: [], skipped: [] };
   }
   let totalInserted = 0;
   const scopeLabels = [];
+  const skipped = [];
   for (const f of winners) {
     const rows = (f.rows || [])
       .filter((r) => r && r.customer && r.brand)
@@ -239,6 +249,10 @@ export async function syncBrandsFromFiles(files) {
         amt: Number(r.amt) || 0,
         qty: Number(r.qty) || 0,
       }));
+    if (rows.length === 0) {
+      skipped.push(`${f.sp} ${f.year} (0 rows)`);
+      continue;
+    }
     const { data, error } = await supabase.rpc("replace_brand_sales_data", {
       p_sp: f.sp,
       p_year: f.year,
@@ -253,8 +267,9 @@ export async function syncBrandsFromFiles(files) {
   }
   return {
     files: winners.length,
-    scopes: winners.length,
+    scopes: scopeLabels.length,
     rows: totalInserted,
     scopeLabels,
+    skipped,
   };
 }
