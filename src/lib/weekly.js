@@ -15,16 +15,24 @@ import { supabase } from "./supabase.js";
 export const REP_ORDER = ["Alan", "Dino", "Khen", "Sakinah", "Wani", "Simon", "Seed Malaysia"];
 
 // Weeks are Monday–Sunday (Malaysian ops convention). Given any ISO date
-// string ("YYYY-MM-DD"), return {start, end} for the containing week. UTC math
-// keeps the boundary stable regardless of the viewer's timezone.
+// string ("YYYY-MM-DD"), return {start, end} for the calendar week that
+// contains it, clamped to the date's own month. Weeks are:
+//   1st-7th, 8th-14th, 15th-21st, 22nd-28th, 29th-end
+// The last week is short in months <31 days (e.g. Feb week 4 = 22-28; Feb
+// has no week 5). This is the "ops" convention the finance team asked for
+// on 2026-07-29 — Mon-Sun weeks were crossing month boundaries (the "29 Jun
+// -> 5 Jul" week showing up under July) which broke month-to-date roll-ups.
 export function weekBounds(isoDate) {
   const [y, m, d] = isoDate.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  const dow = dt.getUTCDay() || 7; // Sun=0 -> 7
-  const monday = new Date(dt); monday.setUTCDate(dt.getUTCDate() - dow + 1);
-  const sunday = new Date(monday); sunday.setUTCDate(monday.getUTCDate() + 6);
-  const iso = (x) => x.toISOString().slice(0, 10);
-  return { start: iso(monday), end: iso(sunday) };
+  const wIdx = Math.floor((d - 1) / 7); // 0..4
+  const startDay = wIdx * 7 + 1;
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate(); // day 0 of next month = last day of this
+  const endDay = Math.min(startDay + 6, lastDay);
+  const pad = (n) => String(n).padStart(2, "0");
+  return {
+    start: `${y}-${pad(m)}-${pad(startDay)}`,
+    end:   `${y}-${pad(m)}-${pad(endDay)}`,
+  };
 }
 
 // Aggregate invoice-detail rows [{ date:"YYYY-MM-DD", sp, amount }, ...] into

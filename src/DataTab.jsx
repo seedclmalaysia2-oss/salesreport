@@ -29,10 +29,22 @@ function fmtSize(n) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function detectedLabel(kind) {
+// Human label for an entry. Prefers the filename over the DB kind so files
+// that were parsed via a newer format (e.g. "Stock Sales Analysis - Detail")
+// don't get labelled by their legacy 'invoice' DB kind. Falls back to the
+// kind alone when only the kind is known (grouping headers etc.).
+function detectedLabel(entryOrKind) {
+  const kind = typeof entryOrKind === "string" ? entryOrKind : entryOrKind?.kind;
+  const name = typeof entryOrKind === "string" ? null : entryOrKind?.name;
+  if (name) {
+    if (/^Stock Sales Analysis - Detail\b/i.test(name))       return "Stock Sales Analysis - Detail";
+    if (/^Customer Invoice Listing\b/i.test(name))            return "Customer Invoice Listing";
+    if (/Sales Analysis by customer\b/i.test(name))           return "Sales Analysis · Customer";
+    if (/Stock Sales Analysis - Summary by [Bb]rand\b/i.test(name)) return "Stock Sales · Brand";
+  }
   if (kind === "customer") return "Sales Analysis · Customer";
   if (kind === "brand") return "Stock Sales · Brand";
-  if (kind === "invoice") return "Customer Invoice Listing";
+  if (kind === "invoice") return "Customer Invoice Listing"; // legacy fallback
   return kind || "Unknown";
 }
 
@@ -459,12 +471,12 @@ export default function DataTab({ data, onRefresh }) {
         (f.name || "").toLowerCase().includes(q) ||
         (f.sp || "").toLowerCase().includes(q) ||
         String(f.year || "").includes(q) ||
-        detectedLabel(f.kind).toLowerCase().includes(q)
+        detectedLabel(f).toLowerCase().includes(q)
       );
     }
     const { key, dir } = sort;
     const mul = dir === "asc" ? 1 : -1;
-    const val = (f) => (key === "kind" ? detectedLabel(f.kind) : f[key]);
+    const val = (f) => (key === "kind" ? detectedLabel(f) : f[key]);
     return [...list].sort((a, b) => {
       const av = val(a), bv = val(b);
       if (typeof av === "string" || typeof bv === "string") {
@@ -504,13 +516,21 @@ export default function DataTab({ data, onRefresh }) {
         const bi = KIND_ORDER[b] ?? 99;
         return ai - bi || a.localeCompare(b);
       });
-      return keys.map(key => ({
-        key,
-        label: detectedLabel(key),
-        color: kindColor(key),
-        entries: buckets.get(key),
-        totalSize: buckets.get(key).reduce((s, e) => s + (e.sizeBytes || 0), 0),
-      }));
+      return keys.map(key => {
+        const entries = buckets.get(key);
+        // Reflect the actual filename subtypes in the header rather than the
+        // static kind label — a group of 'invoice'-kind files can contain
+        // Stock Sales Detail files, Customer Invoice Listings, or both.
+        const subtypes = [...new Set(entries.map(e => detectedLabel(e)))];
+        const label = subtypes.length === 1 ? subtypes[0] : subtypes.join(" · ");
+        return {
+          key,
+          label,
+          color: kindColor(key),
+          entries,
+          totalSize: entries.reduce((s, e) => s + (e.sizeBytes || 0), 0),
+        };
+      });
     }
     // groupBy === "month"
     for (const entry of active) {
@@ -1108,7 +1128,7 @@ export default function DataTab({ data, onRefresh }) {
                           </td>
                           <td style={tdStyle}>
                             <span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,background:`${kindColor(entry.kind)}15`,color: kindColor(entry.kind),fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>
-                              {detectedLabel(entry.kind)}
+                              {detectedLabel(entry)}
                             </span>
                           </td>
                           <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",whiteSpace:"nowrap"}}>{fmtSize(entry.sizeBytes)}</td>

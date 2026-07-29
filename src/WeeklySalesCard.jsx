@@ -27,14 +27,11 @@ const fmtDay = (d) => {
 };
 
 // A week belongs to the month that holds the majority of its days — i.e. the
-// month of its Thursday (the Mon–Sun midpoint). A week straddling a boundary,
-// e.g. 29 Jun–5 Jul (five of seven days in July), then files under July the way
-// a human would, so July's month-to-date includes those early days instead of
-// stranding them in June.
+// Since 2026-07-29 the weekly-sync buckets weeks calendar-style (1-7, 8-14,
+// 15-21, 22-28, 29-end) — they never cross a month boundary now, so a week's
+// month is just the month of its start date. No Thursday-midpoint trick.
 function monthKeyForWeek(startIso) {
-  const [y, m, d] = startIso.split("-").map(Number);
-  const thu = new Date(Date.UTC(y, m - 1, d + 3)); // Monday + 3 = Thursday
-  return `${thu.getUTCFullYear()}-${String(thu.getUTCMonth() + 1).padStart(2, "0")}`;
+  return startIso.slice(0, 7); // "YYYY-MM"
 }
 
 function monthLabel(monthKey) {
