@@ -17,6 +17,10 @@ const MONTH_COLS_0 = [6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28]; // 0-indexe
 
 const FNAME_RE = /^(.+?) (\d{4}) (Sales Analysis by customer|Stock Sales Analysis - Summary by [Bb]rand)\.xlsx$/i;
 
+// Year-only customer file: '2026 Sales Analysis by customer.xlsx' — no SP
+// prefix. Introduced when ops switched to a single team-wide export per year.
+const YEAR_ONLY_CUSTOMER_FNAME_RE = /^(\d{4}) Sales Analysis by customer\.xlsx$/i;
+
 // The Customer Invoice Listing exports don't carry an SP or a fixed year in
 // their filename. The convention is 'Customer Invoice Listing <suffix>.xlsx'
 // where the suffix is a period stamp like '26jul2026', 'jul2026', 'July',
@@ -56,6 +60,12 @@ function yearFromSuffix(suffix) {
 export function parseFilename(name) {
   const m = name.match(FNAME_RE);
   if (m) return { sp: m[1].trim(), year: parseInt(m[2], 10), kind: m[3] };
+  const ym = name.match(YEAR_ONLY_CUSTOMER_FNAME_RE);
+  if (ym) {
+    // No SP in the filename — mark as 'All' so the ingest path stays uniform
+    // with the year-only exports the ops team now ships.
+    return { sp: "All", year: parseInt(ym[1], 10), kind: "Sales Analysis by customer" };
+  }
   const im = name.match(INVOICE_FNAME_RE);
   if (im) {
     const suffix = im[1];
