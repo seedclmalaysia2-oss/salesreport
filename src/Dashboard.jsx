@@ -277,15 +277,19 @@ const Card = ({children, style}) => (
 );
 
 // ============================================================
-// 5 color themes designed for readability + sustained-screen comfort.
-// Each ships its full token set so charts (SVG-attr-based) work too.
+// Two modes: dark (Slate) and light (Crisp). Each ships its full token set so
+// charts (SVG-attr-based fills) get resolved colors, not CSS vars. Crisp mirrors
+// Slate — Slate's background is Crisp's ink and vice versa — so the pair reads
+// as one instrument face flipped, not two unrelated palettes.
 // ============================================================
+const DARK_KEY = "slate";
+const LIGHT_KEY = "crisp";
+
 const THEMES = {
   slate: {
     series: SERIES_DARK,
     status: STATUS_DARK,
     name: "Slate", subtitle: "Soft dark · default", mode: "dark",
-    swatch: ["#0F172A", "#1E293B", "#E2E8F0", "#FB923C"],
     bg: "#0F172A",
     text: "#F1F5F9",
     tintRgb: "226, 232, 240",
@@ -298,45 +302,10 @@ const THEMES = {
     cellTrack: "rgba(148, 163, 184, 0.06)",
     heatmapBaseAlpha: 0.10,
   },
-  midnight: {
-    series: SERIES_DARK,
-    status: STATUS_DARK,
-    name: "Midnight", subtitle: "Deep ocean blue", mode: "dark",
-    swatch: ["#0B1426", "#152843", "#BAE6FD", "#22D3EE"],
-    bg: "#0B1426",
-    text: "#E0F2FE",
-    tintRgb: "186, 230, 253",
-    chartTickFill: "rgba(186, 230, 253, 0.65)",
-    chartTickFillDim: "rgba(186, 230, 253, 0.82)",
-    chartGrid: "rgba(125, 211, 252, 0.16)",
-    tooltipBg: "rgba(11, 20, 38, 0.97)",
-    tooltipBorder: "rgba(125, 211, 252, 0.32)",
-    tooltipText: "#E0F2FE",
-    cellTrack: "rgba(186, 230, 253, 0.05)",
-    heatmapBaseAlpha: 0.10,
-  },
-  paper: {
-    series: SERIES_LIGHT,
-    status: STATUS_LIGHT,
-    name: "Paper", subtitle: "Warm cream", mode: "light",
-    swatch: ["#FAF7F2", "#FFFFFF", "#1C1917", "#EA580C"],
-    bg: "#FAF7F2",
-    text: "#1C1917",
-    tintRgb: "41, 37, 36",
-    chartTickFill: "rgba(41, 37, 36, 0.68)",
-    chartTickFillDim: "rgba(41, 37, 36, 0.85)",
-    chartGrid: "rgba(41, 37, 36, 0.10)",
-    tooltipBg: "rgba(255, 255, 255, 0.98)",
-    tooltipBorder: "rgba(28, 25, 23, 0.18)",
-    tooltipText: "#1C1917",
-    cellTrack: "rgba(28, 25, 23, 0.06)",
-    heatmapBaseAlpha: 0.05,
-  },
   crisp: {
     series: SERIES_LIGHT,
     status: STATUS_LIGHT,
     name: "Crisp", subtitle: "Cool light · pro", mode: "light",
-    swatch: ["#F1F5F9", "#FFFFFF", "#0F172A", "#0EA5E9"],
     bg: "#F1F5F9",
     text: "#0F172A",
     tintRgb: "30, 41, 59",
@@ -349,30 +318,25 @@ const THEMES = {
     cellTrack: "rgba(30, 41, 59, 0.06)",
     heatmapBaseAlpha: 0.05,
   },
-  carbon: {
-    series: SERIES_DARK,
-    status: STATUS_DARK,
-    name: "Carbon", subtitle: "Max contrast", mode: "dark",
-    swatch: ["#000000", "#0F0F0F", "#FFFFFF", "#FFD60A"],
-    bg: "#000000",
-    text: "#FFFFFF",
-    tintRgb: "255, 255, 255",
-    chartTickFill: "rgba(255, 255, 255, 0.75)",
-    chartTickFillDim: "rgba(255, 255, 255, 0.92)",
-    chartGrid: "rgba(255, 255, 255, 0.18)",
-    tooltipBg: "rgba(0, 0, 0, 0.98)",
-    tooltipBorder: "rgba(255, 255, 255, 0.35)",
-    tooltipText: "#FFFFFF",
-    cellTrack: "rgba(255, 255, 255, 0.06)",
-    heatmapBaseAlpha: 0.12,
-  },
 };
 
+// Follow the device's light/dark setting on first load (no saved preference).
+function prefersLightScheme() {
+  try {
+    return typeof window !== "undefined" && !!window.matchMedia
+      && window.matchMedia("(prefers-color-scheme: light)").matches;
+  } catch { return false; }
+}
+
+// Older builds shipped five named themes. Fold any saved value onto the nearest
+// of the two current modes so a returning user never lands on a theme that no
+// longer exists: Paper → Crisp (both light), Midnight/Carbon → Slate (both dark).
+// Returns null for an unrecognised / empty value so the caller can fall back to
+// the system setting.
 function migrateThemeKey(stored) {
-  if (stored && THEMES[stored]) return stored;
-  if (stored === "light") return "paper";
-  if (stored === "dark") return "slate";
-  return "slate";
+  if (stored === LIGHT_KEY || stored === "paper" || stored === "light") return LIGHT_KEY;
+  if (stored === DARK_KEY || stored === "midnight" || stored === "carbon" || stored === "dark") return DARK_KEY;
+  return null;
 }
 
 export default function Dashboard({ data: incomingData, user, brandsLoading, onLogout, onRefresh }) {
@@ -417,11 +381,41 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   // "all" or a year in YEARS. Defaults to all-time so the existing view is
   // unchanged until the admin picks a year.
   const [topCustomersBySpYear, setTopCustomersBySpYear] = useState("all");
+  // A saved manual choice wins; with nothing saved, follow the phone's setting.
   const [themeKey, setThemeKey] = useState(() => {
-    try { return migrateThemeKey(localStorage.getItem("seedTheme")); } catch { return "slate"; }
+    let stored = null;
+    try { stored = localStorage.getItem("seedTheme"); } catch {}
+    return migrateThemeKey(stored) || (prefersLightScheme() ? LIGHT_KEY : DARK_KEY);
   });
-  const [themePickerOpen, setThemePickerOpen] = useState(false);
-  useEffect(() => { try { localStorage.setItem("seedTheme", themeKey); } catch {} }, [themeKey]);
+
+  // Track the OS setting until the user makes an explicit choice. Once they
+  // toggle (which writes seedTheme), their choice is remembered and later
+  // system changes are ignored.
+  useEffect(() => {
+    let mq;
+    try { mq = window.matchMedia("(prefers-color-scheme: light)"); } catch { return; }
+    if (!mq) return;
+    const onChange = (e) => {
+      let stored = null;
+      try { stored = localStorage.getItem("seedTheme"); } catch {}
+      if (stored) return; // explicit choice wins over the system setting
+      setThemeKey(e.matches ? LIGHT_KEY : DARK_KEY);
+    };
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else mq.addListener?.(onChange); // older Safari
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
+      else mq.removeListener?.(onChange);
+    };
+  }, []);
+
+  const toggleTheme = () => {
+    setThemeKey(k => {
+      const next = k === DARK_KEY ? LIGHT_KEY : DARK_KEY;
+      try { localStorage.setItem("seedTheme", next); } catch {}
+      return next;
+    });
+  };
 
   // Active theme object. All tokens live here so Recharts gets resolved colors
   // (SVG fill/stroke don't read CSS vars) and inline styles can use CSS vars.
@@ -870,80 +864,41 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
               {YEARS.map(y => <Pill key={y} label={y} active={y===selectedYear} onClick={()=>setSelectedYear(y)} />)}
             </div>
-            <div style={{position:"relative"}}>
-              <button
-                onClick={() => setThemePickerOpen(o => !o)}
-                title="Choose color theme"
-                style={{
-                  background:"rgba(var(--tint),0.05)",
-                  border:"1px solid rgba(var(--tint),0.12)",
-                  color:"var(--text)",
-                  borderRadius:20,
-                  padding:"6px 14px",
-                  fontSize:13,
-                  fontWeight:600,
-                  cursor:"pointer",
-                  fontFamily:"'Inter',sans-serif",
-                  display:"flex",
-                  alignItems:"center",
-                  gap:8,
-                }}>
-                <span style={{display:"inline-flex",gap:2}}>
-                  {tk.swatch.map((c,i) => (
-                    <span key={i} style={{width:6,height:14,borderRadius:1,background:c,border:"1px solid rgba(var(--tint),0.1)"}} />
-                  ))}
-                </span>
-                {tk.name}
-                <span style={{fontSize:10,opacity:0.5}}>▼</span>
-              </button>
-              {themePickerOpen && (
-                <>
-                  <div onClick={() => setThemePickerOpen(false)} style={{position:"fixed",inset:0,zIndex:50}} />
-                  <div style={{
-                    position:"absolute",top:"calc(100% + 8px)",right:0,zIndex:51,
-                    background:"var(--bg)",
-                    border:"1px solid rgba(var(--tint),0.18)",
-                    borderRadius:14,
-                    padding:8,
-                    width:300,
-                    boxShadow:"0 12px 40px rgba(0,0,0,0.5)",
-                  }}>
-                    <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1.5,color:"rgba(var(--tint),0.55)",padding:"6px 8px 10px"}}>
-                      Choose color theme
-                    </div>
-                    {Object.entries(THEMES).map(([key, t]) => {
-                      const active = themeKey === key;
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => { setThemeKey(key); setThemePickerOpen(false); }}
-                          style={{
-                            display:"flex",alignItems:"center",gap:10,
-                            width:"100%",padding:"10px 10px",marginBottom:4,
-                            background: active ? "rgba(var(--tint),0.08)" : "transparent",
-                            border: active ? "1px solid rgba(var(--tint),0.18)" : "1px solid transparent",
-                            color:"var(--text)",borderRadius:10,cursor:"pointer",textAlign:"left",
-                            fontFamily:"'Inter',sans-serif",
-                          }}
-                          onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(var(--tint),0.04)"; }}
-                          onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}>
-                          <span style={{display:"inline-flex",gap:3,flexShrink:0}}>
-                            {t.swatch.map((c,i) => (
-                              <span key={i} style={{width:14,height:34,borderRadius:3,background:c,border:"1px solid rgba(var(--tint),0.12)"}} />
-                            ))}
-                          </span>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>{t.name}</div>
-                            <div style={{fontSize:11,color:"rgba(var(--tint),0.55)"}}>{t.subtitle}</div>
-                          </div>
-                          {active && <span style={{color:STATUS.accent,fontSize:14}}>●</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
+            <button
+              onClick={toggleTheme}
+              title={tk.mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              aria-label={tk.mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+              style={{
+                background:"rgba(var(--tint),0.05)",
+                border:"1px solid rgba(var(--tint),0.12)",
+                color:"var(--text)",
+                borderRadius:20,
+                padding:"6px 14px",
+                fontSize:13,
+                fontWeight:600,
+                cursor:"pointer",
+                fontFamily:"'Inter',sans-serif",
+                display:"flex",
+                alignItems:"center",
+                gap:8,
+                transition:"background 200ms",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(var(--tint),0.09)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(var(--tint),0.05)"; }}>
+              {tk.mode === "dark" ? (
+                // Sun — the button switches to light mode.
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="4" />
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+                </svg>
+              ) : (
+                // Moon — the button switches to dark mode.
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
               )}
-            </div>
+              {tk.mode === "dark" ? "Light" : "Dark"}
+            </button>
             {user && (
               <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 12px 6px 8px",background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.08)",borderRadius:20}}>
                 <div style={{
