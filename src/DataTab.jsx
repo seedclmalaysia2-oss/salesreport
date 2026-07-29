@@ -1185,8 +1185,8 @@ export default function DataTab({ data, onRefresh }) {
               <span style={{color:"rgba(var(--tint),0.4)"}}> — yearly brand summary</span>
             </li>
             <li>
-              <code style={{fontFamily:"'Space Mono',monospace",color:"#3B82F6",fontSize:11}}>{"Customer Invoice Listing <period>.xlsx"}</code>
-              <span style={{color:"rgba(var(--tint),0.4)"}}> — monthly invoice detail (feeds weekly view)</span>
+              <code style={{fontFamily:"'Space Mono',monospace",color:"#3B82F6",fontSize:11}}>{"Stock Sales Analysis - Detail <period>.xlsx"}</code>
+              <span style={{color:"rgba(var(--tint),0.4)"}}> — line-level sales incl. CN/DN (feeds the weekly view; supersedes the old Customer Invoice Listing)</span>
             </li>
           </ul>
         </div>

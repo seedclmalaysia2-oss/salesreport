@@ -23,6 +23,13 @@ const FNAME_RE = /^(.+?) (\d{4}) (Sales Analysis by customer|Stock Sales Analysi
 // 'jun2026', etc. Any 4-digit 20xx in the suffix gives us the year.
 const INVOICE_FNAME_RE = /^Customer Invoice Listing\s+(.+?)\.xlsx$/i;
 
+// 'Stock Sales Analysis - Detail <suffix>.xlsx' — the wider Autocount export
+// the ops team switched to on 2026-07-29. Unlike the invoice listing, it
+// includes credit notes and debit notes alongside invoices, so the weekly
+// totals net returns automatically. Suffix is a date stamp like '290726'
+// (ddmmyy) or 'jul2026' etc.
+const STOCK_DETAIL_FNAME_RE = /^Stock Sales Analysis - Detail\s+(.+?)\.xlsx$/i;
+
 // Brand IDs ending in FC (Free of Charge / boxes), T or TR (Trial Lens / pieces)
 // have no revenue and must not be counted as paid sales. Filter at parse time.
 export function isSalesBrand(brand) {
@@ -35,18 +42,37 @@ export function isSalesBrand(brand) {
   return true;
 }
 
+// Grab a 4-digit year from a Stock-Detail-style suffix. Handles both
+// 'ddmmyy' shorthand (e.g. '290726' -> 2026) and 'jul2026' / '2026' forms.
+function yearFromSuffix(suffix) {
+  const m4 = suffix.match(/(20\d{2})/);
+  if (m4) return parseInt(m4[1], 10);
+  // ddmmyy at the tail — the last two digits are the two-digit year.
+  const m6 = suffix.match(/(\d{2})(\d{2})(\d{2})\b/);
+  if (m6) return 2000 + parseInt(m6[3], 10);
+  return null;
+}
+
 export function parseFilename(name) {
   const m = name.match(FNAME_RE);
   if (m) return { sp: m[1].trim(), year: parseInt(m[2], 10), kind: m[3] };
   const im = name.match(INVOICE_FNAME_RE);
   if (im) {
     const suffix = im[1];
-    // Any 20xx in the suffix — no word boundary so "26jul2026" still matches.
-    const ym = suffix.match(/(20\d{2})/);
     return {
       sp: null,
-      year: ym ? parseInt(ym[1], 10) : null,
+      year: yearFromSuffix(suffix),
       kind: "Customer Invoice Listing",
+      periodLabel: suffix.trim(),
+    };
+  }
+  const sm = name.match(STOCK_DETAIL_FNAME_RE);
+  if (sm) {
+    const suffix = sm[1];
+    return {
+      sp: null,
+      year: yearFromSuffix(suffix),
+      kind: "Stock Sales Analysis - Detail",
       periodLabel: suffix.trim(),
     };
   }
@@ -275,6 +301,47 @@ function parseInvoiceRows(rows) {
   return out;
 }
 
+// Autocount 'Stock Sales Analysis - Detail (Group by Brand)' export.
+// Very different column layout to the Customer Invoice Listing:
+//   col 1  = date (e.g. '02-Jul-26') for data rows, or the literal 'Brand'
+//            for the header rows that separate one brand from the next.
+//            (Brand headers carry the brand code in col 6.)
+//   col 2  = document number (INV*, CN*, DN*) — CN/DN carry NEGATIVE net_sales
+//            so summing this column already nets returns without extra work.
+//   col 3  = salesman
+//   col 15 = net_sales (RM)
+//
+// The document mix is what makes this file more accurate than the older
+// Customer Invoice Listing: CNs and DNs are present, so the weekly totals
+// match ops' Salesman Sales Listing within Cash Sales rounding.
+function parseStockDetailRows(rows) {
+  const out = [];
+  for (const row of rows) {
+    if (!row) continue;
+    if (row[1] === "Brand") continue; // brand header separator
+    const dateStr = row[1];
+    if (typeof dateStr !== "string") continue;
+    const sp = canonInvoiceSp(row[3]);
+    if (!sp) continue;
+    const amount = row[15];
+    if (typeof amount !== "number") continue;
+    const date = parseAutocountDate(dateStr);
+    if (!date) continue;
+    const doc = row[2] ?? null;
+    out.push({
+      date,
+      // Reuse the invoice-row shape so downstream (weekly sync, dedupe)
+      // treats these identically. 'invoice' holds the doc number so CNs
+      // and DNs get keyed distinctly from their originating invoice.
+      invoice: doc ? String(doc) : null,
+      customer: null,
+      amount: Math.round(amount * 100) / 100,
+      sp,
+    });
+  }
+  return out;
+}
+
 export async function parseFile(file) {
   const fnameInfo = parseFilename(file.name);
   if (!fnameInfo) {
@@ -313,6 +380,24 @@ export async function parseFile(file) {
     return {
       ok: true,
       file: file.name,
+      kind: "invoice",
+      sp: null,
+      year: fnameInfo.year ?? yearFromRows,
+      rowCount: parsed.length,
+      rows: parsed,
+    };
+  } else if (fnameInfo.kind === "Stock Sales Analysis - Detail") {
+    const parsed = parseStockDetailRows(rows);
+    const yearFromRows = parsed
+      .map(r => r.date && parseInt(r.date.slice(0, 4), 10))
+      .find(y => Number.isFinite(y)) ?? null;
+    return {
+      ok: true,
+      file: file.name,
+      // Reuse the 'invoice' kind so the existing weekly-sync path (which
+      // reads kind='invoice' from data_files) picks these up automatically.
+      // The parsed rows have the same shape as invoice-listing rows
+      // {date, invoice, customer, amount, sp}, so no downstream changes.
       kind: "invoice",
       sp: null,
       year: fnameInfo.year ?? yearFromRows,
