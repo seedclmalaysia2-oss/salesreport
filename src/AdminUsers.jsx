@@ -47,6 +47,10 @@ export default function AdminUsers({ user }) {
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [editingEmailId, setEditingEmailId] = useState(null);
+  const [editingEmailValue, setEditingEmailValue] = useState("");
+  const [resetPwId, setResetPwId] = useState(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -119,6 +123,89 @@ export default function AdminUsers({ user }) {
     patch(row, { sp }, `${row.email} is now mapped to ${sp}.`);
   };
 
+  // RPC call wrapper — the four admin_* functions all live behind the same
+  // caller-is-admin guard, so they share this error/notice pipeline.
+  const callRpc = async (fn, args, describe) => {
+    setError(null);
+    setNotice(null);
+    try {
+      const { error } = await supabase.rpc(fn, args);
+      if (error) throw error;
+      setNotice(describe);
+      await refresh();
+      return true;
+    } catch (e) {
+      setError(e.message || String(e));
+      return false;
+    }
+  };
+
+  const onCreateUser = async (payload) => {
+    setBusyId("__new__");
+    const ok = await callRpc(
+      "admin_create_user",
+      {
+        p_email: payload.email,
+        p_password: payload.password,
+        p_sp: payload.sp,
+        p_is_admin: payload.isAdmin,
+        p_can_view_all: payload.canViewAll,
+      },
+      `Created account ${payload.email} (${payload.sp}${payload.isAdmin ? ", admin" : ""}). Share the password with them via a private channel.`
+    );
+    setBusyId(null);
+    if (ok) setAddOpen(false);
+  };
+
+  const beginEditEmail = (row) => {
+    setEditingEmailId(row.user_id);
+    setEditingEmailValue(row.email || "");
+  };
+  const cancelEditEmail = () => {
+    setEditingEmailId(null);
+    setEditingEmailValue("");
+  };
+  const saveEditEmail = async (row) => {
+    const next = editingEmailValue.trim().toLowerCase();
+    if (!next || next === row.email?.toLowerCase()) { cancelEditEmail(); return; }
+    setBusyId(row.user_id);
+    const ok = await callRpc(
+      "admin_update_user_email",
+      { p_user_id: row.user_id, p_email: next },
+      `Email changed to ${next}.`
+    );
+    setBusyId(null);
+    if (ok) cancelEditEmail();
+  };
+
+  const onResetPassword = async (row) => {
+    const pw = window.prompt(
+      `Set a new password for ${row.email}.\nAt least 6 characters. Share it via a private channel.`
+    );
+    if (pw == null) return;
+    if (pw.length < 6) { setError("Password must be at least 6 characters."); return; }
+    setBusyId(row.user_id);
+    await callRpc(
+      "admin_reset_user_password",
+      { p_user_id: row.user_id, p_password: pw },
+      `Password reset for ${row.email}.`
+    );
+    setBusyId(null);
+  };
+
+  const onDelete = async (row) => {
+    const isSelf = row.email?.toLowerCase() === user?.email?.toLowerCase();
+    if (isSelf) { setError("You can't delete your own account."); return; }
+    if (!confirm(`Permanently delete ${row.email}?\n\nThis removes the auth account and the salesperson mapping. Cannot be undone.`)) return;
+    setBusyId(row.user_id);
+    await callRpc(
+      "admin_delete_user",
+      { p_user_id: row.user_id },
+      `${row.email} has been deleted.`
+    );
+    setBusyId(null);
+  };
+
   const adminCount = rows.filter(r => r.is_admin).length;
 
   return (
@@ -128,8 +215,21 @@ export default function AdminUsers({ user }) {
           👤 Users
           <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:12}}> · {rows.length} account{rows.length===1?"":"s"} · {adminCount} admin{adminCount===1?"":"s"}</span>
         </div>
-        <button onClick={refresh} style={{background:"transparent",border:"1px solid #3B82F655",color:"#3B82F6",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer"}}>↻ Refresh</button>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <button onClick={() => setAddOpen(o => !o)} style={{background: addOpen ? "rgba(232,99,59,0.15)" : "#E8633B",color: addOpen ? "#E8633B" : "#fff",border: addOpen ? "1px solid rgba(232,99,59,0.5)" : "none",borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+            {addOpen ? "Cancel" : "+ Add user"}
+          </button>
+          <button onClick={refresh} style={{background:"transparent",border:"1px solid #3B82F655",color:"#3B82F6",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer"}}>↻ Refresh</button>
+        </div>
       </div>
+
+      {addOpen && (
+        <AddUserForm
+          busy={busyId === "__new__"}
+          onCancel={() => setAddOpen(false)}
+          onSubmit={onCreateUser}
+        />
+      )}
 
       <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:14,lineHeight:1.6}}>
         Everyone signed in sees <strong>all</strong> sales data by default. Set <strong>Data access</strong> to
@@ -166,6 +266,7 @@ export default function AdminUsers({ user }) {
                 <th style={thStyle}>Data access</th>
                 <th style={thStyle}>Role</th>
                 <th style={thStyle}>Last sign-in</th>
+                <th style={thStyle}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -181,11 +282,39 @@ export default function AdminUsers({ user }) {
                           display:"flex",alignItems:"center",justifyContent:"center",
                           fontSize:10,fontWeight:700,fontFamily:"'Space Mono',monospace",color:"#fff",
                         }}>{(row.sp || "?")[0]?.toUpperCase()}</div>
-                        <div style={{minWidth:0}}>
-                          <div style={{fontWeight:500,overflow:"hidden",textOverflow:"ellipsis"}}>
-                            {row.email}
-                            {isSelf && <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400}}> (you)</span>}
-                          </div>
+                        <div style={{minWidth:0,flex:1}}>
+                          {editingEmailId === row.user_id ? (
+                            <div style={{display:"flex",alignItems:"center",gap:6}}>
+                              <input
+                                type="email"
+                                value={editingEmailValue}
+                                onChange={(e) => setEditingEmailValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") saveEditEmail(row);
+                                  if (e.key === "Escape") cancelEditEmail();
+                                }}
+                                autoFocus
+                                disabled={busyId === row.user_id}
+                                style={{background:"rgba(var(--tint),0.06)",border:"1px solid rgba(var(--tint),0.2)",color:"var(--text)",borderRadius:6,padding:"4px 8px",fontSize:12,minWidth:220,fontFamily:"'DM Sans',sans-serif"}}
+                              />
+                              <button onClick={() => saveEditEmail(row)} disabled={busyId === row.user_id}
+                                style={{background:"#34D399",color:"#0A0A0F",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Save</button>
+                              <button onClick={cancelEditEmail} disabled={busyId === row.user_id}
+                                style={{background:"transparent",border:"1px solid rgba(var(--tint),0.15)",color:"rgba(var(--tint),0.6)",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>Cancel</button>
+                            </div>
+                          ) : (
+                            <div style={{display:"flex",alignItems:"center",gap:6,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis"}}>
+                              <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{row.email}</span>
+                              {isSelf && <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:11}}>(you)</span>}
+                              <button
+                                onClick={() => beginEditEmail(row)}
+                                disabled={busyId === row.user_id}
+                                title="Change this email"
+                                style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.35)",cursor:"pointer",fontSize:12,padding:"0 4px",lineHeight:1}}>
+                                ✎
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -240,6 +369,24 @@ export default function AdminUsers({ user }) {
                         ? new Date(row.last_sign_in_at).toLocaleString("en-MY", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" })
                         : "never"}
                     </td>
+                    <td style={tdStyle}>
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                        <button
+                          onClick={() => onResetPassword(row)}
+                          disabled={busyId === row.user_id}
+                          title="Set a new password for this user"
+                          style={{background:"rgba(59,130,246,0.10)",border:"1px solid #3B82F655",color:"#3B82F6",borderRadius:6,padding:"4px 8px",fontSize:10.5,fontWeight:600,cursor:busyId===row.user_id?"wait":"pointer",whiteSpace:"nowrap"}}>
+                          🔑 Password
+                        </button>
+                        <button
+                          onClick={() => onDelete(row)}
+                          disabled={busyId === row.user_id || isSelf}
+                          title={isSelf ? "You cannot delete your own account" : "Permanently delete this user"}
+                          style={{background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.4)",color: isSelf ? "rgba(var(--tint),0.25)" : "#F87171",borderRadius:6,padding:"4px 8px",fontSize:10.5,fontWeight:600,cursor: isSelf ? "not-allowed" : (busyId===row.user_id?"wait":"pointer"),whiteSpace:"nowrap"}}>
+                          🗑 Delete
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -252,5 +399,86 @@ export default function AdminUsers({ user }) {
         The database refuses to remove the last admin, so the dashboard can never be locked out of its own controls.
       </div>
     </Card>
+  );
+}
+
+// Inline form to create a new user. Keeps its own local state so keystrokes
+// don't re-render the surrounding table on every character.
+function AddUserForm({ busy, onCancel, onSubmit }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [sp, setSp] = useState(SP_OPTIONS[0]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [canViewAll, setCanViewAll] = useState(true);
+
+  const canSubmit = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()) && password.length >= 6 && sp;
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    onSubmit({ email: email.trim().toLowerCase(), password, sp, isAdmin, canViewAll });
+  };
+
+  const fieldWrap = { display: "flex", flexDirection: "column", gap: 4, flex: "1 1 200px", minWidth: 0 };
+  const labelStyle = { fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "rgba(var(--tint),0.5)", fontWeight: 600 };
+  const inputStyle = { background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.1)", color: "var(--text)", borderRadius: 6, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif" };
+
+  return (
+    <form onSubmit={submit} style={{
+      marginBottom: 16, padding: "14px 16px", borderRadius: 10,
+      background: "rgba(232,99,59,0.06)", border: "1px solid rgba(232,99,59,0.3)",
+      display: "flex", flexDirection: "column", gap: 12,
+    }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>+ Add user</div>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div style={fieldWrap}>
+          <label style={labelStyle}>Email</label>
+          <input type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="name@seed-malaysia.com" style={inputStyle} disabled={busy} />
+        </div>
+        <div style={fieldWrap}>
+          <label style={labelStyle}>Initial password</label>
+          <input type="text" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
+            placeholder="at least 6 chars" style={inputStyle} disabled={busy}
+            autoComplete="new-password" />
+        </div>
+        <div style={{ ...fieldWrap, flex: "0 1 180px" }}>
+          <label style={labelStyle}>Salesperson</label>
+          <select value={sp} onChange={(e) => setSp(e.target.value)} style={{ ...inputStyle, ...selectStyle, padding: "6px 10px", fontSize: 13 }} disabled={busy}>
+            {SP_OPTIONS.map(s => <option key={s} value={s} style={optionStyle}>{s}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(var(--tint),0.85)", cursor: "pointer" }}>
+          <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} disabled={busy} />
+          Admin (manages files + users)
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "rgba(var(--tint),0.85)", cursor: isAdmin ? "not-allowed" : "pointer", opacity: isAdmin ? 0.5 : 1 }}>
+          <input type="checkbox" checked={canViewAll || isAdmin} disabled={isAdmin || busy}
+            onChange={(e) => setCanViewAll(e.target.checked)} />
+          Sees all teams
+          <span style={{ fontSize: 11, color: "rgba(var(--tint),0.5)" }}>(admins always do)</span>
+        </label>
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <button type="submit" disabled={busy || !canSubmit}
+          style={{
+            background: busy || !canSubmit ? "rgba(232,99,59,0.4)" : "#E8633B",
+            color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px",
+            fontSize: 13, fontWeight: 700, cursor: busy || !canSubmit ? "not-allowed" : "pointer",
+            fontFamily: "'DM Sans',sans-serif",
+          }}>
+          {busy ? "Creating…" : "Create account"}
+        </button>
+        <button type="button" onClick={onCancel} disabled={busy}
+          style={{ background: "transparent", border: "1px solid rgba(var(--tint),0.15)", color: "rgba(var(--tint),0.7)", borderRadius: 6, padding: "8px 14px", fontSize: 12, cursor: "pointer" }}>
+          Cancel
+        </button>
+        <span style={{ fontSize: 11, color: "rgba(var(--tint),0.5)" }}>
+          Account is auto-confirmed. Share the password securely — user can change it via Forgot password on the sign-in page.
+        </span>
+      </div>
+    </form>
   );
 }
