@@ -3,12 +3,22 @@ import { readFileSync } from "fs";
 
 const path = process.argv[2];
 const wb = XLSX.read(readFileSync(path), { type: "buffer" });
-console.log("Sheets:", wb.SheetNames);
 const sheet = wb.Sheets[wb.SheetNames[0]];
 const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
-console.log("Total rows:", grid.length);
-for (let i = 0; i < Math.min(grid.length, 15); i++) {
-  const row = grid[i] || [];
-  const nn = row.map((c, j) => c == null || c === "" ? null : `[${j}]=${JSON.stringify(c).slice(0,60)}`).filter(Boolean);
-  console.log(`row ${i}: ${nn.slice(0, 10).join(" ")}${nn.length > 10 ? " …("+(nn.length-10)+")" : ""}`);
+
+console.log("Header row (all non-null cells):");
+grid[4]?.forEach((c, i) => { if (c != null && c !== "") console.log(`  [${i}] = ${JSON.stringify(c)}`); });
+
+console.log("\nFirst data row (all non-null cells):");
+grid[5]?.forEach((c, i) => { if (c != null && c !== "") console.log(`  [${i}] = ${JSON.stringify(c)}`); });
+
+console.log("\nDistinct salesman values (guessing last populated col in row 5):");
+const lastCol = Math.max(...grid.slice(5, 50).map(r => (r || []).length));
+const salesmen = new Set();
+for (const row of grid.slice(5, 400)) {
+  if (!row) continue;
+  const sm = row[lastCol - 1];
+  if (typeof sm === "string" && sm.trim()) salesmen.add(sm.trim());
 }
+console.log(`  last col checked: ${lastCol - 1}`);
+console.log(`  distinct salesmen: ${[...salesmen].sort().join(" | ")}`);

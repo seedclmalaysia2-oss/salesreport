@@ -109,12 +109,20 @@ function detectCustomerLayout(rows) {
   for (let r = 0; r < Math.min(rows.length, 30); r++) {
     const row = rows[r]; if (!row) continue;
     let customerCol = -1;
+    let salesmanCol = -1;
     const monthCols = new Array(12).fill(-1);
     for (let c = 0; c < row.length; c++) {
       const v = row[c];
       if (typeof v !== "string") continue;
       const s = v.trim();
       if (s === "Customer Name" || s === "Customer") customerCol = c;
+      // The year-only Sales Analysis exports carry a per-row Salesman column
+      // at the far right (col 32 in the observed files). Auto-detect it so
+      // the parser attributes each customer's revenue to their rep instead
+      // of dumping every row into 'All'.
+      if (s === "Salesman" || s === "Sales Person" || s === "SalesmanID" || s === "AcSalesmanID") {
+        salesmanCol = c;
+      }
       const m = s.match(/^([A-Za-z]{3})\b/);
       if (m) {
         const canon = m[1][0].toUpperCase() + m[1].slice(1, 3).toLowerCase();
@@ -125,9 +133,9 @@ function detectCustomerLayout(rows) {
     const monthsFound = monthCols.filter(c => c >= 0).length;
     // 6+ months is enough to be confident this is the header row.
     if (customerCol >= 0 && monthsFound >= 6) {
-      // Amount cell sits one column LEFT of the month label on both layouts.
-      const amountCols = monthCols.map(c => c > 0 ? c - 1 : -1);
-      return { headerRow: r, customerCol, amountCols };
+      // Amount cell sits at the same column as its month header (the header
+      // is a merged pair — label on the left cell, blank on the right).
+      return { headerRow: r, customerCol, amountCols: monthCols, salesmanCol };
     }
   }
   return null;
@@ -136,7 +144,7 @@ function detectCustomerLayout(rows) {
 function parseCustomerRows(rows) {
   const layout = detectCustomerLayout(rows);
   if (layout) {
-    const { headerRow, customerCol, amountCols } = layout;
+    const { headerRow, customerCol, amountCols, salesmanCol } = layout;
     const out = [];
     for (let i = headerRow + 1; i < rows.length; i++) {
       const r = rows[i]; if (!r) continue;
@@ -148,10 +156,16 @@ function parseCustomerRows(rows) {
       const total = months.reduce((a, b) => a + b, 0);
       // Skip padding/spacer rows the export inserts between customers.
       if (total === 0 && months.every(m => m === 0)) continue;
+      // Per-row salesman when the file provides it (year-only exports since
+      // 2026). Null when the file's a per-SP export — caller supplies the sp
+      // from the filename in that case.
+      const smRaw = salesmanCol >= 0 ? r[salesmanCol] : null;
+      const sp = smRaw ? canonInvoiceSp(smRaw) : null;
       out.push({
         customer: String(name).trim(),
         months,
         total: Math.round(total * 100) / 100,
+        ...(sp ? { sp } : {}),
       });
     }
     return out;
@@ -279,6 +293,9 @@ const INVOICE_SP_NAMES = {
   "wani": "Wani", "nurzawani": "Wani",
   "simon low": "Simon", "simon": "Simon",
   "seed malaysia": "Seed Malaysia", "seed": "Seed Malaysia",
+  // Reps that appear on the year-only Sales Analysis exports (2021-2025 legacy).
+  "jerry wong": "Jerry", "jerry": "Jerry",
+  "salim": "Salim",
 };
 function canonInvoiceSp(raw) {
   return INVOICE_SP_NAMES[String(raw || "").trim().toLowerCase()] || null;
@@ -421,6 +438,9 @@ export async function parseFile(file) {
 
   if (fnameInfo.kind === "Sales Analysis by customer") {
     const parsed = parseCustomerRows(rows);
+    // Prefer the per-row sp when the file's Salesman column supplied one
+    // (year-only exports carry per-customer sp). Fall back to fnameInfo.sp
+    // (per-SP legacy files where the sp comes from the filename prefix).
     return {
       ok: true,
       file: file.name,
@@ -428,7 +448,13 @@ export async function parseFile(file) {
       sp: fnameInfo.sp,
       year: fnameInfo.year,
       rowCount: parsed.length,
-      rows: parsed.map(p => ({ sp: fnameInfo.sp, year: fnameInfo.year, ...p })),
+      rows: parsed.map(p => ({
+        sp: p.sp || fnameInfo.sp || "All",
+        year: fnameInfo.year,
+        customer: p.customer,
+        months: p.months,
+        total: p.total,
+      })),
     };
   } else if (fnameInfo.kind === "Customer Invoice Listing") {
     const parsed = parseInvoiceRows(rows);
