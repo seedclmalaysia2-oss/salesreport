@@ -77,6 +77,53 @@ function actionButton(variant, { active = false } = {}) {
     border: "1px solid rgba(59,130,246,0.35)" };
 }
 
+// Show which archived Customer Invoice Listings feed the current weekly
+// numbers, so an admin can eyeball whether the freshest export has landed
+// and been deduped in. Collapsed by default: latest file's name + "N more"
+// pill; expanded on click to list every source file with its upload time.
+function SourceFiles({ files, expanded, onToggle }) {
+  const sorted = [...files].sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+  const latest = sorted[0];
+  const more = sorted.length - 1;
+  if (!latest) return null;
+  const fmtWhen = (ts) => ts
+    ? new Date(ts).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+    : "—";
+  return (
+    <div style={{ marginTop: 6, fontSize: 11.5, color: "rgba(var(--tint),0.55)", lineHeight: 1.5 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <span style={{ fontWeight: 600, color: "rgba(var(--tint),0.7)" }}>Source:</span>
+        <span style={{ fontFamily: "'Space Mono',monospace", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis" }} title={latest.name}>
+          {latest.name}
+        </span>
+        <span style={{ color: "rgba(var(--tint),0.45)" }}>· uploaded {fmtWhen(latest.uploadedAt)}</span>
+        {more > 0 && (
+          <button
+            onClick={onToggle}
+            title={expanded ? "Hide the full source list" : "Show every invoice file feeding the weekly board"}
+            style={{
+              background: "rgba(var(--tint),0.06)", border: "1px solid rgba(var(--tint),0.12)",
+              color: "rgba(var(--tint),0.75)", borderRadius: 12, padding: "1px 8px",
+              fontSize: 10.5, fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+            }}>
+            {expanded ? "hide" : `+${more} more`}
+          </button>
+        )}
+      </div>
+      {expanded && more > 0 && (
+        <ul style={{ margin: "6px 0 0 0", padding: "8px 12px", listStyle: "none", background: "rgba(var(--tint),0.03)", border: "1px solid rgba(var(--tint),0.08)", borderRadius: 8 }}>
+          {sorted.map((f) => (
+            <li key={f.id || f.name} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "3px 0", fontSize: 11, fontFamily: "'Space Mono',monospace" }}>
+              <span style={{ color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={f.name}>{f.name}</span>
+              <span style={{ color: "rgba(var(--tint),0.5)", whiteSpace: "nowrap" }}>{fmtWhen(f.uploadedAt)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function Spinner({ size = 13, color = "var(--st-info)" }) {
   return (
     <span style={{
@@ -209,9 +256,10 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
   );
 }
 
-export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploaded, onRefresh, seriesColors }) {
+export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], targets, isAdmin, onUploaded, onRefresh, seriesColors }) {
   const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
   const [refreshing, setRefreshing] = useState(false);
+  const [showAllSources, setShowAllSources] = useState(false);
   // onUploaded is retained in the props for backward compatibility with any
   // future ad-hoc upload button, but the card no longer opens an inline
   // upload panel — all uploads live on the Data tab now.
@@ -417,6 +465,16 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
             <div style={{ fontSize: 11.5, color: "rgba(var(--tint),0.5)", marginTop: 4 }}>
               Last updated {new Date(headerUploadedAt).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
             </div>
+          )}
+          {/* Source-file traceability — which archived Customer Invoice
+              Listings feed the current view. Non-admins get an empty list
+              from RLS, so the whole block collapses to nothing for them. */}
+          {invoiceFiles.length > 0 && (
+            <SourceFiles
+              files={invoiceFiles}
+              expanded={showAllSources}
+              onToggle={() => setShowAllSources(v => !v)}
+            />
           )}
         </div>
         {HeaderActions}

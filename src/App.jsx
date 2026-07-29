@@ -175,10 +175,17 @@ export default function App() {
       // the new object.
       try {
         setLoadStage("Loading sales data…");
-        const [customers, targets, weekly] = await Promise.all([
+        // invoiceFiles: metadata only (no rows_json) so the Weekly Sales card
+        // can show which archived files feed the current view. RLS on
+        // data_files returns empty for non-admins, so the extra fetch is a
+        // no-op for them — no server-side gate needed here.
+        const [customers, targets, weekly, invoiceFiles] = await Promise.all([
           fetchAll("customers_data", "sp,year,customer,months,total"),
           fetchAll("sales_targets", "year,month,sp,target_amt"),
           fetchAll("weekly_sales", "period_start,period_end,sp,amount,uploaded_at"),
+          fetchAll("data_files", "id,name,kind,uploaded_at,deleted_at")
+            .then(rows => rows.filter(r => r.kind === "invoice" && !r.deleted_at))
+            .catch(() => []),
         ]);
 
         const withTotals = (brandSales) => {
@@ -189,6 +196,11 @@ export default function App() {
           aggregated.weeklySales = weekly.map(w => ({
             periodStart: w.period_start, periodEnd: w.period_end,
             sp: w.sp, amount: Number(w.amount), uploadedAt: w.uploaded_at,
+          }));
+          aggregated.invoiceFiles = invoiceFiles.map(f => ({
+            id: f.id,
+            name: f.name,
+            uploadedAt: f.uploaded_at ? new Date(f.uploaded_at).getTime() : null,
           }));
           return aggregated;
         };
