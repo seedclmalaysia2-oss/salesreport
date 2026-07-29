@@ -274,12 +274,27 @@ function canonInvoiceSp(raw) {
   return INVOICE_SP_NAMES[String(raw || "").trim().toLowerCase()] || null;
 }
 function parseAutocountDate(s) {
-  const m = String(s).match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
-  if (!m) return null;
-  const MON = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
-  const mm = MON[m[2].toLowerCase()]; if (!mm) return null;
-  let yy = parseInt(m[3], 10); if (yy < 100) yy += 2000;
-  return `${yy}-${String(mm).padStart(2,"0")}-${String(parseInt(m[1], 10)).padStart(2,"0")}`;
+  const str = String(s).trim();
+  // '02-Jul-26' or '02-Jul-2026' — the format the Customer Invoice Listing
+  // and older Stock Detail exports use.
+  const dashMon = str.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+  if (dashMon) {
+    const MON = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
+    const mm = MON[dashMon[2].toLowerCase()]; if (!mm) return null;
+    let yy = parseInt(dashMon[3], 10); if (yy < 100) yy += 2000;
+    return `${yy}-${String(mm).padStart(2,"0")}-${String(parseInt(dashMon[1], 10)).padStart(2,"0")}`;
+  }
+  // '03/06/2026' or '03/06/26' (DD/MM/YYYY) — the format newer Stock Detail
+  // exports use. Also accept dash-numeric '03-06-2026'.
+  const numeric = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (numeric) {
+    const dd = parseInt(numeric[1], 10);
+    const mm = parseInt(numeric[2], 10);
+    if (mm < 1 || mm > 12) return null;
+    let yy = parseInt(numeric[3], 10); if (yy < 100) yy += 2000;
+    return `${yy}-${String(mm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`;
+  }
+  return null;
 }
 function parseInvoiceRows(rows) {
   const out = [];
@@ -302,32 +317,67 @@ function parseInvoiceRows(rows) {
 }
 
 // Autocount 'Stock Sales Analysis - Detail (Group by Brand)' export.
-// Very different column layout to the Customer Invoice Listing:
-//   col 1  = date (e.g. '02-Jul-26') for data rows, or the literal 'Brand'
-//            for the header rows that separate one brand from the next.
-//            (Brand headers carry the brand code in col 6.)
-//   col 2  = document number (INV*, CN*, DN*) — CN/DN carry NEGATIVE net_sales
-//            so summing this column already nets returns without extra work.
-//   col 3  = salesman
-//   col 15 = net_sales (RM)
 //
-// The document mix is what makes this file more accurate than the older
-// Customer Invoice Listing: CNs and DNs are present, so the weekly totals
-// match ops' Salesman Sales Listing within Cash Sales rounding.
+// Two column layouts observed in the wild:
+//   Layout A (Date at col 0): common in newer exports
+//     [0]=Date  [1]=Document No  [2]=Salesman  [6]=Quantity  [12]=Price  [14]=Net Sales
+//   Layout B (Date at col 1): older / dashed-date exports
+//     [1]=Date  [2]=Document No  [3]=Salesman  [6]=Quantity  [13]=Price  [15]=Net Sales
+//
+// The offset is a global left/right shift by 1 column. Rather than hard-
+// coding either, we scan the first 20 rows for the header row (cells with
+// "Date", "Document No", "Salesman", "Net Sales"), then derive the exact
+// column indexes. Dates may be dash-Mon-year ('02-Jul-26') or DD/MM/YYYY
+// ('02/07/2026') — parseAutocountDate handles both.
+//
+// CN/DN documents carry NEGATIVE net_sales, so summing this column already
+// nets returns without extra work — which is why this file replaced the
+// Customer Invoice Listing as the source of truth for the Weekly board.
+function findStockDetailLayout(rows) {
+  const scan = Math.min(rows.length, 30);
+  for (let r = 0; r < scan; r++) {
+    const row = rows[r]; if (!row) continue;
+    const dateCol = row.findIndex(c => typeof c === "string" && c.trim() === "Date");
+    if (dateCol < 0) continue;
+    const docCol = row.findIndex(c => typeof c === "string" && /^Document\s*No/i.test(c.trim()));
+    const spCol  = row.findIndex(c => typeof c === "string" && /^Sales(man|_?person|_?ID)?$/i.test(c.trim()));
+    const amtCol = row.findIndex(c => typeof c === "string" && /^Net\s*Sales$/i.test(c.trim()));
+    if (docCol >= 0 && amtCol >= 0) {
+      return {
+        headerRow: r,
+        dateCol,
+        docCol,
+        // Salesman column isn't always in the header row (sometimes it sits
+        // in the metadata band); fall back to docCol+1 which holds it on
+        // both known layouts.
+        spCol: spCol >= 0 ? spCol : docCol + 1,
+        amtCol,
+      };
+    }
+  }
+  return null;
+}
+
 function parseStockDetailRows(rows) {
+  const layout = findStockDetailLayout(rows);
+  if (!layout) return [];
+  const { headerRow, dateCol, docCol, spCol, amtCol } = layout;
+
   const out = [];
-  for (const row of rows) {
-    if (!row) continue;
-    if (row[1] === "Brand") continue; // brand header separator
-    const dateStr = row[1];
+  for (let i = headerRow + 1; i < rows.length; i++) {
+    const row = rows[i]; if (!row) continue;
+    // 'Brand' rows separate one brand's block from the next; they sit in
+    // dateCol and carry no numeric data.
+    if (row[dateCol] === "Brand") continue;
+    const dateStr = row[dateCol];
     if (typeof dateStr !== "string") continue;
-    const sp = canonInvoiceSp(row[3]);
+    const sp = canonInvoiceSp(row[spCol]);
     if (!sp) continue;
-    const amount = row[15];
+    const amount = row[amtCol];
     if (typeof amount !== "number") continue;
     const date = parseAutocountDate(dateStr);
     if (!date) continue;
-    const doc = row[2] ?? null;
+    const doc = row[docCol] ?? null;
     out.push({
       date,
       // Reuse the invoice-row shape so downstream (weekly sync, dedupe)
