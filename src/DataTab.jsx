@@ -948,49 +948,15 @@ export default function DataTab({ data, onRefresh }) {
         </button>
       </div>
 
-      {/* The link between this tab and the Weekly Sales board. Uploading an
-          invoice listing now feeds the board automatically, but this button
-          also rebuilds it from every invoice file already in the library — the
-          one click that backfills weeks uploaded before that link existed. */}
-      {invoiceFileCount > 0 && (
-        <div style={{
-          display:"flex",alignItems:"center",gap:16,flexWrap:"wrap",marginBottom:20,
-          padding:"14px 18px",borderRadius:14,
-          background:"rgba(59,130,246,0.06)",border:"1px solid rgba(59,130,246,0.28)",
-        }}>
-          <div style={{fontSize:22,lineHeight:1,flexShrink:0}} aria-hidden="true">📊</div>
-          <div style={{flex:"1 1 260px",minWidth:0}}>
-            <div style={{fontSize:13,fontWeight:600,color:"var(--text)",marginBottom:2}}>
-              Weekly Sales board
-            </div>
-            <div style={{fontSize:12,color:"rgba(var(--tint),0.65)",lineHeight:1.5}}>
-              {invoiceFileCount} invoice listing{invoiceFileCount===1?"":"s"} in the library feed the weekly view.
-              New uploads sync on their own — use this to rebuild every week from the current files.
-            </div>
-          </div>
-          <button
-            onClick={() => runWeeklySync(files)}
-            disabled={syncing}
-            style={{
-              display:"inline-flex",alignItems:"center",gap:8,
-              background: syncing ? "rgba(59,130,246,0.12)" : "#3B82F6",
-              color: syncing ? "rgba(59,130,246,0.9)" : "#fff",
-              border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,
-              cursor: syncing ? "wait" : "pointer",fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
-            }}>
-            {syncing ? (
-              <>
-                <span style={{
-                  width:13,height:13,borderRadius:"50%",display:"inline-block",
-                  border:"2px solid rgba(59,130,246,0.35)",borderTopColor:"#3B82F6",
-                  animation:"seedspin 0.8s linear infinite",
-                }} />
-                Syncing…
-              </>
-            ) : "↻ Sync Weekly Sales"}
-          </button>
-        </div>
-      )}
+      {/* Weekly Sales sync used to have its own dedicated panel here. It was
+          removed because it duplicated two other paths that already do the
+          same work more reliably:
+            1. Every invoice-listing upload auto-runs runWeeklySync silently
+               (see onUploadClick further down).
+            2. The Recalculate button above runs the weekly sync as one of its
+               nine stages, with a visible checklist row.
+          Keep the runWeeklySync function itself — the per-file Update button
+          on invoice rows still uses it. */}
 
       {error && (
         <div style={{marginBottom:16,padding:"10px 14px",background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:8,fontSize:12,color:"#F87171",whiteSpace:"pre-wrap"}}>

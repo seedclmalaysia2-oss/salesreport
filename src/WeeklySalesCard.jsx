@@ -211,8 +211,11 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
 
 export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploaded, onRefresh, seriesColors }) {
   const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
-  const [uploadOpen, setUploadOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // onUploaded is retained in the props for backward compatibility with any
+  // future ad-hoc upload button, but the card no longer opens an inline
+  // upload panel — all uploads live on the Data tab now.
+  void onUploaded;
 
   // Clear the refreshing spinner once fresh data actually arrives (App hands
   // down a new weeklySales reference after the refetch). The failsafe timer in
@@ -323,20 +326,19 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
     return t ? t.target : 0;
   }, [activeMonth, targets]);
 
-  // Refresh + Upload live in the header of both the empty and populated states.
+  // Only Refresh lives in the header now — uploads happen exclusively on the
+  // Data ⤴ tab so admins have one place to manage source files. Refresh pulls
+  // whatever weekly_sales rows are currently in the database after the auto-
+  // sync (invoice-listing uploads on the Data tab re-aggregate every week
+  // from every file, deduped by invoice number, so any refresh here shows the
+  // latest board without needing a second click.)
   const HeaderActions = (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
       {onRefresh && (
-        <button onClick={handleRefresh} disabled={refreshing} title="Reload the latest weekly numbers"
+        <button onClick={handleRefresh} disabled={refreshing} title="Reload the latest weekly numbers from the database"
           style={{ ...actionButton("info"), cursor: refreshing ? "wait" : "pointer" }}>
           {refreshing ? <Spinner /> : <span style={{ fontSize: 14, lineHeight: 1 }}>↻</span>}
           {refreshing ? "Refreshing…" : "Refresh"}
-        </button>
-      )}
-      {isAdmin && (
-        <button onClick={() => setUploadOpen(v => !v)}
-          style={actionButton("primary", { active: uploadOpen })}>
-          {uploadOpen ? "Cancel" : "⬆ Upload"}
         </button>
       )}
     </div>
@@ -362,17 +364,12 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
             <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginTop: 6 }}>No weekly data yet</div>
             <div style={{ fontSize: 13, color: "rgba(var(--tint),0.65)", marginTop: 4, maxWidth: 520, lineHeight: 1.6 }}>
               {isAdmin
-                ? "Upload a Customer Invoice Listing on the Data tab (it syncs here automatically), use ⬆ Upload for a one-off week, or hit Refresh if you just added one."
-                : "Waiting for the admin to upload this week's numbers. Pull to refresh once they have."}
+                ? "Upload a Customer Invoice Listing on the Data ⤴ tab — it syncs here automatically. Hit Refresh if the numbers haven't caught up yet."
+                : "Waiting for the admin to upload this week's numbers. Hit Refresh once they have."}
             </div>
           </div>
           {HeaderActions}
         </div>
-        {uploadOpen && (
-          <div style={{ marginTop: 16 }}>
-            <UploadPanel onClose={() => setUploadOpen(false)} onUploaded={onUploaded} seriesColors={SP_COLORS} />
-          </div>
-        )}
       </div>
     );
   }
@@ -424,16 +421,6 @@ export default function WeeklySalesCard({ weeklySales, targets, isAdmin, onUploa
         </div>
         {HeaderActions}
       </div>
-
-      {uploadOpen && (
-        <UploadPanel
-          seriesColors={SP_COLORS}
-          defaultStart={latestPeriod.start}
-          defaultEnd={latestPeriod.end}
-          onClose={() => setUploadOpen(false)}
-          onUploaded={() => { setUploadOpen(false); onUploaded?.(); }}
-        />
-      )}
 
       {/* Month + week navigator. Prev/next hop between months that actually
           have data; the pill row lists every week of the active month, latest
