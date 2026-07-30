@@ -26,14 +26,8 @@ colors:
   series-seed-light: "#7C1968"
   slate-bg: "#0F172A"
   slate-ink: "#F1F5F9"
-  midnight-bg: "#0B1426"
-  midnight-ink: "#E0F2FE"
-  paper-bg: "#FAF7F2"
-  paper-ink: "#1C1917"
   crisp-bg: "#F1F5F9"
   crisp-ink: "#0F172A"
-  carbon-bg: "#000000"
-  carbon-ink: "#FFFFFF"
 typography:
   display:
     fontFamily: "Inter, DM Sans, system-ui, sans-serif"
@@ -157,7 +151,7 @@ The system explicitly rejects two things named in PRODUCT.md. It is not a **spre
 - Flat, even surfaces built from hairline borders and 2–3% tint fills
 - Monospaced figures throughout; the numbers are the interface
 - One accent colour, used only where action is required
-- Five complete themes, dark and light, all first-class
+- Two modes — one dark (Slate), one light (Crisp) — flipped by a single sun/moon toggle, following the phone's system setting until the reader chooses
 - Phone-first: judged at 375px before any desktop view
 
 ## 2. Colors
@@ -175,21 +169,20 @@ The status vocabulary. These four say how a number is performing and nothing els
 - **Info Blue** (#3B82F6): neutral emphasis and non-destructive controls (View, Refresh).
 
 ### Tertiary
-The series vocabulary. Six colours identify a salesperson in a chart and carry no judgement — and there are **two** verified sets, one per theme family, because no single set can clear 3:1 on both a near-black and a near-white background at once. Forcing six colours into that shared luminance band leaves them indistinguishable under colour-blind vision; splitting frees each set to separate by lightness as well as hue. Both were solver-optimised: every colour clears 3:1 on its own backgrounds, and worst-case separation is dE ≥ 20 (normal / protanopia / deuteranopia) and ≥ 15 (tritanopia). Hues stay near each rep's original so people recognise their own.
-- **Dark themes** — Alan #E28B59 · Dino #6890CD · Khen #4DEDE0 · Sakinah #9A3DF0 · Simon #E0D046 · Seed Malaysia #D42F71
-- **Light themes** — Alan #E06711 · Dino #1832C6 · Khen #2A9C70 · Sakinah #C259E2 · Simon #5C5410 · Seed Malaysia #7C1968
+The series vocabulary. Six colours identify a salesperson in a chart and carry no judgement — and there are **two** verified sets, one per mode, because no single set can clear 3:1 on both the dark and light background at once. Forcing six colours into that shared luminance band leaves them indistinguishable under colour-blind vision; splitting frees each set to separate by lightness as well as hue. Both were solver-optimised: every colour clears 3:1 on its own background, and worst-case separation is dE ≥ 20 (normal / protanopia / deuteranopia) and ≥ 15 (tritanopia). Hues stay near each rep's original so people recognise their own.
+- **Dark mode (Slate)** — Alan #E28B59 · Dino #6890CD · Khen #4DEDE0 · Sakinah #9A3DF0 · Simon #E0D046 · Seed Malaysia #D42F71
+- **Light mode (Crisp)** — Alan #E06711 · Dino #1832C6 · Khen #2A9C70 · Sakinah #C259E2 · Simon #5C5410 · Seed Malaysia #7C1968
 
 ### Neutral
-Five complete themes ship, each defining a background, an ink, and a tint triplet that every border, fill and muted text derives from via `rgba(var(--tint), α)`.
-- **Slate** (#0F172A bg / #F1F5F9 ink): the default. Soft dark, low emission for sustained reading.
-- **Midnight** (#0B1426 bg / #E0F2FE ink): deeper, cooler, more contrast between surface and ink.
-- **Paper** (#FAF7F2 bg / #1C1917 ink): warm light.
-- **Crisp** (#F1F5F9 bg / #0F172A ink): cool light. The strongest daylight option.
-- **Carbon** (#000000 bg / #FFFFFF ink): maximum contrast, for the worst lighting or the sharpest eyes.
+Two modes ship — one dark, one light — each defining a background, an ink, and a tint triplet that every border, fill and muted text derives from via `rgba(var(--tint), α)`. They are chosen by a single light/dark toggle; a new reader follows the phone's `prefers-color-scheme` until they pick, and the choice is then remembered.
+- **Slate** (#0F172A bg / #F1F5F9 ink): the dark mode. Soft dark, low emission for sustained reading.
+- **Crisp** (#F1F5F9 bg / #0F172A ink): the light mode. Cool, the strongest daylight option — and a deliberate mirror of Slate, whose background is Crisp's ink and vice versa, so the pair reads as one instrument face flipped rather than two unrelated palettes.
 
-Both the status and series vocabularies are theme-aware: the bright values above are the dark-theme set, and each has a darkened light-theme variant (see the `*-light` tokens in the frontmatter) that clears 4.5:1 on both #F1F5F9 and #FAF7F2 while still giving white text ≥5:1 for button fills. Delivery is split by rendering context: module-level CSS reads `--st-*` custom properties on the theme wrapper; chart fills read a JS `STATUS`/`COLORS` object, because CSS `var()` does not resolve inside an SVG `fill`/`stroke` attribute.
+Both the status and series vocabularies are mode-aware: the bright values above are the dark set, and each has a darkened light variant (see the `*-light` tokens in the frontmatter) that clears 4.5:1 on the #F1F5F9 light background while still giving white text ≥5:1 for button fills. Delivery is split by rendering context: module-level CSS reads `--st-*` custom properties on the theme wrapper; chart fills read a JS `STATUS`/`COLORS` object, because CSS `var()` does not resolve inside an SVG `fill`/`stroke` attribute.
 
-Surface hierarchy inside a theme is built from the tint alone: page background at 0%, cards at 2%, KPI panels at 3%, hover states at 4–5%, borders at 6%.
+Surface hierarchy inside a mode is built from the tint alone: page background at 0%, cards at 2%, KPI panels at 3%, hover states at 4–5%, borders at 6%.
+
+The pre-auth full screens (login, loading, error states) resolve the same mode from a shared `src/lib/theme.js`, so sign-in matches the app the reader lands in rather than being hardcoded dark.
 
 ### Named Rules
 
@@ -197,7 +190,7 @@ Surface hierarchy inside a theme is built from the tint alone: page background a
 
 **The Two-Palette Rule.** Series colours identify *who*; status colours report *how it is going*. They must never be legible as each other, and the two vocabularies are now fully disjoint — the series palette was rebuilt so no rep shares a status hue. Even so, any chart showing both identity and performance should still separate them by position, label, or shape as well as colour.
 
-**The Daylight Rule.** The light themes are not a courtesy. Sunlight readability is a stated product requirement, so no colour decision ships until it has been checked in Crisp as well as Slate. Every status and series colour now has a verified light-theme variant clearing 4.5:1; a value that only resolves on a dark background is unfinished.
+**The Daylight Rule.** The light mode is not a courtesy. Sunlight readability is a stated product requirement, so no colour decision ships until it has been checked in Crisp as well as Slate. Every status and series colour now has a verified light-mode variant clearing 4.5:1; a value that only resolves on a dark background is unfinished.
 
 ## 3. Typography
 
@@ -288,7 +281,7 @@ The system's most repeated object and the one that carries the north star. An up
 - **Don't** drift toward **heavy corporate BI** (Power BI, Tableau): filter rails flanking the content, chrome competing with the numbers, or anything requiring training before a rep can read their own figures.
 - **Don't** put a shadow on a resting surface. Shadows mean "floating and dismissable" — tooltip, modal, login card. Nothing else.
 - **Don't** distinguish salespeople by colour alone in a chart. The palettes are now disjoint (no rep shares a status hue) and per-theme, but colour still needs a second channel — position, a direct label, or the year-line dash pattern.
-- **Don't** hardcode a bright status/series hex as foreground text or a chart fill. Route it through `STATUS.*` (charts) or `var(--st-*)` (CSS) so it picks up the light-theme variant; a raw dark-theme value fails contrast on Paper and Crisp.
+- **Don't** hardcode a bright status/series hex as foreground text or a chart fill. Route it through `STATUS.*` (charts) or `var(--st-*)` (CSS) so it picks up the light-mode variant; a raw dark-mode value fails contrast on Crisp.
 - **Don't** reintroduce a font the interface doesn't use, or inject font `<link>` tags from inside React. Fonts load once from `index.html` (Inter / DM Sans / Space Mono only).
 - **Don't** nest a card inside a card, or reach for a card when a plain section with a heading would do.
 - **Don't** introduce a second sans-serif family. Contrast comes from weight, size, and the mono/proportional split.

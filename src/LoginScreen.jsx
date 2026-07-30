@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase.js";
+// Sign-in follows the same saved/system light-dark mode as the dashboard.
+import { resolveScreenTheme } from "./lib/theme.js";
 
 // LoginScreen handles three phases:
 //   * "signin"  – standard email + password form
@@ -70,23 +72,25 @@ export default function LoginScreen() {
     setBusy(false);
   };
 
+  const t = resolveScreenTheme();
+
   return (
     <div style={{
-      minHeight: "100vh", background: "#0A0A0F", color: "#fff",
+      minHeight: "100vh", background: t.bg, color: t.ink,
       display: "flex", alignItems: "center", justifyContent: "center",
       fontFamily: "'DM Sans',sans-serif",
       backgroundImage: "linear-gradient(135deg, rgba(232,99,59,0.05) 0%, rgba(59,130,246,0.04) 100%)",
     }}>
       <div style={{
-        background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+        background: t.cardBg, border: `1px solid ${t.cardBorder}`,
         borderRadius: 16, padding: "40px 36px", width: "100%", maxWidth: 380,
-        boxShadow: "0 20px 60px rgba(0,0,0,0.5)"
+        boxShadow: t.shadow
       }}>
-        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 2, color: "rgba(255,255,255,0.35)", marginBottom: 8 }}>SEED Malaysia</div>
+        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 2, color: t.eyebrow, marginBottom: 8 }}>SEED Malaysia</div>
         <h1 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 6px 0", letterSpacing: -0.3 }}>
           {mode === "signin" ? "Sales Dashboard" : mode === "forgot" ? "Reset password" : "Set a new password"}
         </h1>
-        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 24 }}>
+        <div style={{ fontSize: 13, color: t.sub, marginBottom: 24 }}>
           {mode === "signin" && "Sign in to view your performance"}
           {mode === "forgot" && "We'll email you a link to set a new password."}
           {mode === "reset"  && "Pick a password you'll remember."}
@@ -94,11 +98,11 @@ export default function LoginScreen() {
 
         {mode === "signin" && (
           <form onSubmit={signIn}>
-            <Field label="Email" type="email" value={email} onChange={setEmail} autoComplete="username" autoFocus />
-            <Field label="Password" type="password" value={password} onChange={setPassword} autoComplete="current-password" />
-            <FormMsg error={error} info={info} />
-            <PrimaryButton busy={busy} label="Sign In" busyLabel="Signing in…" />
-            <SecondaryLink onClick={() => { setMode("forgot"); setError(null); setInfo(null); }}>
+            <Field t={t} label="Email" type="email" value={email} onChange={setEmail} autoComplete="username" autoFocus />
+            <Field t={t} label="Password" type="password" value={password} onChange={setPassword} autoComplete="current-password" />
+            <FormMsg t={t} error={error} info={info} />
+            <PrimaryButton t={t} busy={busy} label="Sign In" busyLabel="Signing in…" />
+            <SecondaryLink t={t} onClick={() => { setMode("forgot"); setError(null); setInfo(null); }}>
               Forgot password?
             </SecondaryLink>
           </form>
@@ -106,10 +110,10 @@ export default function LoginScreen() {
 
         {mode === "forgot" && (
           <form onSubmit={sendReset}>
-            <Field label="Email" type="email" value={email} onChange={setEmail} autoComplete="username" autoFocus />
-            <FormMsg error={error} info={info} />
-            <PrimaryButton busy={busy} label="Send reset link" busyLabel="Sending…" />
-            <SecondaryLink onClick={() => { setMode("signin"); setError(null); setInfo(null); }}>
+            <Field t={t} label="Email" type="email" value={email} onChange={setEmail} autoComplete="username" autoFocus />
+            <FormMsg t={t} error={error} info={info} />
+            <PrimaryButton t={t} busy={busy} label="Send reset link" busyLabel="Sending…" />
+            <SecondaryLink t={t} onClick={() => { setMode("signin"); setError(null); setInfo(null); }}>
               ← Back to sign in
             </SecondaryLink>
           </form>
@@ -117,10 +121,10 @@ export default function LoginScreen() {
 
         {mode === "reset" && (
           <form onSubmit={applyReset}>
-            <Field label="New password" type="password" value={password} onChange={setPassword} autoComplete="new-password" autoFocus />
-            <Field label="Confirm new password" type="password" value={confirm} onChange={setConfirm} autoComplete="new-password" />
-            <FormMsg error={error} info={info} />
-            <PrimaryButton busy={busy} label="Update password" busyLabel="Updating…" />
+            <Field t={t} label="New password" type="password" value={password} onChange={setPassword} autoComplete="new-password" autoFocus />
+            <Field t={t} label="Confirm new password" type="password" value={confirm} onChange={setConfirm} autoComplete="new-password" />
+            <FormMsg t={t} error={error} info={info} />
+            <PrimaryButton t={t} busy={busy} label="Update password" busyLabel="Updating…" />
           </form>
         )}
       </div>
@@ -132,10 +136,10 @@ export default function LoginScreen() {
 // Small presentational primitives kept in-file to keep LoginScreen
 // self-contained.
 // ============================================================
-function Field({ label, type, value, onChange, autoComplete, autoFocus }) {
+function Field({ t, label, type, value, onChange, autoComplete, autoFocus }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <label style={{ display: "block", fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5, color: "rgba(255,255,255,0.4)", marginBottom: 6 }}>{label}</label>
+      <label style={{ display: "block", fontSize: 11, textTransform: "uppercase", letterSpacing: 1.5, color: t.label, marginBottom: 6 }}>{label}</label>
       <input
         type={type}
         value={value}
@@ -145,8 +149,8 @@ function Field({ label, type, value, onChange, autoComplete, autoFocus }) {
         required
         style={{
           width: "100%", boxSizing: "border-box", padding: "10px 14px",
-          background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-          color: "#fff", borderRadius: 8, fontSize: 14, outline: "none",
+          background: t.inputBg, border: `1px solid ${t.inputBorder}`,
+          color: t.ink, borderRadius: 8, fontSize: 14, outline: "none",
           fontFamily: "'DM Sans',sans-serif",
         }}
       />
@@ -154,9 +158,9 @@ function Field({ label, type, value, onChange, autoComplete, autoFocus }) {
   );
 }
 
-function FormMsg({ error, info }) {
+function FormMsg({ t, error, info }) {
   if (!error && !info) return null;
-  const color = error ? "#F87171" : "#34D399";
+  const color = error ? t.bad : t.ok;
   const bg    = error ? "rgba(248,113,113,0.10)" : "rgba(52,211,153,0.10)";
   const border= error ? "rgba(248,113,113,0.25)" : "rgba(52,211,153,0.25)";
   return (
@@ -170,11 +174,11 @@ function FormMsg({ error, info }) {
   );
 }
 
-function PrimaryButton({ busy, label, busyLabel }) {
+function PrimaryButton({ t, busy, label, busyLabel }) {
   return (
     <button type="submit" disabled={busy} style={{
       width: "100%", padding: "12px", fontSize: 14, fontWeight: 600,
-      background: busy ? "rgba(232,99,59,0.5)" : "#E8633B", color: "#fff",
+      background: busy ? t.accentDisabled : t.accent, color: "#fff",
       border: "none", borderRadius: 8, cursor: busy ? "not-allowed" : "pointer",
       fontFamily: "'DM Sans',sans-serif", letterSpacing: 0.3,
     }}>
@@ -183,11 +187,11 @@ function PrimaryButton({ busy, label, busyLabel }) {
   );
 }
 
-function SecondaryLink({ onClick, children }) {
+function SecondaryLink({ t, onClick, children }) {
   return (
     <div style={{ marginTop: 18, fontSize: 12, textAlign: "center" }}>
       <button type="button" onClick={onClick} style={{
-        background: "transparent", border: "none", color: "rgba(255,255,255,0.6)",
+        background: "transparent", border: "none", color: t.link,
         cursor: "pointer", fontSize: 12, fontFamily: "'DM Sans',sans-serif",
         textDecoration: "underline",
       }}>

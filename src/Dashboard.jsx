@@ -2,6 +2,10 @@ import { useState, useMemo, useEffect, useRef, lazy, Suspense } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, ReferenceLine } from "recharts";
 import WeeklySalesCard from "./WeeklySalesCard.jsx";
 import { aggregateProductSales, CATEGORY_COLORS, CATEGORY_ORDER } from "./lib/productCategories.js";
+// The light/dark mode decision is shared with the pre-auth screens (App /
+// LoginScreen) so they agree on the active mode. THEMES below keeps the full
+// per-mode token map the charts need.
+import { DARK_KEY, LIGHT_KEY, prefersLightScheme, migrateThemeKey } from "./lib/theme.js";
 // Admin-only panels. Only one account can open these, so there is no reason
 // for everyone else to download them — and DataTab drags in the xlsx parser.
 const DataTab = lazy(() => import("./DataTab.jsx"));
@@ -281,10 +285,9 @@ const Card = ({children, style}) => (
 // charts (SVG-attr-based fills) get resolved colors, not CSS vars. Crisp mirrors
 // Slate — Slate's background is Crisp's ink and vice versa — so the pair reads
 // as one instrument face flipped, not two unrelated palettes.
+// DARK_KEY / LIGHT_KEY and the mode helpers come from ./lib/theme.js so the
+// pre-auth screens resolve the same mode.
 // ============================================================
-const DARK_KEY = "slate";
-const LIGHT_KEY = "crisp";
-
 const THEMES = {
   slate: {
     series: SERIES_DARK,
@@ -320,24 +323,6 @@ const THEMES = {
   },
 };
 
-// Follow the device's light/dark setting on first load (no saved preference).
-function prefersLightScheme() {
-  try {
-    return typeof window !== "undefined" && !!window.matchMedia
-      && window.matchMedia("(prefers-color-scheme: light)").matches;
-  } catch { return false; }
-}
-
-// Older builds shipped five named themes. Fold any saved value onto the nearest
-// of the two current modes so a returning user never lands on a theme that no
-// longer exists: Paper → Crisp (both light), Midnight/Carbon → Slate (both dark).
-// Returns null for an unrecognised / empty value so the caller can fall back to
-// the system setting.
-function migrateThemeKey(stored) {
-  if (stored === LIGHT_KEY || stored === "paper" || stored === "light") return LIGHT_KEY;
-  if (stored === DARK_KEY || stored === "midnight" || stored === "carbon" || stored === "dark") return DARK_KEY;
-  return null;
-}
 
 export default function Dashboard({ data: incomingData, user, brandsLoading, onLogout, onRefresh }) {
   const isMobile = useMediaQuery("(max-width: 768px)");

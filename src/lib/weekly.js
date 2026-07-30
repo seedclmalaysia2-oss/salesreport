@@ -139,6 +139,26 @@ export async function syncWeeklyFromFiles(files) {
   };
 }
 
+// One press that rebuilds every fact table the dashboard reads, from the newest
+// uploaded/updated files currently in Supabase — customers_data, brand_sales_data
+// and weekly_sales — then leaves it to the caller to re-fetch and re-render.
+// This is exactly what the Data-tab "Recalculate now" runs, minus the checklist
+// UI, so the Weekly card's Refresh can offer the same guarantee: press it and
+// whatever file you just Updated shows immediately.
+//
+// Admin-only in practice: RLS returns non-admins an empty file list, so every
+// sync below is a harmless no-op for them (and they lack write permission
+// regardless). Each helper is idempotent, so running this repeatedly converges.
+export async function recalcAllFacts(files) {
+  const customers = await syncCustomersFromFiles(files);
+  const brands = await syncBrandsFromFiles(files);
+  let weekly = { files: 0, invoices: 0, weeks: 0, rows: 0, periodStart: null, periodEnd: null };
+  if (invoiceFilesFrom(files).length > 0) {
+    weekly = await syncWeeklyFromFiles(files);
+  }
+  return { customers, brands, weekly };
+}
+
 // ============================================================
 // Customer + brand fact-table sync
 // ============================================================

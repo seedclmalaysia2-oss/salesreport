@@ -3,8 +3,9 @@ import { useEffect, useMemo, useState, useRef } from "react";
 // upload needs it, so it must not sit in the initial bundle.
 import { supabase } from "./lib/supabase.js";
 // weekBounds + the rep order are shared with the Data-tab → weekly sync so both
-// paths bucket dates into the exact same Mon–Sun weeks.
-import { weekBounds, REP_ORDER } from "./lib/weekly.js";
+// paths bucket dates into the exact same Mon–Sun weeks. recalcAllFacts lets the
+// Refresh button rebuild every fact table (admins only) before reloading.
+import { weekBounds, REP_ORDER, recalcAllFacts } from "./lib/weekly.js";
 
 // Retail Sales Team = the three reps who count toward the "Sales Team" column.
 // Everyone else only contributes to the "Seed Malaysia" total.
@@ -230,6 +231,7 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
 export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], targets, isAdmin, onUploaded, onRefresh, seriesColors }) {
   const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState(null);
   // onUploaded is retained in the props for backward compatibility with any
   // future ad-hoc upload button, but the card no longer opens an inline
   // upload panel — all uploads live on the Data tab now.
@@ -243,11 +245,37 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weeklySales]);
 
-  const handleRefresh = () => {
+  // Refresh does two different jobs depending on who's pressing it:
+  //   • Admin — a true recalc. Pull the newest files from Supabase (the ones
+  //     just Updated on the Data tab), rebuild every fact table, THEN reload.
+  //     So a file replaced on the Data tab shows on the board in one press,
+  //     without a separate trip to the Data-tab "Recalculate" button.
+  //   • Everyone else — a plain reload. Reps can't write (RLS), so recalc would
+  //     only error; they just re-fetch whatever the admin's last sync produced.
+  // Either way it stays robust: a recalc error falls through to the reload and
+  // surfaces a small note rather than leaving the board stuck.
+  const handleRefresh = async () => {
     if (refreshing || !onRefresh) return;
     setRefreshing(true);
+    setRefreshError(null);
+    if (isAdmin) {
+      try {
+        // files.js pulls in the xlsx parser transitively; import it on demand so
+        // it never weighs down the initial bundle (parser loads xlsx lazily too).
+        const { listFiles } = await import("./lib/files.js");
+        const files = await listFiles();
+        await recalcAllFacts(files);
+      } catch (e) {
+        setRefreshError(
+          `Couldn't recalculate from the files — reloaded the existing numbers instead. ${e?.message || e}`
+        );
+      }
+    }
     onRefresh();
-    setTimeout(() => setRefreshing(false), 6000);
+    // Failsafe: the weeklySales-arrival effect normally stops the spinner, but a
+    // recalc + refetch can take several seconds, so give the admin path room
+    // before force-clearing.
+    setTimeout(() => setRefreshing(false), isAdmin ? 15000 : 6000);
   };
 
   // Build the month + week navigation index. periodsByMonth is an ordered map
@@ -345,22 +373,36 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
   }, [activeMonth, targets]);
 
   // Only Refresh lives in the header now — uploads happen exclusively on the
-  // Data ⤴ tab so admins have one place to manage source files. Refresh pulls
-  // whatever weekly_sales rows are currently in the database after the auto-
-  // sync (invoice-listing uploads on the Data tab re-aggregate every week
-  // from every file, deduped by invoice number, so any refresh here shows the
-  // latest board without needing a second click.)
+  // Data ⤴ tab so admins have one place to manage source files. For an admin,
+  // Refresh recalculates every fact table from the newest files first, then
+  // reloads (see handleRefresh); for everyone else it just re-fetches the
+  // latest weekly_sales rows the admin's last sync produced.
+  const refreshTitle = isAdmin
+    ? "Recalculate from the latest uploaded files, then reload"
+    : "Reload the latest weekly numbers from the database";
+  const refreshBusyLabel = isAdmin ? "Recalculating…" : "Refreshing…";
   const HeaderActions = (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
       {onRefresh && (
-        <button onClick={handleRefresh} disabled={refreshing} title="Reload the latest weekly numbers from the database"
+        <button onClick={handleRefresh} disabled={refreshing} title={refreshTitle}
           style={{ ...actionButton("info"), cursor: refreshing ? "wait" : "pointer" }}>
           {refreshing ? <Spinner /> : <span style={{ fontSize: 14, lineHeight: 1 }}>↻</span>}
-          {refreshing ? "Refreshing…" : "Refresh"}
+          {refreshing ? refreshBusyLabel : "Refresh"}
         </button>
       )}
     </div>
   );
+
+  const RefreshError = refreshError ? (
+    <div style={{
+      marginTop: 12, padding: "8px 12px", borderRadius: 8, fontSize: 12, lineHeight: 1.5,
+      background: "color-mix(in srgb, var(--st-bad) 12%, transparent)",
+      border: "1px solid color-mix(in srgb, var(--st-bad) 35%, transparent)",
+      color: "var(--st-bad)",
+    }}>
+      ⚠ {refreshError}
+    </div>
+  ) : null;
 
   const Eyebrow = (
     <div style={{ fontSize: 11, fontWeight: 700, color: "var(--st-accent)", textTransform: "uppercase", letterSpacing: 1.5 }}>
@@ -388,6 +430,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
           </div>
           {HeaderActions}
         </div>
+        {RefreshError}
       </div>
     );
   }
@@ -443,6 +486,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
         </div>
         {HeaderActions}
       </div>
+      {RefreshError}
 
       {/* Month + week navigator. Prev/next hop between months that actually
           have data; the pill row lists every week of the active month, latest

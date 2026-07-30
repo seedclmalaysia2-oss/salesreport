@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase, fetchAll, aggregateFromRaw } from "./lib/supabase.js";
 import LoginScreen from "./LoginScreen.jsx";
 import Dashboard from "./Dashboard.jsx";
+// Pre-auth full screens follow the same saved/system light-dark mode as the app.
+import { resolveScreenTheme } from "./lib/theme.js";
 // data.json is a ~2.5 MB offline fallback. Importing it statically compiled the
 // whole dataset into the JS bundle, so every visitor downloaded it before the
 // app could start — and then we fetch the live data from Supabase anyway. Load
@@ -12,16 +14,23 @@ const supabaseConfigured = !!(
   import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
-function FullScreenMessage({ title, detail, accent = "#E8633B", children }) {
+function FullScreenMessage({ title, detail, accent, children }) {
+  const t = resolveScreenTheme();
+  // Callers pass a dark-theme hex; map the two known ones to the active mode's
+  // variant so the title still clears contrast on the light background.
+  const resolvedAccent =
+    accent === "#F59E0B" ? t.warn :
+    (accent === "#E8633B" || accent == null) ? t.accent :
+    accent;
   return (
     <div style={{
-      minHeight: "100vh", background: "#0A0A0F", color: "#fff",
+      minHeight: "100vh", background: t.bg, color: t.ink,
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       fontFamily: "'DM Sans',sans-serif", textAlign: "center", padding: 24,
     }}>
-      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 2, color: "rgba(255,255,255,0.35)", marginBottom: 8 }}>SEED Malaysia</div>
-      <h1 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 12px 0", color: accent }}>{title}</h1>
-      {detail && <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", maxWidth: 480, lineHeight: 1.6 }}>{detail}</div>}
+      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 2, color: t.eyebrow, marginBottom: 8 }}>SEED Malaysia</div>
+      <h1 style={{ fontSize: 22, fontWeight: 700, margin: "0 0 12px 0", color: resolvedAccent }}>{title}</h1>
+      {detail && <div style={{ fontSize: 13, color: t.sub, maxWidth: 480, lineHeight: 1.6 }}>{detail}</div>}
       {children}
     </div>
   );
@@ -31,15 +40,16 @@ function FullScreenMessage({ title, detail, accent = "#E8633B", children }) {
 // so a slow network reads as "still working" rather than "frozen". After a
 // while it says so explicitly instead of leaving the user guessing.
 function LoadingScreen({ stage }) {
+  const t = resolveScreenTheme();
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setElapsed(e => e + 1), 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setElapsed(e => e + 1), 1000);
+    return () => clearInterval(timer);
   }, []);
 
   return (
     <div style={{
-      minHeight: "100vh", background: "#0A0A0F", color: "#fff",
+      minHeight: "100vh", background: t.bg, color: t.ink,
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       fontFamily: "'DM Sans',sans-serif", textAlign: "center", padding: 24,
     }}>
@@ -51,34 +61,34 @@ function LoadingScreen({ stage }) {
 
       <div style={{
         width: 54, height: 54, borderRadius: "50%", marginBottom: 22,
-        border: "3px solid rgba(232,99,59,0.15)", borderTopColor: "#E8633B",
+        border: `3px solid ${t.accentDisabled}`, borderTopColor: t.accent,
         animation: "seedspin 0.9s linear infinite",
       }} />
 
-      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 2, color: "rgba(255,255,255,0.35)", marginBottom: 6 }}>
+      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 2, color: t.eyebrow, marginBottom: 6 }}>
         SEED Malaysia
       </div>
       <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 14 }}>Sales Dashboard</div>
 
       <div style={{
         position: "relative", width: "min(280px, 80vw)", height: 4, borderRadius: 2,
-        background: "rgba(255,255,255,0.07)", overflow: "hidden", marginBottom: 14,
+        background: t.track, overflow: "hidden", marginBottom: 14,
       }}>
         <div style={{
           position: "absolute", top: 0, height: "100%", width: "40%", borderRadius: 2,
-          background: "linear-gradient(90deg,transparent,#E8633B,transparent)",
+          background: `linear-gradient(90deg,transparent,${t.accent},transparent)`,
           animation: "seedbar 1.2s ease-in-out infinite",
         }} />
       </div>
 
-      <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", animation: "seedpulse 1.8s ease-in-out infinite" }}>
+      <div style={{ fontSize: 13, color: t.sub, animation: "seedpulse 1.8s ease-in-out infinite" }}>
         {stage}
       </div>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 8, fontFamily: "'Space Mono',monospace" }}>
+      <div style={{ fontSize: 11, color: t.eyebrow, marginTop: 8, fontFamily: "'Space Mono',monospace" }}>
         {elapsed}s
       </div>
       {elapsed >= 8 && (
-        <div style={{ fontSize: 11, color: "rgba(245,158,11,0.75)", marginTop: 12, maxWidth: 320, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 11, color: t.warn, marginTop: 12, maxWidth: 320, lineHeight: 1.6 }}>
           Still working — a slow connection can make the first load take a little longer.
         </div>
       )}
@@ -228,6 +238,10 @@ export default function App() {
     })();
   }, [session, refreshTick]);
 
+  // Palette for the chrome App renders around the app (sign-out button on the
+  // error screen, the stale-data banner). Same mode the Dashboard resolves.
+  const screen = resolveScreenTheme();
+
   if (!supabaseConfigured) {
     return (
       <FullScreenMessage
@@ -246,8 +260,8 @@ export default function App() {
       <FullScreenMessage title="Account not ready" detail={profileError} accent="#F59E0B">
         <button onClick={() => supabase.auth.signOut()} style={{
           marginTop: 20, padding: "8px 18px", fontSize: 13, fontWeight: 600,
-          background: "transparent", border: "1px solid rgba(255,255,255,0.2)",
-          color: "rgba(255,255,255,0.7)", borderRadius: 8, cursor: "pointer",
+          background: "transparent", border: `1px solid ${screen.inputBorder}`,
+          color: screen.sub, borderRadius: 8, cursor: "pointer",
           fontFamily: "'DM Sans',sans-serif",
         }}>Sign out</button>
       </FullScreenMessage>
@@ -262,12 +276,12 @@ export default function App() {
         <div style={{
           position:"sticky",top:0,zIndex:50,
           background:"rgba(245,158,11,0.12)",borderBottom:"1px solid rgba(245,158,11,0.3)",
-          color:"#F59E0B",padding:"8px 20px",fontSize:12,fontFamily:"'DM Sans',sans-serif",
+          color:screen.warn,padding:"8px 20px",fontSize:12,fontFamily:"'DM Sans',sans-serif",
           display:"flex",alignItems:"center",justifyContent:"center",gap:10,flexWrap:"wrap",textAlign:"center"
         }}>
           <span>⚠ Live data backend is unreachable — showing the baked-in snapshot, which may be out of date.</span>
           <button onClick={() => setRefreshTick(t => t + 1)} style={{
-            background:"transparent",border:"1px solid rgba(245,158,11,0.4)",color:"#F59E0B",
+            background:"transparent",border:"1px solid rgba(245,158,11,0.4)",color:screen.warn,
             borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer"
           }}>Retry</button>
         </div>
