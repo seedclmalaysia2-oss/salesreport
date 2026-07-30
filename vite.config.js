@@ -4,6 +4,13 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: { host: 'localhost', port: 5173, strictPort: false },
+  // Vitest. Runs in the Node environment because the units under test are pure
+  // data logic (weekly bucketing, dedupe, fact-table sync) with Supabase mocked
+  // — no DOM needed. `npm test` runs once; `npm run test:watch` re-runs on save.
+  test: {
+    environment: 'node',
+    include: ['src/**/*.{test,spec}.{js,jsx}'],
+  },
   build: {
     rollupOptions: {
       output: {
