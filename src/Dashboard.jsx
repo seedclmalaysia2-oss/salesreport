@@ -10,6 +10,7 @@ import { DARK_KEY, LIGHT_KEY, prefersLightScheme, migrateThemeKey } from "./lib/
 // for everyone else to download them — and DataTab drags in the xlsx parser.
 const DataTab = lazy(() => import("./DataTab.jsx"));
 const AdminUsers = lazy(() => import("./AdminUsers.jsx"));
+const ReportTab = lazy(() => import("./ReportTab.jsx"));
 
 // Uploads used to be parsed into these keys while the dashboard ran open to
 // everyone, and the cache took priority over the server's response. With
@@ -390,7 +391,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   const visibleTabKeys = [
     "overview","monthly","team","customers","yoy","drilldown",
     "brands","cohort","heatmap","targets",
-    ...(user?.isAdmin ? ["data","users"] : []),
+    ...(user?.isAdmin ? ["report","data","users"] : []),
   ];
   const onTablistKeyDown = (e) => {
     const keys = visibleTabKeys;
@@ -982,6 +983,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           <TabButton tabKey="products" active={tab==="products"} onClick={()=>setTab("products")}>Product Sales</TabButton>
           <TabButton tabKey="cohort" active={tab==="cohort"} onClick={()=>setTab("cohort")}>New vs Lost</TabButton>
           <TabButton tabKey="heatmap" active={tab==="heatmap"} onClick={()=>setTab("heatmap")}>Customer × Brand</TabButton>
+          {user?.isAdmin && (
+            <TabButton tabKey="report" active={tab==="report"} onClick={()=>setTab("report")} accent>📄 HQ Report</TabButton>
+          )}
           {user?.isAdmin && (
             <TabButton tabKey="data" active={tab==="data"} onClick={()=>setTab("data")} accent>Data ⤴</TabButton>
           )}
@@ -2202,6 +2206,13 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         {/* Guarded here as well as in the tab bar: hiding a button is not a
             control. Both panels also read through RLS / an admin-only function,
             so a non-admin who forced this state client-side still sees nothing. */}
+        {tab === "report" && (user?.isAdmin
+          ? <Card><Suspense fallback={<div style={{fontSize:13,color:"rgba(var(--tint),0.67)"}}>Loading report generator…</div>}>
+              <ReportTab user={user} data={data} />
+            </Suspense></Card>
+          : <Card><div style={{fontSize:13,color:"rgba(var(--tint),0.67)"}}>Admins only.</div></Card>
+        )}
+
         {tab === "data" && (user?.isAdmin
           ? <Suspense fallback={<Card><div style={{fontSize:13,color:"rgba(var(--tint),0.67)"}}>Loading file manager…</div></Card>}>
               <DataTab user={user} data={data} onRefresh={onRefresh} />
@@ -2218,7 +2229,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
       </div>
 
-      {tab !== "data" && tab !== "users" && <SourceFilesFooter files={data.dataFiles} isAdmin={user?.isAdmin} />}
+      {tab !== "data" && tab !== "users" && tab !== "report" && <SourceFilesFooter files={data.dataFiles} isAdmin={user?.isAdmin} />}
 
       <div style={{textAlign:"center",fontSize:11,color:"rgba(var(--tint),0.67)",padding:"40px 0 20px",fontFamily:"'Space Mono',monospace"}}>
         SEED Malaysia Sales Dashboard · {CUSTOMERS.length.toLocaleString()} customer-year rows · {BRAND_SALES.length.toLocaleString()} brand-sale rows · signed in as {user?.email || "—"}
