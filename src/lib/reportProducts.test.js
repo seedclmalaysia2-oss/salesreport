@@ -41,9 +41,10 @@ describe("HQ-confirmed mappings (2026-07-31)", () => {
     expect(brandToProduct("DISOP ACUAISS ULTRA 10ml")).toBe("DISOP ULTRA EYEDROP");
     expect(brandToProduct("DISOP HidroHealth 360ml (Protein Removal)")).toBe("DISOP H2O2 SOLUTION");
   });
-  it("1D Pure Up = base; MS = multistage", () => {
+  it("1D Pure Up = base; MS = multistage; UP TORIC = astigmatism", () => {
     expect(brandToProduct("1D PURE UP")).toBe("1 DAY PURE");
     expect(brandToProduct("1D PURE UP MS A")).toBe("1 DAY MULSTISTAGE");
+    expect(brandToProduct("1D PURE UP TORIC Trial Lens")).toBe("1 DAY PURE ASTIGMATISM");
   });
   it("accessories by ACC / ACCSD code", () => {
     expect(brandToProduct("ACCSD BATTERY")).toBe("ACCESSORIES/OTHERS");
@@ -80,15 +81,36 @@ describe("aggregateProductMonthly", () => {
     expect(unmapped["NA"]).toEqual({ qty: 4, amount: 44 });
   });
 
-  it("converts PCS trial units to boxes by pack size; boxes count as-is", () => {
+  it("converts trial pieces to boxes by pack size; non-trial boxes count as-is", () => {
     const rows = [
       { date: "2026-02-01", brand: "1D PURE EDOF Trial", qty: 64, amount: 0, uom: "PCS" }, // 64/32 = 2 boxes
       { date: "2026-02-02", brand: "1D PURE EDOF [HIGH]", qty: 3, amount: 420, uom: "BOX" },
-      { date: "2026-02-03", brand: "MC-COCOA BRN", qty: 4, amount: 0, uom: "PCS" }, // 4/2 = 2 boxes (Pegavision)
+      { date: "2026-02-03", brand: "MC-COCOA BRN Trial Lens", qty: 4, amount: 0 }, // 4/2 = 2 boxes (Pegavision)
     ];
     const { products } = aggregateProductMonthly(rows, 2026);
     expect(products["1 DAYPURE EDOF"].qty[1]).toBe(5); // 2 converted + 3 box
     expect(products["MONTHLY COLOR UV - PEGAVISION"].qty[1]).toBe(2);
+  });
+
+  it("HQ trial-lens SKUs: map to the base product; Trial → pieces, no-Trial → boxes", () => {
+    const rows = [
+      // Eye Coffret: trial lens = 10pcs/box; BASE/RICH MAKE = boxes
+      { date: "2026-04-01", brand: "ECB Trial Lens [FOC tie in goods]", qty: 40, amount: 0 }, // 40/10 = 4
+      { date: "2026-04-02", brand: "EC10 BASE MAKE [FOC tie in goods]", qty: 3, amount: 0 },  // 3 boxes
+      // Minasoft 1-day colour: MN- trial = 10pcs/box; MN- SiHy box = as-is
+      { date: "2026-04-03", brand: "MN-Rose Brown Trial Lens (FOC tie in goods)", qty: 20, amount: 0 }, // 2
+      { date: "2026-04-04", brand: "MN-VIOLET SiHy (FOC tie in goods)", qty: 5, amount: 0 },  // 5 boxes
+      // Minasoft Care: trial = 3pcs/box
+      { date: "2026-04-05", brand: "MN-Care UV Trial Lens (FOC tie in goods)", qty: 9, amount: 0 }, // 3
+      // MonthlyPure trial = 6pcs/box → Pure6
+      { date: "2026-04-06", brand: "MonthlyPure Trial Lens [FOC tie in goods]", qty: 12, amount: 0 }, // 2
+    ];
+    const { products, unmapped } = aggregateProductMonthly(rows, 2026);
+    expect(Object.keys(unmapped)).toHaveLength(0);
+    expect(products["EYE COFFRET-M"].qty[3]).toBe(7);          // 4 + 3
+    expect(products["MINASOFT 1DAY COLOR UV"].qty[3]).toBe(7); // 2 + 5
+    expect(products["MINASOFT CARE UV"].qty[3]).toBe(3);
+    expect(products["MONTHLY PURE6"].qty[3]).toBe(2);
   });
 });
 

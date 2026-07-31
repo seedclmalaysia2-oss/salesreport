@@ -60,14 +60,17 @@ const RULES = [
   { test: /^EC\w*30-?M?\s*TORIC|Toric 30[RW]/i, product: "EYE COFFRET-M 30 TORIC" },
   { test: /^EC[A-Z]*\d*-M\b/i,                 product: "EYE COFFRET-M" },
   { test: /Eye Coffret-M/i,                    product: "EYE COFFRET-M" },
+  // Eye Coffret makes & trial lenses without the "-M" suffix (ECB/ECN/ECR, EC10/EC30).
+  { test: /^EC(B|N|R|W|D|10|30|WT)/i,          product: "EYE COFFRET-M" },
 
   // --- 1 Day Pure family ---
   { test: /^1D PURE SILFA/i,                   product: "1 DAY PURE SILFA" },
   { test: /^1D PURE EDOF/i,                    product: "1 DAYPURE EDOF" },
   { test: /^1D PURE (VIEW SUPPORT|VS)\b/i,     product: "1 DAY VIEW SUPPORT" },
-  { test: /^1D PURE UP MS/i,                   product: "1 DAY MULSTISTAGE" },      // review: multistage
+  { test: /^1D PURE UP MS/i,                   product: "1 DAY MULSTISTAGE" },      // multistage
+  { test: /^1D PURE UP TORIC/i,                product: "1 DAY PURE ASTIGMATISM" }, // UP toric = astigmatism
   { test: /^1DPT[\s-]/i,                        product: "1 DAY PURE ASTIGMATISM" }, // toric = astigmatism
-  { test: /^1D PURE UP\b/i,                     product: "1 DAY PURE" },             // review: UP vs base
+  { test: /^1D PURE UP\b/i,                     product: "1 DAY PURE" },             // plain UP = base
   { test: /^1D PURE\b/i,                        product: "1 DAY PURE" },
 
   // --- 2 Week Pure family ---
@@ -83,10 +86,11 @@ const RULES = [
   { test: /MONTHLY FINE/i,                     product: "MONTHLY FINE PLUS" },
   { test: /MONTHLYPURE6/i,                     product: "MONTHLY PURE6" },
   { test: /MONTHLYPURE3/i,                     product: "MONTHLY PURE3" },
+  { test: /^MonthlyPure\b/i,                   product: "MONTHLY PURE6" }, // bare "MonthlyPure Trial" → Pure6 (HQ)
 
-  // --- Minasoft ---
-  { test: /MINASOFT Care UV/i,                 product: "MINASOFT CARE UV" },
-  { test: /MINASOFT (BlueGray|RoseBrown|VIOLET|MN-VIOLET)/i, product: "MINASOFT 1DAY COLOR UV" }, // review
+  // --- Minasoft: "MINASOFT ..." full names and the "MN-" SKU codes (HQ mapping) ---
+  { test: /MINASOFT Care UV|^MN-?\s*Care/i,    product: "MINASOFT CARE UV" },
+  { test: /MINASOFT (BlueGray|RoseBrown|VIOLET|MN-VIOLET)|^MN-/i, product: "MINASOFT 1DAY COLOR UV" },
 
   // --- RGP / specialty ---
   { test: /UV-1( KC)? RGP|^SEED UV-1/i,        product: "RGP UV-1 / UV-1 KC" },
@@ -142,7 +146,6 @@ export function brandToProduct(name) {
 export function aggregateProductMonthly(rows, year) {
   const products = {};
   const unmapped = {};
-  const isPcs = (u) => /^(PCS|PCE|PIECE|PC\b)/i.test(String(u || "").trim());
   for (const r of rows || []) {
     if (!r || !r.date) continue;
     const [y, m] = r.date.split("-").map(Number);
@@ -163,9 +166,10 @@ export function aggregateProductMonthly(rows, year) {
       u.qty += qty; u.amount += amount;
       continue;
     }
-    // Report quantity is in BOXES. Trial units come in PIECES (UOM=PCS) — convert
-    // to boxes by pack size. Everything else is already in boxes/units.
-    if (isPcs(r.uom) && TRIAL_PCS_PER_BOX[product]) qty = qty / TRIAL_PCS_PER_BOX[product];
+    // Report quantity is in BOXES. Trial-lens lines (SKU code "TR" / "Trial" in
+    // the name) are counted in PIECES — convert to boxes by pack size. Non-trial
+    // lines (incl. FOC product boxes) are already in boxes and count as-is.
+    if (/\btrial\b/i.test(name) && TRIAL_PCS_PER_BOX[product]) qty = qty / TRIAL_PCS_PER_BOX[product];
     const p = products[product] ||
       (products[product] = { qty: new Array(12).fill(0), amount: new Array(12).fill(0) });
     p.qty[i] += qty;
