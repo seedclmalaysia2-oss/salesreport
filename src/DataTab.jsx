@@ -554,23 +554,15 @@ export default function DataTab({ data, onRefresh }) {
 
   // Which group sections are expanded. Keys include the group-by axis so
   // switching between Type and Month keeps each layout's open state separate.
+  // Everything starts collapsed on every visit — the admin asked to land on a
+  // tidy, all-hidden list and open only what they need (nothing auto-expands).
   const [openGroups, setOpenGroups] = useState(() => new Set());
-  const [seenGroups, setSeenGroups] = useState(() => new Set());
-  useEffect(() => {
-    if (!grouped.length) return;
-    const scoped = grouped.map(g => `${groupBy}:${g.key}`);
-    const fresh = scoped.filter(k => !seenGroups.has(k));
-    if (!fresh.length) return;
-    setSeenGroups(prev => {
-      const next = new Set(prev); fresh.forEach(k => next.add(k)); return next;
-    });
-    setOpenGroups(prev => {
-      // First render for this axis: open the first (most-relevant) group only.
-      const anyForAxis = [...prev].some(k => k.startsWith(`${groupBy}:`));
-      if (!anyForAxis) return new Set([...prev, scoped[0]]);
-      const next = new Set(prev); fresh.forEach(k => next.add(k)); return next;
-    });
-  }, [grouped, seenGroups, groupBy]);
+
+  // Row selection for bulk delete. Ids reference data_files rows; a soft-delete
+  // (move to trash, restorable) is applied so bulk delete is as safe as the
+  // per-row Remove button.
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const groupKey = (k) => `${groupBy}:${k}`;
   const toggleGroup = (key) => {
@@ -826,6 +818,49 @@ export default function DataTab({ data, onRefresh }) {
     } finally {
       setBusyId(null);
     }
+  };
+
+  // Selection helpers. Selection is over the currently-visible (active) rows;
+  // the master checkbox toggles all of them, an individual box toggles one.
+  const selectedLive = useMemo(
+    () => files.filter(f => selectedIds.has(f.id) && !f.deletedAt),
+    [files, selectedIds]
+  );
+  const allActiveSelected = active.length > 0 && active.every(f => selectedIds.has(f.id));
+  const someActiveSelected = active.some(f => selectedIds.has(f.id)) && !allActiveSelected;
+  const toggleSelectAll = () => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (active.every(f => next.has(f.id))) active.forEach(f => next.delete(f.id));
+    else active.forEach(f => next.add(f.id));
+    return next;
+  });
+  const toggleSelectOne = (id) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const onBulkDelete = async () => {
+    const targets = selectedLive;
+    if (!targets.length) return;
+    if (!confirm(`Move ${targets.length} file${targets.length === 1 ? "" : "s"} to trash? You can restore them later.`)) return;
+    setBulkBusy(true);
+    setError(null);
+    setNotice(null);
+    const failures = [];
+    for (const entry of targets) {
+      try {
+        const updated = await softDeleteFile(entry);
+        setFiles(prev => prev.map(f => (f.id === updated.id ? updated : f)));
+      } catch (e) {
+        failures.push(`${entry.name}: ${fmtErr(e)}`);
+      }
+    }
+    setBulkBusy(false);
+    clearSelection();
+    if (failures.length) setError(`${failures.length} file(s) could not be removed:\n${failures.join("\n")}`);
+    else setNotice(`Moved ${targets.length} file${targets.length === 1 ? "" : "s"} to trash.`);
   };
 
   const validNames = selectedFiles.filter(f => parseFilename(f.name));
@@ -1093,8 +1128,8 @@ export default function DataTab({ data, onRefresh }) {
             )}
             {grouped.length > 1 && (
               <>
-                <button onClick={expandAllGroups} style={actionBtn("rgba(255,255,255,0.5)")} title="Expand every group">Expand all</button>
-                <button onClick={collapseAllGroups} style={actionBtn("rgba(255,255,255,0.5)")} title="Collapse every group">Collapse all</button>
+                <button onClick={expandAllGroups} style={actionBtn("#3B82F6")} title="Expand every group">Expand all</button>
+                <button onClick={collapseAllGroups} style={actionBtn("#3B82F6")} title="Collapse every group">Collapse all</button>
               </>
             )}
             <button onClick={refresh} style={actionBtn("#3B82F6")}>↻ Refresh</button>
@@ -1125,10 +1160,46 @@ export default function DataTab({ data, onRefresh }) {
             </button>
           </div>
         ) : (
+          <>
+            {selectedLive.length > 0 && (
+              <div style={{
+                display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:12,
+                padding:"10px 14px",borderRadius:10,
+                background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.3)",
+              }}>
+                <span style={{fontSize:12,fontWeight:600,color:"var(--text)"}}>
+                  {selectedLive.length} file{selectedLive.length===1?"":"s"} selected
+                </span>
+                <button
+                  onClick={onBulkDelete}
+                  disabled={bulkBusy}
+                  style={{
+                    display:"inline-flex",alignItems:"center",gap:6,
+                    background: bulkBusy ? "rgba(248,113,113,0.4)" : "#F87171",
+                    color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",
+                    fontSize:12,fontWeight:700,cursor: bulkBusy ? "wait" : "pointer",
+                    fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
+                  }}>
+                  {bulkBusy ? "Removing…" : `🗑 Move ${selectedLive.length} to trash`}
+                </button>
+                <button onClick={clearSelection} disabled={bulkBusy} style={actionBtn("rgba(var(--tint),0.6)", bulkBusy)}>Clear</button>
+                <span style={{fontSize:11,color:"rgba(var(--tint),0.55)"}}>Moves to trash — restorable</span>
+              </div>
+            )}
           <div style={{overflowX:"auto",border:"1px solid rgba(var(--tint),0.06)",borderRadius:10}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
               <thead>
                 <tr style={{background:"rgba(var(--tint),0.03)"}}>
+                  <th style={{...thStyle,width:34,textAlign:"center",padding:"10px 8px"}}>
+                    <input
+                      type="checkbox"
+                      checked={allActiveSelected}
+                      ref={el => { if (el) el.indeterminate = someActiveSelected; }}
+                      onChange={toggleSelectAll}
+                      title="Select all files"
+                      style={{cursor:"pointer",accentColor:"#F87171"}}
+                    />
+                  </th>
                   <SortHeader label="File" k="name" />
                   <SortHeader label="Type" k="kind" />
                   <SortHeader label="Size" k="sizeBytes" />
@@ -1143,7 +1214,7 @@ export default function DataTab({ data, onRefresh }) {
                     <Fragment key={group.key}>
                       <tr onClick={() => toggleGroup(group.key)}
                           style={{cursor:"pointer",background:`${group.color}12`}}>
-                        <td colSpan={5} style={{
+                        <td colSpan={6} style={{
                           padding:"9px 14px",
                           borderTop:`1px solid ${group.color}33`,
                           borderLeft:`3px solid ${group.color}`,
@@ -1160,7 +1231,16 @@ export default function DataTab({ data, onRefresh }) {
                         </td>
                       </tr>
                       {isOpen && group.entries.map(entry => (
-                        <tr key={entry.id}>
+                        <tr key={entry.id} style={selectedIds.has(entry.id) ? {background:"rgba(248,113,113,0.06)"} : undefined}>
+                          <td style={{...tdStyle,textAlign:"center",width:34,padding:"10px 8px"}}>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(entry.id)}
+                              onChange={() => toggleSelectOne(entry.id)}
+                              title="Select this file"
+                              style={{cursor:"pointer",accentColor:"#F87171"}}
+                            />
+                          </td>
                           <td style={{...tdStyle,minWidth:280}}>
                             <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
                               <span style={{color: kindColor(entry.kind),fontSize:14,marginTop:1,flexShrink:0}}>📄</span>
@@ -1195,6 +1275,7 @@ export default function DataTab({ data, onRefresh }) {
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         {trashed.length > 0 && (
@@ -1373,14 +1454,27 @@ function DataSourceStatus({ data }) {
   const brandByKey = new Map();
   brandRows.forEach(r => brandByKey.set(`${r.sp}|${r.year}`, (brandByKey.get(`${r.sp}|${r.year}`) || 0) + 1));
 
+  // Collapsed by default — the admin asked this section to stay hidden on visit
+  // and be opened only when they want to inspect coverage.
+  const [open, setOpen] = useState(false);
+
   return (
     <Card>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
-        <div style={{fontSize:14,fontWeight:600}}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",
+          width:"100%",background:"transparent",border:"none",padding:0,cursor:"pointer",
+          color:"var(--text)",textAlign:"left",fontFamily:"'DM Sans',sans-serif",
+          marginBottom: open ? 14 : 0,
+        }}>
+        <div style={{fontSize:14,fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{color:"rgba(var(--tint),0.6)",fontFamily:"'Space Mono',monospace",fontSize:12}}>{open ? "▾" : "▸"}</span>
           🗂️ Dataset coverage <span style={{color:"rgba(var(--tint),0.65)",fontWeight:400,fontSize:12}}>· {sps.length} salespeople × {years.length} years</span>
         </div>
-        <div style={{fontSize:11,color:"rgba(var(--tint),0.67)"}}>each cell shows customer / brand-sale row count</div>
-      </div>
+        <span style={{fontSize:11,color:"rgba(var(--tint),0.67)"}}>{open ? "each cell shows customer / brand-sale row count" : "click to show"}</span>
+      </button>
+      {open && (<>
       <div style={{overflow:"auto",border:"1px solid rgba(var(--tint),0.06)",borderRadius:10}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
           <thead>
@@ -1424,6 +1518,7 @@ function DataSourceStatus({ data }) {
         <span>c = customer-year rows (monthly sales)</span>
         <span>b = brand-sale rows (per-customer × brand)</span>
       </div>
+      </>)}
     </Card>
   );
 }
