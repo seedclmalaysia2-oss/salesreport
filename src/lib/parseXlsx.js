@@ -378,6 +378,7 @@ function findStockDetailLayout(rows) {
     const docCol = row.findIndex(c => typeof c === "string" && /^Document\s*No/i.test(c.trim()));
     const spCol  = row.findIndex(c => typeof c === "string" && /^Sales(man|_?person|_?ID)?$/i.test(c.trim()));
     const amtCol = row.findIndex(c => typeof c === "string" && /^Net\s*Sales$/i.test(c.trim()));
+    const qtyCol = row.findIndex(c => typeof c === "string" && /^Quantity$/i.test(c.trim()));
     if (docCol >= 0 && amtCol >= 0) {
       return {
         headerRow: r,
@@ -388,6 +389,10 @@ function findStockDetailLayout(rows) {
         // both known layouts.
         spCol: spCol >= 0 ? spCol : docCol + 1,
         amtCol,
+        // Quantity header when present. In some exports the numeric value lands
+        // one column RIGHT of the header (merged header cell), so the reader
+        // below checks qtyCol and qtyCol+1.
+        qtyCol: qtyCol >= 0 ? qtyCol : -1,
       };
     }
   }
@@ -397,14 +402,25 @@ function findStockDetailLayout(rows) {
 function parseStockDetailRows(rows) {
   const layout = findStockDetailLayout(rows);
   if (!layout) return [];
-  const { headerRow, dateCol, docCol, spCol, amtCol } = layout;
+  const { headerRow, dateCol, docCol, spCol, amtCol, qtyCol } = layout;
 
   const out = [];
+  let currentBrand = null;
   for (let i = headerRow + 1; i < rows.length; i++) {
     const row = rows[i]; if (!row) continue;
-    // 'Brand' rows separate one brand's block from the next; they sit in
-    // dateCol and carry no numeric data.
-    if (row[dateCol] === "Brand") continue;
+    // 'Brand' rows separate one brand's block from the next. They carry the
+    // brand name — captured here so every following line inherits it, which is
+    // what the HQ product report needs. The name is the rightmost non-empty
+    // string on the row (a short brand code, if present, sits to its left).
+    if (row[dateCol] === "Brand") {
+      let name = null;
+      for (let c = row.length - 1; c > dateCol; c--) {
+        const v = row[c];
+        if (typeof v === "string" && v.trim()) { name = v.trim(); break; }
+      }
+      currentBrand = name;
+      continue;
+    }
     const dateStr = row[dateCol];
     if (typeof dateStr !== "string") continue;
     const sp = canonInvoiceSp(row[spCol]);
@@ -414,6 +430,13 @@ function parseStockDetailRows(rows) {
     const date = parseAutocountDate(dateStr);
     if (!date) continue;
     const doc = row[docCol] ?? null;
+    // Quantity: prefer the header column; fall back one column right when the
+    // export merged the header cell (the value then sits at qtyCol+1).
+    let qty = 0;
+    if (qtyCol >= 0) {
+      qty = typeof row[qtyCol] === "number" ? row[qtyCol]
+          : typeof row[qtyCol + 1] === "number" ? row[qtyCol + 1] : 0;
+    }
     out.push({
       date,
       // Reuse the invoice-row shape so downstream (weekly sync, dedupe)
@@ -423,6 +446,9 @@ function parseStockDetailRows(rows) {
       customer: null,
       amount: Math.round(amount * 100) / 100,
       sp,
+      // Extra fields for the HQ product report; the weekly path ignores them.
+      brand: currentBrand,
+      qty,
     });
   }
   return out;

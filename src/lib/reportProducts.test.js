@@ -2,7 +2,7 @@
 // the unambiguous rules; the flagged-for-review cases (MC colour split, DISOP
 // variants, overseas BOC) are intentionally NOT asserted until confirmed.
 import { describe, it, expect } from "vitest";
-import { brandToProduct, isFreeOrSample, REPORT_PRODUCTS } from "./reportProducts.js";
+import { brandToProduct, isFreeOrSample, REPORT_PRODUCTS, aggregateProductMonthly } from "./reportProducts.js";
 
 describe("brandToProduct — unambiguous rules", () => {
   it("1-day pure torics → astigmatism", () => {
@@ -57,6 +57,26 @@ describe("exclusions", () => {
     expect(brandToProduct("1D PURE EDOF HIGH [FOC tie in goods]")).toBeNull();
     expect(brandToProduct("DISOP ACUAISS ULTRA 10ml SAMPLE")).toBeNull();
     expect(brandToProduct("NA")).toBeNull();
+  });
+});
+
+describe("aggregateProductMonthly", () => {
+  it("buckets by product & calendar month; excludes FOC, other years, unmapped", () => {
+    const rows = [
+      { date: "2026-03-10", brand: "1D PURE EDOF [HIGH]", qty: 2, amount: 280 },
+      { date: "2026-03-12", brand: "ECB10-M BASE MAKE", qty: 5, amount: 200 },
+      { date: "2026-07-01", brand: "1D PURE EDOF [LOW]", qty: 1, amount: 140 },
+      { date: "2026-03-15", brand: "1D PURE EDOF HIGH [FOC tie in goods]", qty: 3, amount: 0 },
+      { date: "2025-03-01", brand: "1D PURE EDOF [MID]", qty: 9, amount: 9 },
+      { date: "2026-03-20", brand: "NA", qty: 4, amount: 44 },
+    ];
+    const { products, unmapped } = aggregateProductMonthly(rows, 2026);
+    expect(products["1 DAYPURE EDOF"].qty[2]).toBe(2);    // March
+    expect(products["1 DAYPURE EDOF"].amount[2]).toBe(280);
+    expect(products["1 DAYPURE EDOF"].qty[6]).toBe(1);    // July
+    expect(products["EYE COFFRET-M"].qty[2]).toBe(5);
+    expect(products["1 DAYPURE EDOF"].qty.reduce((a, b) => a + b, 0)).toBe(3); // FOC + 2025 excluded
+    expect(unmapped["NA"]).toEqual({ qty: 4, amount: 44 });
   });
 });
 

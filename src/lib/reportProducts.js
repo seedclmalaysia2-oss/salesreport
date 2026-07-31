@@ -114,6 +114,42 @@ export function brandToProduct(name) {
   return null; // unmapped — surfaced to the admin, never silently counted
 }
 
+// Roll Stock-Detail lines up into the HQ monthly grid.
+// `rows` are parsed Stock-Detail rows: { date:"YYYY-MM-DD", brand, qty, amount, sp }.
+// Returns { products, unmapped, months } where products[name] = { qty:[12], amount:[12] }
+// (calendar-month index 0=Jan) and `unmapped` lists brand → totals that matched no
+// report row, so the admin can see (and we can fix) anything falling through.
+export function aggregateProductMonthly(rows, year) {
+  const products = {};
+  const unmapped = {};
+  for (const r of rows || []) {
+    if (!r || !r.date) continue;
+    const [y, m] = r.date.split("-").map(Number);
+    if (y !== year || !(m >= 1 && m <= 12)) continue;
+    const i = m - 1;
+    const qty = Number(r.qty) || 0;
+    const amount = Number(r.amount) || 0;
+    const product = brandToProduct(r.brand);
+    if (!product) {
+      if (r.brand && !isFreeOrSample(r.brand)) {
+        const u = unmapped[r.brand] || (unmapped[r.brand] = { qty: 0, amount: 0 });
+        u.qty += qty; u.amount += amount;
+      }
+      continue;
+    }
+    const p = products[product] ||
+      (products[product] = { qty: new Array(12).fill(0), amount: new Array(12).fill(0) });
+    p.qty[i] += qty;
+    p.amount[i] += amount;
+  }
+  // round to 2dp so floating error doesn't leak into the export
+  for (const p of Object.values(products)) {
+    p.qty = p.qty.map(v => Math.round(v * 100) / 100);
+    p.amount = p.amount.map(v => Math.round(v * 100) / 100);
+  }
+  return { products, unmapped };
+}
+
 // Remaining items to watch (confirmed rules above are per HQ 2026-07-31).
 export const REVIEW_NOTES = [
   "BREATH O CORRECT (OVERSEAS) has no rule yet — stays 0 until HQ sends the overseas file.",
