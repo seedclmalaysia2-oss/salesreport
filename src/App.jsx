@@ -189,12 +189,12 @@ export default function App() {
         // can show which archived files feed the current view. RLS on
         // data_files returns empty for non-admins, so the extra fetch is a
         // no-op for them — no server-side gate needed here.
-        const [customers, targets, weekly, invoiceFiles] = await Promise.all([
+        const [customers, targets, weekly, allFiles] = await Promise.all([
           fetchAll("customers_data", "sp,year,customer,months,total"),
           fetchAll("sales_targets", "year,month,sp,target_amt"),
           fetchAll("weekly_sales", "period_start,period_end,sp,amount,uploaded_at"),
-          fetchAll("data_files", "id,name,kind,uploaded_at,deleted_at")
-            .then(rows => rows.filter(r => r.kind === "invoice" && !r.deleted_at))
+          fetchAll("data_files", "id,name,kind,sp,year,uploaded_at,deleted_at")
+            .then(rows => rows.filter(r => !r.deleted_at))
             .catch(() => []),
         ]);
 
@@ -207,9 +207,15 @@ export default function App() {
             periodStart: w.period_start, periodEnd: w.period_end,
             sp: w.sp, amount: Number(w.amount), uploadedAt: w.uploaded_at,
           }));
-          aggregated.invoiceFiles = invoiceFiles.map(f => ({
+          aggregated.invoiceFiles = allFiles.filter(f => f.kind === "invoice").map(f => ({
             id: f.id,
             name: f.name,
+            uploadedAt: f.uploaded_at ? new Date(f.uploaded_at).getTime() : null,
+          }));
+          // Every live source file (customer / brand / invoice) with its year, so
+          // the dashboard footer can show which file feeds each view.
+          aggregated.dataFiles = allFiles.map(f => ({
+            name: f.name, kind: f.kind, sp: f.sp, year: f.year,
             uploadedAt: f.uploaded_at ? new Date(f.uploaded_at).getTime() : null,
           }));
           return aggregated;

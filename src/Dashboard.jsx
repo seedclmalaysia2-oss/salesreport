@@ -329,6 +329,58 @@ const THEMES = {
 };
 
 
+// Source-file footer — shows which uploaded file feeds each data view, so a
+// missing or wrong number on any page traces straight to the file to re-upload.
+// One chip per (kind, year), newest upload wins. RLS hides the file list from
+// non-admins, so `files` is empty for them and this simply doesn't render.
+function SourceFilesFooter({ files }) {
+  const latest = new Map(); // "kind|year" -> newest file
+  for (const f of files || []) {
+    if (!f || !f.kind) continue;
+    const key = `${f.kind}|${f.year ?? "—"}`;
+    const cur = latest.get(key);
+    if (!cur || (f.uploadedAt || 0) > (cur.uploadedAt || 0)) latest.set(key, f);
+  }
+  const byKind = { customer: [], brand: [], invoice: [] };
+  for (const f of latest.values()) if (byKind[f.kind]) byKind[f.kind].push(f);
+  for (const arr of Object.values(byKind)) arr.sort((a, b) => (b.year || 0) - (a.year || 0));
+
+  const LABELS = { customer: "Customer sales", brand: "Brand sales", invoice: "Weekly (invoices)" };
+  const kinds = ["customer", "brand", "invoice"].filter(k => byKind[k].length);
+  if (!kinds.length) return null;
+  const shortDate = (ms) => ms ? new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—";
+  const longDate = (ms) => ms ? new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
+
+  return (
+    <div style={{ marginTop: 28, padding: "18px 20px", background: "rgba(var(--tint),0.02)", border: "1px solid rgba(var(--tint),0.08)", borderRadius: 14 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, color: "rgba(var(--tint),0.7)", marginBottom: 12 }}>
+        Data sources · latest file per year
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {kinds.map(kind => (
+          <div key={kind} style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)", minWidth: 128 }}>{LABELS[kind]}</span>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {byKind[kind].map(f => (
+                <span key={f.name} title={`${f.name} · uploaded ${longDate(f.uploadedAt)}`} style={{
+                  fontSize: 11.5, fontFamily: "'Space Mono',monospace", color: "rgba(var(--tint),0.8)",
+                  background: "rgba(var(--tint),0.05)", border: "1px solid rgba(var(--tint),0.12)",
+                  borderRadius: 6, padding: "3px 9px", whiteSpace: "nowrap",
+                }}>
+                  {f.year ?? "—"} · {shortDate(f.uploadedAt)}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11.5, color: "rgba(var(--tint),0.7)", marginTop: 14, lineHeight: 1.55 }}>
+        Numbers off or missing on a page? Update the matching file on the <strong style={{ color: "var(--text)" }}>Data ⤴</strong> tab — the newest upload per year wins.
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard({ data: incomingData, user, brandsLoading, onLogout, onRefresh }) {
   const isMobile = useMediaQuery("(max-width: 768px)");
   const isNarrow = useMediaQuery("(max-width: 1100px)");
@@ -2170,7 +2222,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
       </div>
 
-      <div style={{textAlign:"center",fontSize:11,color:"rgba(var(--tint),0.5)",padding:"40px 0 20px",fontFamily:"'Space Mono',monospace"}}>
+      {tab !== "data" && tab !== "users" && <SourceFilesFooter files={data.dataFiles} />}
+
+      <div style={{textAlign:"center",fontSize:11,color:"rgba(var(--tint),0.67)",padding:"40px 0 20px",fontFamily:"'Space Mono',monospace"}}>
         SEED Malaysia Sales Dashboard · {CUSTOMERS.length.toLocaleString()} customer-year rows · {BRAND_SALES.length.toLocaleString()} brand-sale rows · signed in as {user?.email || "—"}
       </div>
     </div>
