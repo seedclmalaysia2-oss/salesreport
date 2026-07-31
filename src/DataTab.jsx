@@ -873,7 +873,7 @@ export default function DataTab({ data, onRefresh }) {
               Recalculate dashboard
             </div>
             <div style={{fontSize:12,color:"rgba(var(--tint),0.72)",lineHeight:1.5}}>
-              Reload the file library, replay invoice listings into the Weekly Sales board, and re-fetch every table on every tab. Each step below turns green as it completes.
+              Rebuilds every chart on every tab from your uploaded files — pushes each file's saved customer, brand, and invoice rows into the customer, brand, and Weekly Sales tables, then re-fetches everything. Uses the uploaded files' saved data, <strong style={{color:"var(--text)"}}>not a re-download</strong> (that's Reprocess). A data type whose file was removed is left untouched — never wiped. Each step below turns green as it completes.
             </div>
           </div>
           {lastRecalcAt && !recalculating && (
