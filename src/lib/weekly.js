@@ -223,31 +223,45 @@ export async function syncCustomersFromFiles(files) {
   const scopeLabels = [];
   const skipped = [];
   for (const f of winners) {
-    const rows = (f.rows || [])
-      .filter((r) => r && r.customer)
-      .map((r) => ({
+    // Split the file's rows by their per-row salesperson. The year-only exports
+    // ("2026 Sales Analysis by customer.xlsx") carry a Salesman column, so ONE
+    // file feeds several (sp, year) scopes — attributing each customer to their
+    // rep is the whole reason that column exists. Rows with no recognised
+    // salesman fall back to the file's own sp: legacy per-SP exports set that
+    // from the filename ("Alan 2025 …"), and a year-only file with an unreadable
+    // salesman lands in "All". Before this, the per-row sp was dropped and every
+    // customer was written under a single f.sp bucket ("All" for year-only
+    // files), so the per-salesperson customer analysis silently went missing.
+    const groups = new Map(); // sp -> [{customer, months, total}]
+    for (const r of f.rows || []) {
+      if (!r || !r.customer) continue;
+      const sp = r.sp || f.sp || "All";
+      if (!groups.has(sp)) groups.set(sp, []);
+      groups.get(sp).push({
         customer: r.customer,
         months:
           Array.isArray(r.months) && r.months.length === 12
             ? r.months.map((m) => Number(m) || 0)
             : new Array(12).fill(0),
         total: Number(r.total) || 0,
-      }));
-    if (rows.length === 0) {
+      });
+    }
+    if (groups.size === 0) {
       skipped.push(`${f.sp} ${f.year} (0 rows)`);
       continue;
     }
-    const { data, error } = await supabase.rpc("replace_customers_data", {
-      p_sp: f.sp,
-      p_year: f.year,
-      p_rows: rows,
-    });
-    if (error) {
-      throw new Error(`Replacing ${f.sp} ${f.year} failed: ${error.message}`);
+    for (const [sp, rows] of groups) {
+      const { data, error } = await supabase.rpc("replace_customers_data", {
+        p_sp: sp,
+        p_year: f.year,
+        p_rows: rows,
+      });
+      if (error) {
+        throw new Error(`Replacing ${sp} ${f.year} failed: ${error.message}`);
+      }
+      totalInserted += data?.[0]?.inserted ?? rows.length;
+      scopeLabels.push(`${sp} ${f.year}`);
     }
-    const inserted = data?.[0]?.inserted ?? rows.length;
-    totalInserted += inserted;
-    scopeLabels.push(`${f.sp} ${f.year}`);
   }
   return {
     files: winners.length,

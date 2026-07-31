@@ -189,6 +189,28 @@ describe("syncCustomersFromFiles", () => {
     expect(res.skipped).toEqual(["Dino 2026 (0 rows)"]);
   });
 
+  it("splits a year-only file by its per-row salesperson (the Salesman column)", async () => {
+    // "2026 Sales Analysis by customer.xlsx" is sp="All" at the file level but
+    // carries a Salesman column per row. It must fan out into one scope per rep,
+    // never a single "All" bucket — the bug that made the per-salesperson
+    // customer analysis silently disappear.
+    const yearFile = [{
+      id: "y1", kind: "customer", sp: "All", year: 2026, deletedAt: null, uploadedAt: 3000,
+      rows: [
+        { sp: "Alan", customer: "A", months: months12(95), total: 95 },
+        { sp: "Dino", customer: "B", months: months12(80), total: 80 },
+        { sp: "Alan", customer: "C", months: months12(5),  total: 5 },
+        { sp: "Khen", customer: "D", months: months12(72), total: 72 },
+      ],
+    }];
+    const res = await syncCustomersFromFiles(yearFile);
+    const bySp = Object.fromEntries(H.state.rpcs.map(c => [c.args.p_sp, c.args.p_rows.length]));
+    expect(bySp).toEqual({ Alan: 2, Dino: 1, Khen: 1 });
+    expect(H.state.rpcs.every(c => c.args.p_year === 2026)).toBe(true);
+    expect(H.state.rpcs.some(c => c.args.p_sp === "All")).toBe(false);
+    expect(res.scopes).toBe(3);
+  });
+
   it("surfaces an RPC error instead of silently losing data", async () => {
     H.state.rpcError = { message: "permission denied" };
     await expect(syncCustomersFromFiles([
