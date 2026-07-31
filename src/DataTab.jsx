@@ -722,7 +722,27 @@ export default function DataTab({ data, onRefresh }) {
       const updated = await replaceFile(target, file, parsed);
       const nextFiles = files.map(f => (f.id === updated.id ? updated : f));
       setFiles(nextFiles);
-      setNotice(`"${updated.name}" replaced.`);
+      // Kind-aware confirmation. The recurring confusion: updating a
+      // "Sales Analysis by customer" file leaves the Weekly Sales card
+      // unchanged, because that card is fed ONLY by the invoice-kind file
+      // (Stock Sales Analysis - Detail / Customer Invoice Listing) — never by
+      // customer or brand files. Say so here so nobody expects a customer or
+      // brand update to move the weekly numbers. Invoice updates fall through
+      // to runWeeklySync below, which sets its own "Weekly Sales updated…" note.
+      if (updated.kind === "customer") {
+        setNotice(
+          `"${updated.name}" replaced — customer charts updated. ` +
+          `Heads up: the Weekly Sales card reads the "Stock Sales Analysis - Detail" file, ` +
+          `not this one — update that file to refresh the weekly numbers.`
+        );
+      } else if (updated.kind === "brand") {
+        setNotice(
+          `"${updated.name}" replaced — brand charts updated. ` +
+          `(The Weekly Sales card is fed by the "Stock Sales Analysis - Detail" file, not this one.)`
+        );
+      } else {
+        setNotice(`"${updated.name}" replaced.`);
+      }
       // Replacing a workbook is the whole point of the Update button — the
       // dashboard must reflect the newer numbers immediately. Route each kind
       // through its fact-table sync, then nudge every chart to recompute.
