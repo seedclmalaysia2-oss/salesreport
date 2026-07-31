@@ -75,9 +75,11 @@ const RULES = [
   { test: /^2UWKA/i,                            product: "2 WEEK PURE UP TORIC" },
   { test: /^2W\w* PURE UP/i,                    product: "2 WEEK PURE UP" },
 
-  // --- Monthly ---
+  // --- Monthly Color: MCII- is the "II" line; MC- splits by colour (HQ mapping) ---
   { test: /^MCII-/i,                           product: "MONTHLY COLOR UV  II" },
-  { test: /^MC-/i,                             product: "MONTHLY COLOR UV - BLUE" }, // REVIEW: colour→sub-line unknown
+  { test: /^MC-(COCOA|GOLD|PINK)/i,            product: "MONTHLY COLOR UV - PEGAVISION" },
+  { test: /^MC-(NAT|GLIT|FIRE)/i,              product: "MONTHLY COLOR UV - BLUE" },
+  { test: /^MC-(SPARK|JADE|SHINING)/i,         product: "MONTHLY COLOR UV - ORANGE" },
   { test: /MONTHLY FINE/i,                     product: "MONTHLY FINE PLUS" },
   { test: /MONTHLYPURE6/i,                     product: "MONTHLY PURE6" },
   { test: /MONTHLYPURE3/i,                     product: "MONTHLY PURE3" },
@@ -91,13 +93,16 @@ const RULES = [
   { test: /AS[\s-]?LUNA|O2 NOAH/i,             product: "RGP AS-LUNA/O2 NOAH" },
   { test: /IRIS/i,                             product: "IRIS LENS" },
   { test: /^UV /i,                             product: "ULTRA VISION" },           // UV AVANTI/DURAWAVE/etc.
-  { test: /BOC|ORTHO-?K/i,                     product: "BREATH O CORRECT" },       // review: overseas split
+  { test: /BOC|ORTHO-?K/i,                     product: "BREATH O CORRECT" },       // overseas split ships separately
   { test: /Wohlk|WHCL/i,                       product: "Wohlk KE RGP" },
 
-  // --- Solutions / drops ---
-  { test: /DISOP.*(H2O2|H202)/i,               product: "DISOP H2O2 SOLUTION" },
-  { test: /DISOP.*(ULTRA|ACUAISS ULTRA)/i,     product: "DISOP ULTRA EYEDROP" },
-  { test: /DISOP/i,                            product: "DISOP H2O2 SOLUTION" },    // REVIEW: DUAL GEL / HidroHealth
+  // --- DISOP solutions / drops (HQ: DUAL GEL & ACUAISS are eyedrop; HidroHealth is H2O2) ---
+  { test: /DISOP.*(ULTRA|DUAL GEL|ACUAISS)/i,  product: "DISOP ULTRA EYEDROP" },
+  { test: /DISOP.*(H2O2|H202|HidroHealth)/i,   product: "DISOP H2O2 SOLUTION" },
+  { test: /DISOP/i,                            product: "DISOP H2O2 SOLUTION" },
+
+  // --- Accessories / other — items coded ACC / ACCSD ---
+  { test: /\bACCSD\b|\bACC\b|ACCESSOR/i,       product: "ACCESSORIES/OTHERS" },
 ];
 
 export function brandToProduct(name) {
@@ -109,11 +114,10 @@ export function brandToProduct(name) {
   return null; // unmapped — surfaced to the admin, never silently counted
 }
 
-// SKUs whose mapping is a guess and needs a human's eye (shown in the review UI).
+// Remaining items to watch (confirmed rules above are per HQ 2026-07-31).
 export const REVIEW_NOTES = [
-  "MC-* colours currently all map to 'MONTHLY COLOR UV - BLUE' — the PEGAVISION/BLUE/ORANGE split is unknown.",
-  "MINASOFT colour SKUs (BlueGray/RoseBrown/Violet) map to 'MINASOFT 1DAY COLOR UV' — confirm vs CARE UV.",
-  "DISOP DUAL GEL / AQUA GEL / HidroHealth fall through to 'DISOP H2O2 SOLUTION' — confirm the right row.",
-  "'1D PURE UP' and '1D PURE UP MS' — confirm 1 DAY PURE vs MULTISTAGE.",
-  "BREATH O CORRECT overseas split not detected — all Ortho-K maps to the domestic row.",
+  "BREATH O CORRECT (OVERSEAS) has no rule yet — stays 0 until HQ sends the overseas file.",
+  "Pegavision colours beyond Cocoa (Gold/Pink Brown, Gray) aren't in the sample file — rules will catch them by name if they appear.",
+  "MINASOFT colour SKUs (BlueGray/RoseBrown/Violet) map to 'MINASOFT 1DAY COLOR UV' — confirm vs CARE UV once seen in a report.",
+  "ACC/ACCSD accessory rule matches the brand name; if accessories are coded elsewhere in the export we'll revisit during aggregation.",
 ];

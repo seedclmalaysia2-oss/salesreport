@@ -26,6 +26,31 @@ describe("brandToProduct — unambiguous rules", () => {
   });
 });
 
+describe("HQ-confirmed mappings (2026-07-31)", () => {
+  it("Monthly Color split by colour", () => {
+    expect(brandToProduct("MC-COCOA BRN")).toBe("MONTHLY COLOR UV - PEGAVISION");
+    expect(brandToProduct("MC-NAT GRAY")).toBe("MONTHLY COLOR UV - BLUE");
+    expect(brandToProduct("MC-FIRE BROWN")).toBe("MONTHLY COLOR UV - BLUE");
+    expect(brandToProduct("MC-SPARK GRAY")).toBe("MONTHLY COLOR UV - ORANGE");
+    expect(brandToProduct("MC-JADE GREEN")).toBe("MONTHLY COLOR UV - ORANGE");
+    expect(brandToProduct("MC-SHINING HONEY")).toBe("MONTHLY COLOR UV - ORANGE");
+    expect(brandToProduct("MCII-DARK GRAY")).toBe("MONTHLY COLOR UV  II");
+  });
+  it("DISOP eyedrop vs H2O2", () => {
+    expect(brandToProduct("DISOP AQUA DUAL GEL 20VL")).toBe("DISOP ULTRA EYEDROP");
+    expect(brandToProduct("DISOP ACUAISS ULTRA 10ml")).toBe("DISOP ULTRA EYEDROP");
+    expect(brandToProduct("DISOP HidroHealth 360ml (Protein Removal)")).toBe("DISOP H2O2 SOLUTION");
+  });
+  it("1D Pure Up = base; MS = multistage", () => {
+    expect(brandToProduct("1D PURE UP")).toBe("1 DAY PURE");
+    expect(brandToProduct("1D PURE UP MS A")).toBe("1 DAY MULSTISTAGE");
+  });
+  it("accessories by ACC / ACCSD code", () => {
+    expect(brandToProduct("ACCSD BATTERY")).toBe("ACCESSORIES/OTHERS");
+    expect(brandToProduct("ACC CASE")).toBe("ACCESSORIES/OTHERS");
+  });
+});
+
 describe("exclusions", () => {
   it("FOC tie-in goods and samples are excluded", () => {
     expect(isFreeOrSample("1D PURE EDOF HIGH [FOC tie in goods]")).toBe(true);
