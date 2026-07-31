@@ -379,6 +379,7 @@ function findStockDetailLayout(rows) {
     const spCol  = row.findIndex(c => typeof c === "string" && /^Sales(man|_?person|_?ID)?$/i.test(c.trim()));
     const amtCol = row.findIndex(c => typeof c === "string" && /^Net\s*Sales$/i.test(c.trim()));
     const qtyCol = row.findIndex(c => typeof c === "string" && /^Quantity$/i.test(c.trim()));
+    const uomCol = row.findIndex(c => typeof c === "string" && /^UOM$/i.test(c.trim()));
     if (docCol >= 0 && amtCol >= 0) {
       return {
         headerRow: r,
@@ -393,6 +394,9 @@ function findStockDetailLayout(rows) {
         // one column RIGHT of the header (merged header cell), so the reader
         // below checks qtyCol and qtyCol+1.
         qtyCol: qtyCol >= 0 ? qtyCol : -1,
+        // UOM header; the value sits at or just LEFT of the header (BOX/PCS/BTL),
+        // so the reader checks a small window around it.
+        uomCol: uomCol >= 0 ? uomCol : -1,
       };
     }
   }
@@ -402,7 +406,7 @@ function findStockDetailLayout(rows) {
 function parseStockDetailRows(rows) {
   const layout = findStockDetailLayout(rows);
   if (!layout) return [];
-  const { headerRow, dateCol, docCol, spCol, amtCol, qtyCol } = layout;
+  const { headerRow, dateCol, docCol, spCol, amtCol, qtyCol, uomCol } = layout;
 
   const out = [];
   let currentBrand = null;
@@ -437,6 +441,15 @@ function parseStockDetailRows(rows) {
       qty = typeof row[qtyCol] === "number" ? row[qtyCol]
           : typeof row[qtyCol + 1] === "number" ? row[qtyCol + 1] : 0;
     }
+    // UOM (BOX / PCS / BTL …) — the value sits just left of, at, or just right
+    // of the header column depending on the export's merged cells.
+    let uom = null;
+    if (uomCol >= 0) {
+      for (const c of [uomCol - 1, uomCol, uomCol + 1]) {
+        const v = c >= 0 ? row[c] : null;
+        if (typeof v === "string" && /^(BOX|PCS|PCE|PIECE|BTL|VIAL|SET|EA|TUBE|PKT)/i.test(v.trim())) { uom = v.trim(); break; }
+      }
+    }
     out.push({
       date,
       // Reuse the invoice-row shape so downstream (weekly sync, dedupe)
@@ -449,6 +462,7 @@ function parseStockDetailRows(rows) {
       // Extra fields for the HQ product report; the weekly path ignores them.
       brand: currentBrand,
       qty,
+      uom,
     });
   }
   return out;

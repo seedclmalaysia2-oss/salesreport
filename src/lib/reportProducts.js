@@ -142,26 +142,30 @@ export function brandToProduct(name) {
 export function aggregateProductMonthly(rows, year) {
   const products = {};
   const unmapped = {};
+  const isPcs = (u) => /^(PCS|PCE|PIECE|PC\b)/i.test(String(u || "").trim());
   for (const r of rows || []) {
     if (!r || !r.date) continue;
     const [y, m] = r.date.split("-").map(Number);
     if (y !== year || !(m >= 1 && m <= 12)) continue;
     const i = m - 1;
-    const qty = Number(r.qty) || 0;
+    const name = r.brand;
+    if (!name) continue;
+    // Promotional giveaways (pens/bags/thermos) and evaluation samples aren't
+    // saleable lens units — dropped. FOC "tie-in goods" ARE product units, so
+    // strip the tag and classify by the underlying product (revenue is 0 anyway).
+    if (/\bSAMPLE\b/i.test(name) || /Promotion Use/i.test(name)) continue;
+    const clean = name.replace(/\[?\s*FOC tie in goods\s*\]?.*$/i, "").trim();
+    const product = brandToProduct(clean);
     const amount = Number(r.amount) || 0;
-    // NOTE: FOC tie-in goods are excluded for now. Amounts match the HQ report
-    // exactly this way (FOC = 0 revenue), but the report DOES count FOC units in
-    // its quantity column, so quantities read ~20% low. Including FOC naively
-    // overshoots (the FOC/promotional lines don't carry clean unit counts in the
-    // quantity column) — a targeted fix is pending investigation of that column.
-    const product = brandToProduct(r.brand);
+    let qty = Number(r.qty) || 0;
     if (!product) {
-      if (r.brand && !isFreeOrSample(r.brand)) {
-        const u = unmapped[r.brand] || (unmapped[r.brand] = { qty: 0, amount: 0 });
-        u.qty += qty; u.amount += amount;
-      }
+      const u = unmapped[r.brand] || (unmapped[r.brand] = { qty: 0, amount: 0 });
+      u.qty += qty; u.amount += amount;
       continue;
     }
+    // Report quantity is in BOXES. Trial units come in PIECES (UOM=PCS) — convert
+    // to boxes by pack size. Everything else is already in boxes/units.
+    if (isPcs(r.uom) && TRIAL_PCS_PER_BOX[product]) qty = qty / TRIAL_PCS_PER_BOX[product];
     const p = products[product] ||
       (products[product] = { qty: new Array(12).fill(0), amount: new Array(12).fill(0) });
     p.qty[i] += qty;
