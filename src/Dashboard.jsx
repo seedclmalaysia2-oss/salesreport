@@ -416,6 +416,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   const [selectedSP, setSelectedSP] = useState("All");
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState("");
+  // Drill-down customer list ordering: by lifetime amount or by name, either
+  // direction. Default keeps the previous behaviour (biggest spender first).
+  const [customerSort, setCustomerSort] = useState("amount-desc");
   const [topCustomersBySpView, setTopCustomersBySpView] = useState("grid");
   // "all" or a year in YEARS. Defaults to all-time so the existing view is
   // unchanged until the admin picks a year.
@@ -684,10 +687,22 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   }, [data, topCustomersBySpYear]);
 
   const filteredCustomerList = useMemo(() => {
-    if (!customerSearch) return customerIndex.slice(0, 200);
-    const q = customerSearch.toLowerCase();
-    return customerIndex.filter(c => c.customer.toLowerCase().includes(q)).slice(0, 200);
-  }, [customerIndex, customerSearch]);
+    const q = customerSearch.trim().toLowerCase();
+    // Copy before sorting — customerIndex is shared with the Top-Customers
+    // panels, which rely on its amount-desc order and must not be mutated.
+    const list = q
+      ? customerIndex.filter(c => c.customer.toLowerCase().includes(q))
+      : customerIndex.slice();
+    const byName = (a, b) =>
+      a.customer.localeCompare(b.customer, undefined, { numeric: true, sensitivity: "base" });
+    switch (customerSort) {
+      case "amount-asc": list.sort((a, b) => a.total - b.total); break;
+      case "name-asc":   list.sort(byName); break;
+      case "name-desc":  list.sort((a, b) => byName(b, a)); break;
+      default:           list.sort((a, b) => b.total - a.total); break; // amount-desc
+    }
+    return list;
+  }, [customerIndex, customerSearch, customerSort]);
 
   const activeCustomer = useMemo(() => {
     if (!selectedCustomer) return customerIndex[0];
@@ -1656,9 +1671,27 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                 style={{
                   width:"100%",boxSizing:"border-box",padding:"8px 12px",
                   background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.08)",
-                  color:"var(--text)",borderRadius:8,fontSize:13,marginBottom:12,outline:"none"
+                  color:"var(--text)",borderRadius:8,fontSize:13,marginBottom:10,outline:"none"
                 }}
               />
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                <span style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.55)",fontWeight:600,flexShrink:0}}>Sort</span>
+                <select
+                  value={customerSort}
+                  onChange={(e) => setCustomerSort(e.target.value)}
+                  aria-label="Sort customers"
+                  style={{
+                    flex:1,minWidth:0,boxSizing:"border-box",padding:"7px 10px",
+                    background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.08)",
+                    color:"var(--text)",borderRadius:8,fontSize:12,cursor:"pointer",outline:"none",
+                    fontFamily:"'DM Sans',sans-serif",colorScheme:"dark light",
+                  }}>
+                  <option value="amount-desc">Amount: high → low</option>
+                  <option value="amount-asc">Amount: low → high</option>
+                  <option value="name-asc">Name: A → Z</option>
+                  <option value="name-desc">Name: Z → A</option>
+                </select>
+              </div>
               <div style={{maxHeight:560,overflowY:"auto"}}>
                 {filteredCustomerList.map(c => (
                   <button
