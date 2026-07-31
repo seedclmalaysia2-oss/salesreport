@@ -93,7 +93,8 @@ const RULES = [
   { test: /AS[\s-]?LUNA|O2 NOAH/i,             product: "RGP AS-LUNA/O2 NOAH" },
   { test: /IRIS/i,                             product: "IRIS LENS" },
   { test: /^UV /i,                             product: "ULTRA VISION" },           // UV AVANTI/DURAWAVE/etc.
-  { test: /BOC|ORTHO-?K/i,                     product: "BREATH O CORRECT" },       // overseas split ships separately
+  { test: /Glodisa/i,                          product: "BREATH O CORRECT (OVERSEAS)" }, // HQ: Glodisa = overseas
+  { test: /BOC|ORTHO-?K/i,                     product: "BREATH O CORRECT" },       // all other Ortho-K = local
   { test: /Wohlk|WHCL/i,                       product: "Wohlk KE RGP" },
 
   // --- DISOP solutions / drops (HQ: DUAL GEL & ACUAISS are eyedrop; HidroHealth is H2O2) ---
@@ -101,9 +102,28 @@ const RULES = [
   { test: /DISOP.*(H2O2|H202|HidroHealth)/i,   product: "DISOP H2O2 SOLUTION" },
   { test: /DISOP/i,                            product: "DISOP H2O2 SOLUTION" },
 
-  // --- Accessories / other — items coded ACC / ACCSD ---
-  { test: /\bACCSD\b|\bACC\b|ACCESSOR/i,       product: "ACCESSORIES/OTHERS" },
+  // --- Accessories, services & other income (non-lens lines, per HQ) ---
+  { test: /\bSEVA\b|Correct Clean|Contact Lens|ACCESSOR|\bACCSD?\b|\bACC\b/i, product: "ACCESSORIES/OTHERS" },
+  { test: /COURIER|\bSERVICES?\b/i,            product: "OTHER INCOME" },
 ];
+
+// 'OTHER INCOME' is an amount-only row in the report (below ACCESSORIES/OTHERS
+// in the SALES AMOUNT section) — it never appears in the quantity grid.
+export const AMOUNT_ONLY_ROWS = ["OTHER INCOME"];
+
+// Trial units (SKU tag "TR") are counted in PIECES in the export but the report
+// wants BOXES. Divide a product's trial pieces by its pack size to convert.
+// Genuine FOC product boxes (contact lenses) count as-is; promotional giveaways
+// (pens/bags/thermos) are excluded. Pack sizes per HQ (2026-07-31):
+export const TRIAL_PCS_PER_BOX = {
+  "1 DAY PURE": 32, "1 DAY PURE SILFA": 32, "1 DAY PURE ASTIGMATISM": 32,
+  "1 DAY MULSTISTAGE": 32, "1 DAYPURE EDOF": 32, "1 DAY VIEW SUPPORT": 32,
+  "MONTHLY COLOR UV - PEGAVISION": 2, "MONTHLY COLOR UV - BLUE": 2,
+  "MONTHLY COLOR UV - ORANGE": 2, "MONTHLY COLOR UV  II": 2,
+  "MINASOFT 1DAY COLOR UV": 10, "MINASOFT CARE UV": 3,
+  "MONTHLY PURE6": 6, "MONTHLY FINE PLUS": 3,
+  "EYE COFFRET-M": 10, "EYE COFFRET-M 10 TORIC": 10, "EYE COFFRET-M 30 TORIC": 10,
+};
 
 export function brandToProduct(name) {
   if (!name || typeof name !== "string") return null;
