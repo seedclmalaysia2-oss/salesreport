@@ -18,7 +18,7 @@ const Card = ({children, style}) => (
 
 const thStyle = {
   textAlign: "left", padding: "10px 14px", fontSize: 10, fontWeight: 600,
-  letterSpacing: 1, color: "rgba(var(--tint),0.45)",
+  letterSpacing: 1, color: "rgba(var(--tint),0.66)",
   borderBottom: "1px solid rgba(var(--tint),0.06)", textTransform: "uppercase",
   whiteSpace: "nowrap",
 };
@@ -213,7 +213,7 @@ export default function AdminUsers({ user }) {
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
         <div style={{fontSize:14,fontWeight:600}}>
           👤 Users
-          <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:12}}> · {rows.length} account{rows.length===1?"":"s"} · {adminCount} admin{adminCount===1?"":"s"}</span>
+          <span style={{color:"rgba(var(--tint),0.65)",fontWeight:400,fontSize:12}}> · {rows.length} account{rows.length===1?"":"s"} · {adminCount} admin{adminCount===1?"":"s"}</span>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
           <button onClick={() => setAddOpen(o => !o)} style={{background: addOpen ? "rgba(232,99,59,0.15)" : "#E8633B",color: addOpen ? "#E8633B" : "#fff",border: addOpen ? "1px solid rgba(232,99,59,0.5)" : "none",borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
@@ -231,7 +231,7 @@ export default function AdminUsers({ user }) {
         />
       )}
 
-      <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:14,lineHeight:1.6}}>
+      <div style={{fontSize:12,color:"rgba(var(--tint),0.67)",marginBottom:14,lineHeight:1.6}}>
         Everyone signed in sees <strong>all</strong> sales data by default. Set <strong>Data access</strong> to
         <span style={{color:"#F59E0B"}}> Own only</span> to restrict a user to just their own salesperson's rows.
         <strong> Admin</strong> adds management of uploaded files (the Data tab) and this panel — uploaded files are never visible to regular users.
@@ -251,9 +251,9 @@ export default function AdminUsers({ user }) {
       )}
 
       {loading ? (
-        <div style={{fontSize:12,color:"rgba(var(--tint),0.4)",padding:"20px 0",textAlign:"center"}}>Loading users…</div>
+        <div style={{fontSize:12,color:"rgba(var(--tint),0.65)",padding:"20px 0",textAlign:"center"}}>Loading users…</div>
       ) : !rows.length ? (
-        <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",padding:"20px 0",textAlign:"center"}}>
+        <div style={{fontSize:12,color:"rgba(var(--tint),0.67)",padding:"20px 0",textAlign:"center"}}>
           No users found. Run <code style={{fontFamily:"'Space Mono',monospace"}}>scripts/seed_users.py</code> to create accounts.
         </div>
       ) : (
@@ -300,17 +300,17 @@ export default function AdminUsers({ user }) {
                               <button onClick={() => saveEditEmail(row)} disabled={busyId === row.user_id}
                                 style={{background:"#34D399",color:"#0A0A0F",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Save</button>
                               <button onClick={cancelEditEmail} disabled={busyId === row.user_id}
-                                style={{background:"transparent",border:"1px solid rgba(var(--tint),0.15)",color:"rgba(var(--tint),0.6)",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>Cancel</button>
+                                style={{background:"transparent",border:"1px solid rgba(var(--tint),0.15)",color:"rgba(var(--tint),0.7)",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>Cancel</button>
                             </div>
                           ) : (
                             <div style={{display:"flex",alignItems:"center",gap:6,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis"}}>
                               <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{row.email}</span>
-                              {isSelf && <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:11}}>(you)</span>}
+                              {isSelf && <span style={{color:"rgba(var(--tint),0.65)",fontWeight:400,fontSize:11}}>(you)</span>}
                               <button
                                 onClick={() => beginEditEmail(row)}
                                 disabled={busyId === row.user_id}
                                 title="Change this email"
-                                style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.35)",cursor:"pointer",fontSize:12,padding:"0 4px",lineHeight:1}}>
+                                style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.62)",cursor:"pointer",fontSize:12,padding:"0 4px",lineHeight:1}}>
                                 ✎
                               </button>
                             </div>
@@ -330,7 +330,7 @@ export default function AdminUsers({ user }) {
                     </td>
                     <td style={tdStyle}>
                       {row.is_admin ? (
-                        <span style={{fontSize:11,color:"rgba(var(--tint),0.5)"}}>All teams (admin)</span>
+                        <span style={{fontSize:11,color:"rgba(var(--tint),0.67)"}}>All teams (admin)</span>
                       ) : (
                         <button
                           onClick={() => onToggleViewAll(row)}
@@ -364,7 +364,7 @@ export default function AdminUsers({ user }) {
                         {row.is_admin ? "★ Admin" : "Regular user"}
                       </button>
                     </td>
-                    <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",fontSize:11,color:"rgba(var(--tint),0.55)",whiteSpace:"nowrap"}}>
+                    <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",fontSize:11,color:"rgba(var(--tint),0.69)",whiteSpace:"nowrap"}}>
                       {row.last_sign_in_at
                         ? new Date(row.last_sign_in_at).toLocaleString("en-MY", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" })
                         : "never"}
@@ -395,7 +395,7 @@ export default function AdminUsers({ user }) {
         </div>
       )}
 
-      <div style={{marginTop:12,fontSize:11,color:"rgba(var(--tint),0.4)",lineHeight:1.6}}>
+      <div style={{marginTop:12,fontSize:11,color:"rgba(var(--tint),0.65)",lineHeight:1.6}}>
         The database refuses to remove the last admin, so the dashboard can never be locked out of its own controls.
       </div>
     </Card>
@@ -420,7 +420,7 @@ function AddUserForm({ busy, onCancel, onSubmit }) {
   };
 
   const fieldWrap = { display: "flex", flexDirection: "column", gap: 4, flex: "1 1 200px", minWidth: 0 };
-  const labelStyle = { fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "rgba(var(--tint),0.5)", fontWeight: 600 };
+  const labelStyle = { fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "rgba(var(--tint),0.67)", fontWeight: 600 };
   const inputStyle = { background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.1)", color: "var(--text)", borderRadius: 6, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif" };
 
   return (
@@ -458,7 +458,7 @@ function AddUserForm({ busy, onCancel, onSubmit }) {
           <input type="checkbox" checked={canViewAll || isAdmin} disabled={isAdmin || busy}
             onChange={(e) => setCanViewAll(e.target.checked)} />
           Sees all teams
-          <span style={{ fontSize: 11, color: "rgba(var(--tint),0.5)" }}>(admins always do)</span>
+          <span style={{ fontSize: 11, color: "rgba(var(--tint),0.67)" }}>(admins always do)</span>
         </label>
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -475,7 +475,7 @@ function AddUserForm({ busy, onCancel, onSubmit }) {
           style={{ background: "transparent", border: "1px solid rgba(var(--tint),0.15)", color: "rgba(var(--tint),0.7)", borderRadius: 6, padding: "8px 14px", fontSize: 12, cursor: "pointer" }}>
           Cancel
         </button>
-        <span style={{ fontSize: 11, color: "rgba(var(--tint),0.5)" }}>
+        <span style={{ fontSize: 11, color: "rgba(var(--tint),0.67)" }}>
           Account is auto-confirmed. Share the password securely — user can change it via Forgot password on the sign-in page.
         </span>
       </div>

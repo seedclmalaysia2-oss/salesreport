@@ -84,15 +84,15 @@ const Card = ({children, style}) => (
 
 const KPI = ({label, value, sub, color}) => (
   <div style={{flex:"1 1 180px",background:"rgba(var(--tint),0.02)",border:"1px solid rgba(var(--tint),0.06)",borderRadius:14,padding:"16px 18px"}}>
-    <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1.2,color:"rgba(var(--tint),0.45)",marginBottom:6}}>{label}</div>
+    <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1.2,color:"rgba(var(--tint),0.66)",marginBottom:6}}>{label}</div>
     <div style={{fontSize:20,fontWeight:700,color,fontFamily:"'Space Mono',monospace"}}>{value}</div>
-    {sub && <div style={{fontSize:11,color:"rgba(var(--tint),0.4)",marginTop:4}}>{sub}</div>}
+    {sub && <div style={{fontSize:11,color:"rgba(var(--tint),0.65)",marginTop:4}}>{sub}</div>}
   </div>
 );
 
 const thStyle = {
   textAlign: "left", padding: "10px 14px", fontSize: 10, fontWeight: 600,
-  letterSpacing: 1, color: "rgba(var(--tint),0.45)",
+  letterSpacing: 1, color: "rgba(var(--tint),0.66)",
   borderBottom: "1px solid rgba(var(--tint),0.06)", textTransform: "uppercase",
   fontFamily: "'DM Sans',sans-serif", whiteSpace: "nowrap",
 };
@@ -546,7 +546,7 @@ export default function DataTab({ data, onRefresh }) {
     return keys.map(key => ({
       key,
       label: monthLabelFor(key),
-      color: "rgba(var(--tint),0.55)",
+      color: "rgba(var(--tint),0.69)",
       entries: buckets.get(key),
       totalSize: buckets.get(key).reduce((s, e) => s + (e.sizeBytes || 0), 0),
     }));
@@ -872,12 +872,12 @@ export default function DataTab({ data, onRefresh }) {
             <div style={{fontSize:13,fontWeight:700,color:"var(--text)",marginBottom:2}}>
               Recalculate dashboard
             </div>
-            <div style={{fontSize:12,color:"rgba(var(--tint),0.65)",lineHeight:1.5}}>
+            <div style={{fontSize:12,color:"rgba(var(--tint),0.72)",lineHeight:1.5}}>
               Reload the file library, replay invoice listings into the Weekly Sales board, and re-fetch every table on every tab. Each step below turns green as it completes.
             </div>
           </div>
           {lastRecalcAt && !recalculating && (
-            <div style={{fontSize:11,color:"rgba(var(--tint),0.55)",fontFamily:"'Space Mono',monospace",whiteSpace:"nowrap"}}>
+            <div style={{fontSize:11,color:"rgba(var(--tint),0.69)",fontFamily:"'Space Mono',monospace",whiteSpace:"nowrap"}}>
               Last run {fmtDate(lastRecalcAt)}
             </div>
           )}
@@ -945,7 +945,7 @@ export default function DataTab({ data, onRefresh }) {
                   </span>
                   <div style={{minWidth:0,flex:1}}>
                     <div style={{color: s.status === "pending" ? "rgba(var(--tint),0.55)" : "var(--text)",fontWeight:500,lineHeight:1.3}}>
-                      <span style={{color:"rgba(var(--tint),0.35)",fontFamily:"'Space Mono',monospace",marginRight:6}}>{idx+1}.</span>
+                      <span style={{color:"rgba(var(--tint),0.62)",fontFamily:"'Space Mono',monospace",marginRight:6}}>{idx+1}.</span>
                       {stage.label}
                     </div>
                     {s.detail && (
@@ -979,7 +979,7 @@ export default function DataTab({ data, onRefresh }) {
           <div style={{fontSize:13,fontWeight:700,color:"var(--text)",marginBottom:2}}>
             Reprocess uploaded files (recovery)
           </div>
-          <div style={{fontSize:12,color:"rgba(var(--tint),0.65)",lineHeight:1.5}}>
+          <div style={{fontSize:12,color:"rgba(var(--tint),0.72)",lineHeight:1.5}}>
             When a chart is missing scopes despite the files being uploaded (e.g. the earlier 2026 wipe). Re-downloads every archived workbook from storage, re-parses it, and pushes fresh rows into customers_data / brand_sales_data / weekly_sales. Slower than Recalculate but self-healing — no need to re-upload from disk.
           </div>
           {reprocessProgress && (
@@ -1040,7 +1040,7 @@ export default function DataTab({ data, onRefresh }) {
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
           <div style={{fontSize:14,fontWeight:600}}>
             📁 Uploaded files
-            <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:12}}>
+            <span style={{color:"rgba(var(--tint),0.65)",fontWeight:400,fontSize:12}}>
               {" · "}
               {query.trim() && active.length !== liveCount
                 ? `${active.length} of ${liveCount} files`
@@ -1069,7 +1069,7 @@ export default function DataTab({ data, onRefresh }) {
                     onClick={() => setQuery("")}
                     title="Clear search"
                     style={{position:"absolute",right:6,background:"transparent",border:"none",
-                            color:"rgba(var(--tint),0.45)",cursor:"pointer",fontSize:13,padding:"0 2px"}}>✕</button>
+                            color:"rgba(var(--tint),0.66)",cursor:"pointer",fontSize:13,padding:"0 2px"}}>✕</button>
                 )}
               </div>
             )}
@@ -1078,7 +1078,7 @@ export default function DataTab({ data, onRefresh }) {
                 display:"flex",alignItems:"center",gap:0,
                 border:"1px solid rgba(var(--tint),0.12)",borderRadius:8,overflow:"hidden",
               }}>
-                <span style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.5)",padding:"0 10px",fontWeight:600}}>Group by</span>
+                <span style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.67)",padding:"0 10px",fontWeight:600}}>Group by</span>
                 {["type","month"].map((g, i) => (
                   <button key={g} onClick={() => setGroupBy(g)} style={{
                     background: groupBy === g ? "rgba(232,99,59,0.15)" : "transparent",
@@ -1105,20 +1105,20 @@ export default function DataTab({ data, onRefresh }) {
             something here; when empty this card collapses to one line so it
             stops dominating the screen above the upload area. */}
         {liveCount > 0 && (
-          <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:14,lineHeight:1.6}}>
+          <div style={{fontSize:12,color:"rgba(var(--tint),0.67)",marginBottom:14,lineHeight:1.6}}>
             These workbooks live in a private bucket that only admins can read. Regular users never see this tab, and the
             database blocks them from the files even if they call the API directly. Downloads are short-lived signed links.
           </div>
         )}
 
         {loading ? (
-          <div style={{fontSize:12,color:"rgba(var(--tint),0.4)",padding:"4px 0"}}>Loading files…</div>
+          <div style={{fontSize:12,color:"rgba(var(--tint),0.65)",padding:"4px 0"}}>Loading files…</div>
         ) : !liveCount ? (
-          <div style={{fontSize:12,color:"rgba(var(--tint),0.45)",padding:"2px 0 4px",lineHeight:1.6}}>
+          <div style={{fontSize:12,color:"rgba(var(--tint),0.66)",padding:"2px 0 4px",lineHeight:1.6}}>
             Nothing on the server yet — files you upload below will appear here. Stored privately, admin-only.
           </div>
         ) : !active.length ? (
-          <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",padding:"14px 0",textAlign:"center"}}>
+          <div style={{fontSize:12,color:"rgba(var(--tint),0.67)",padding:"14px 0",textAlign:"center"}}>
             No file matches “{query}”.{" "}
             <button onClick={() => setQuery("")} style={{background:"transparent",border:"none",color:"#3B82F6",cursor:"pointer",fontSize:12,textDecoration:"underline",padding:0}}>
               Clear search
@@ -1153,7 +1153,7 @@ export default function DataTab({ data, onRefresh }) {
                           <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                             <span style={{color: group.color,width:12,display:"inline-block",fontFamily:"'Space Mono',monospace"}}>{isOpen ? "▾" : "▸"}</span>
                             <span style={{color: group.color}}>{group.label}</span>
-                            <span style={{color:"rgba(var(--tint),0.5)",fontWeight:400,fontSize:11,fontFamily:"'Space Mono',monospace"}}>
+                            <span style={{color:"rgba(var(--tint),0.67)",fontWeight:400,fontSize:11,fontFamily:"'Space Mono',monospace"}}>
                               · {group.entries.length} file{group.entries.length===1?"":"s"} · {fmtSize(group.totalSize)}
                             </span>
                           </div>
@@ -1166,7 +1166,7 @@ export default function DataTab({ data, onRefresh }) {
                               <span style={{color: kindColor(entry.kind),fontSize:14,marginTop:1,flexShrink:0}}>📄</span>
                               <div style={{minWidth:0,flex:1}}>
                                 <div title={entry.name} style={{fontWeight:500,wordBreak:"break-word",lineHeight:1.35}}>{entry.name}</div>
-                                <div style={{fontSize:10,color:"rgba(var(--tint),0.45)",fontFamily:"'Space Mono',monospace",marginTop:2}}>
+                                <div style={{fontSize:10,color:"rgba(var(--tint),0.66)",fontFamily:"'Space Mono',monospace",marginTop:2}}>
                                   {entry.sp || "—"} · {entry.year || "—"} · {entry.rowCount} rows
                                 </div>
                               </div>
@@ -1178,7 +1178,7 @@ export default function DataTab({ data, onRefresh }) {
                             </span>
                           </td>
                           <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",whiteSpace:"nowrap"}}>{fmtSize(entry.sizeBytes)}</td>
-                          <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.6)",whiteSpace:"nowrap",fontSize:11}}>{fmtDate(entry.uploadedAt)}</td>
+                          <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",whiteSpace:"nowrap",fontSize:11}}>{fmtDate(entry.uploadedAt)}</td>
                           <td style={tdStyle}>
                             <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                               <button onClick={() => setViewing(entry)} style={actionBtn("#3B82F6")}>👁 View</button>
@@ -1199,7 +1199,7 @@ export default function DataTab({ data, onRefresh }) {
 
         {trashed.length > 0 && (
           <div style={{marginTop:16}}>
-            <button onClick={() => setShowTrash(s => !s)} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.5)",fontSize:12,cursor:"pointer",padding:0}}>
+            <button onClick={() => setShowTrash(s => !s)} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.67)",fontSize:12,cursor:"pointer",padding:0}}>
               {showTrash ? "▾" : "▸"} 🗑 Trash ({trashed.length})
             </button>
             {showTrash && (
@@ -1217,9 +1217,9 @@ export default function DataTab({ data, onRefresh }) {
                       <tr key={entry.id}>
                         <td style={tdStyle}>
                           <div style={{fontWeight:500}}>{entry.name}</div>
-                          <div style={{fontSize:10,color:"rgba(var(--tint),0.45)",fontFamily:"'Space Mono',monospace"}}>{entry.sp || "—"} · {entry.year || "—"}</div>
+                          <div style={{fontSize:10,color:"rgba(var(--tint),0.66)",fontFamily:"'Space Mono',monospace"}}>{entry.sp || "—"} · {entry.year || "—"}</div>
                         </td>
-                        <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",fontSize:11,color:"rgba(var(--tint),0.6)"}}>{fmtDate(entry.deletedAt)}</td>
+                        <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",fontSize:11,color:"rgba(var(--tint),0.7)"}}>{fmtDate(entry.deletedAt)}</td>
                         <td style={tdStyle}>
                           <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                             <button onClick={() => setViewing(entry)} style={actionBtn("#3B82F6")}>👁 View</button>
@@ -1239,20 +1239,20 @@ export default function DataTab({ data, onRefresh }) {
 
       <Card>
         <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>Upload workbooks</div>
-        <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginBottom:16,lineHeight:1.6}}>
+        <div style={{fontSize:12,color:"rgba(var(--tint),0.67)",marginBottom:16,lineHeight:1.6}}>
           Drag <strong>.xlsx</strong> files matching one of these naming patterns:
           <ul style={{margin:"8px 0 0",paddingLeft:18,display:"flex",flexDirection:"column",gap:4}}>
             <li>
               <code style={{fontFamily:"'Space Mono',monospace",color:"#34D399",fontSize:11}}>{"<SP> <YYYY> Sales Analysis by customer.xlsx"}</code>
-              <span style={{color:"rgba(var(--tint),0.4)"}}> — yearly customer summary</span>
+              <span style={{color:"rgba(var(--tint),0.65)"}}> — yearly customer summary</span>
             </li>
             <li>
               <code style={{fontFamily:"'Space Mono',monospace",color:"#A855F7",fontSize:11}}>{"<SP> <YYYY> Stock Sales Analysis - Summary by Brand.xlsx"}</code>
-              <span style={{color:"rgba(var(--tint),0.4)"}}> — yearly brand summary</span>
+              <span style={{color:"rgba(var(--tint),0.65)"}}> — yearly brand summary</span>
             </li>
             <li>
               <code style={{fontFamily:"'Space Mono',monospace",color:"#3B82F6",fontSize:11}}>{"Stock Sales Analysis - Detail <period>.xlsx"}</code>
-              <span style={{color:"rgba(var(--tint),0.4)"}}> — line-level sales incl. CN/DN (feeds the weekly view; supersedes the old Customer Invoice Listing)</span>
+              <span style={{color:"rgba(var(--tint),0.65)"}}> — line-level sales incl. CN/DN (feeds the weekly view; supersedes the old Customer Invoice Listing)</span>
             </li>
           </ul>
         </div>
@@ -1269,7 +1269,7 @@ export default function DataTab({ data, onRefresh }) {
           }}>
           <div style={{fontSize:28,marginBottom:8,opacity:0.4}}>⤴</div>
           <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>Drop xlsx files here</div>
-          <div style={{fontSize:12,color:"rgba(var(--tint),0.4)"}}>or click to browse</div>
+          <div style={{fontSize:12,color:"rgba(var(--tint),0.65)"}}>or click to browse</div>
           <input ref={inputRef} type="file" accept=".xlsx" multiple style={{display:"none"}}
             onChange={(e) => addFiles([...e.target.files])} />
         </div>
@@ -1286,7 +1286,7 @@ export default function DataTab({ data, onRefresh }) {
             }}>
               <div style={{flex:"1 1 220px",fontSize:12,lineHeight:1.5}}>
                 <strong style={{color:"var(--text)"}}>{validNames.length} file{validNames.length===1?"":"s"} ready</strong>
-                <span style={{color:"rgba(var(--tint),0.65)"}}> — still on your computer, not uploaded yet</span>
+                <span style={{color:"rgba(var(--tint),0.72)"}}> — still on your computer, not uploaded yet</span>
                 {invalidNames.length > 0 && (
                   <span style={{color:"#F87171"}}> · {invalidNames.length} skipped (filename doesn't match the pattern)</span>
                 )}
@@ -1308,14 +1308,14 @@ export default function DataTab({ data, onRefresh }) {
                 disabled={uploading}
                 style={{
                   background:"transparent",border:"1px solid rgba(var(--tint),0.15)",
-                  color:"rgba(var(--tint),0.6)",borderRadius:8,padding:"9px 14px",fontSize:12,
+                  color:"rgba(var(--tint),0.7)",borderRadius:8,padding:"9px 14px",fontSize:12,
                   cursor: uploading ? "not-allowed" : "pointer",fontFamily:"'DM Sans',sans-serif",
                 }}>Clear</button>
             </div>
 
             {progress && (
               <div style={{marginTop:12}}>
-                <div style={{fontSize:12,color:"rgba(var(--tint),0.6)",fontFamily:"'Space Mono',monospace",marginBottom:6}}>
+                <div style={{fontSize:12,color:"rgba(var(--tint),0.7)",fontFamily:"'Space Mono',monospace",marginBottom:6}}>
                   [{progress.index + 1}/{progress.total}] uploading {progress.file}
                 </div>
                 <div style={{height:6,background:"rgba(var(--tint),0.06)",borderRadius:3,overflow:"hidden"}}>
@@ -1327,7 +1327,7 @@ export default function DataTab({ data, onRefresh }) {
               </div>
             )}
 
-            <div style={{fontSize:11,color:"rgba(var(--tint),0.45)",margin:"14px 0 6px",textTransform:"uppercase",letterSpacing:1}}>
+            <div style={{fontSize:11,color:"rgba(var(--tint),0.66)",margin:"14px 0 6px",textTransform:"uppercase",letterSpacing:1}}>
               Selected files
             </div>
             <div style={{maxHeight:240,overflowY:"auto",border:"1px solid rgba(var(--tint),0.04)",borderRadius:8}}>
@@ -1338,13 +1338,13 @@ export default function DataTab({ data, onRefresh }) {
                     <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0}}>
                       <span style={{color: info ? "#34D399" : "#F87171",fontWeight:600,flexShrink:0}}>{info ? "✓" : "✗"}</span>
                       <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{f.name}</span>
-                      {info && <span style={{color:"rgba(var(--tint),0.4)",fontSize:10,fontFamily:"'Space Mono',monospace",flexShrink:0}}>
+                      {info && <span style={{color:"rgba(var(--tint),0.65)",fontSize:10,fontFamily:"'Space Mono',monospace",flexShrink:0}}>
                         {info.kind === "Customer Invoice Listing"
                           ? `Invoice · ${info.periodLabel || (info.year ?? "—")}`
                           : `${info.sp} · ${info.year}`}
                       </span>}
                     </div>
-                    <button onClick={() => setSelectedFiles(prev => prev.filter(x => x.name !== f.name))} disabled={uploading} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.3)",cursor: uploading ? "not-allowed" : "pointer",fontSize:14,padding:"0 0 0 8px"}}>✕</button>
+                    <button onClick={() => setSelectedFiles(prev => prev.filter(x => x.name !== f.name))} disabled={uploading} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.58)",cursor: uploading ? "not-allowed" : "pointer",fontSize:14,padding:"0 0 0 8px"}}>✕</button>
                   </div>
                 );
               })}
@@ -1377,9 +1377,9 @@ function DataSourceStatus({ data }) {
     <Card>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
         <div style={{fontSize:14,fontWeight:600}}>
-          🗂️ Dataset coverage <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400,fontSize:12}}>· {sps.length} salespeople × {years.length} years</span>
+          🗂️ Dataset coverage <span style={{color:"rgba(var(--tint),0.65)",fontWeight:400,fontSize:12}}>· {sps.length} salespeople × {years.length} years</span>
         </div>
-        <div style={{fontSize:11,color:"rgba(var(--tint),0.5)"}}>each cell shows customer / brand-sale row count</div>
+        <div style={{fontSize:11,color:"rgba(var(--tint),0.67)"}}>each cell shows customer / brand-sale row count</div>
       </div>
       <div style={{overflow:"auto",border:"1px solid rgba(var(--tint),0.06)",borderRadius:10}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
@@ -1409,7 +1409,7 @@ function DataSourceStatus({ data }) {
                       {has ? (
                         <div style={{fontFamily:"'Space Mono',monospace",fontSize:11,lineHeight:1.3}}>
                           <div>{c.toLocaleString()}c</div>
-                          <div style={{color:"rgba(var(--tint),0.55)"}}>{b.toLocaleString()}b</div>
+                          <div style={{color:"rgba(var(--tint),0.69)"}}>{b.toLocaleString()}b</div>
                         </div>
                       ) : "—"}
                     </td>
@@ -1420,7 +1420,7 @@ function DataSourceStatus({ data }) {
           </tbody>
         </table>
       </div>
-      <div style={{marginTop:10,fontSize:10,color:"rgba(var(--tint),0.45)",display:"flex",gap:14,flexWrap:"wrap"}}>
+      <div style={{marginTop:10,fontSize:10,color:"rgba(var(--tint),0.66)",display:"flex",gap:14,flexWrap:"wrap"}}>
         <span>c = customer-year rows (monthly sales)</span>
         <span>b = brand-sale rows (per-customer × brand)</span>
       </div>
@@ -1445,18 +1445,18 @@ function FilePreviewModal({ entry, onClose }) {
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid rgba(var(--tint),0.06)"}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:14,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.name}</div>
-            <div style={{fontSize:11,color:"rgba(var(--tint),0.5)",marginTop:3,fontFamily:"'Space Mono',monospace"}}>
+            <div style={{fontSize:11,color:"rgba(var(--tint),0.67)",marginTop:3,fontFamily:"'Space Mono',monospace"}}>
               {entry.sp || "—"} · {entry.year || "—"} · {entry.kind} · {rows.length} rows
             </div>
           </div>
-          <button onClick={onClose} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.6)",fontSize:20,cursor:"pointer",padding:"4px 10px"}}>✕</button>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.7)",fontSize:20,cursor:"pointer",padding:"4px 10px"}}>✕</button>
         </div>
         <div style={{overflow:"auto",flex:1}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'Space Mono',monospace"}}>
             <thead style={{position:"sticky",top:0,background:"rgba(15,15,20,0.95)",backdropFilter:"blur(8px)"}}>
               <tr>
                 {cols.map(c => (
-                  <th key={c} style={{textAlign:"left",padding:"8px 10px",borderBottom:"1px solid rgba(var(--tint),0.08)",color:"rgba(var(--tint),0.6)",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,fontSize:10}}>{c}</th>
+                  <th key={c} style={{textAlign:"left",padding:"8px 10px",borderBottom:"1px solid rgba(var(--tint),0.08)",color:"rgba(var(--tint),0.7)",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,fontSize:10}}>{c}</th>
                 ))}
               </tr>
             </thead>
@@ -1477,12 +1477,12 @@ function FilePreviewModal({ entry, onClose }) {
             </tbody>
           </table>
           {rows.length > 1000 && (
-            <div style={{padding:"10px 14px",fontSize:11,color:"rgba(var(--tint),0.4)",textAlign:"center"}}>
+            <div style={{padding:"10px 14px",fontSize:11,color:"rgba(var(--tint),0.65)",textAlign:"center"}}>
               Showing first 1000 of {rows.length} rows.
             </div>
           )}
           {!rows.length && (
-            <div style={{padding:"40px 20px",fontSize:12,color:"rgba(var(--tint),0.5)",textAlign:"center"}}>
+            <div style={{padding:"40px 20px",fontSize:12,color:"rgba(var(--tint),0.67)",textAlign:"center"}}>
               No rows stored for this file.
             </div>
           )}

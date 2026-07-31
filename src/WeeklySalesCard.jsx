@@ -86,12 +86,12 @@ function SourceFiles({ files }) {
     ? new Date(latest.uploadedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
     : "—";
   return (
-    <div style={{ marginTop: 6, fontSize: 11.5, color: "rgba(var(--tint),0.55)", lineHeight: 1.5, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+    <div style={{ marginTop: 6, fontSize: 11.5, color: "rgba(var(--tint),0.69)", lineHeight: 1.5, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
       <span style={{ fontWeight: 600, color: "rgba(var(--tint),0.7)" }}>Source:</span>
       <span style={{ fontFamily: "'Space Mono',monospace", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis" }} title={latest.name}>
         {latest.name}
       </span>
-      <span style={{ color: "rgba(var(--tint),0.45)" }}>· uploaded {when}</span>
+      <span style={{ color: "rgba(var(--tint),0.66)" }}>· uploaded {when}</span>
     </div>
   );
 }
@@ -143,7 +143,7 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
           <div style={{ width: 4, height: 16, background: accentColor, borderRadius: 2 }} />
           <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, color: accentColor, fontWeight: 700 }}>{title}</div>
         </div>
-        <div style={{ fontSize: 12, color: "rgba(var(--tint),0.6)", marginLeft: 12 }}>{subtitle}</div>
+        <div style={{ fontSize: 12, color: "rgba(var(--tint),0.7)", marginLeft: 12 }}>{subtitle}</div>
       </div>
 
       {/* Big number + progress */}
@@ -163,7 +163,7 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
             </div>
           )}
         </div>
-        <div style={{ fontSize: 12, color: "rgba(var(--tint),0.65)", marginTop: 6 }}>
+        <div style={{ fontSize: 12, color: "rgba(var(--tint),0.72)", marginTop: 6 }}>
           of <span style={{ fontFamily: "'Space Mono',monospace", color: "var(--text)", fontWeight: 600 }}>{fmtRM(target)}</span> monthly target
         </div>
         <div style={{ marginTop: 12 }}>
@@ -177,12 +177,12 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
 
       {/* Per-rep table */}
       <div>
-        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "rgba(var(--tint),0.55)", marginBottom: 10, fontWeight: 600 }}>
+        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "rgba(var(--tint),0.69)", marginBottom: 10, fontWeight: 600 }}>
           By salesperson · {period}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {rows.length === 0 ? (
-            <div style={{ color: "rgba(var(--tint),0.5)", fontSize: 13, padding: "12px 0", textAlign: "center" }}>No sales recorded this week</div>
+            <div style={{ color: "rgba(var(--tint),0.67)", fontSize: 13, padding: "12px 0", textAlign: "center" }}>No sales recorded this week</div>
           ) : rows.map((r) => {
             const repPct = total > 0 ? r.amount / total : 0;
             return (
@@ -214,7 +214,7 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
           ].map((t, i) => (
             <div key={i} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
               <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.5, color: t.color, fontWeight: 700 }}>{t.label}</div>
-              <div style={{ fontSize: 11, color: "rgba(var(--tint),0.55)", fontFamily: "'Space Mono',monospace" }}>
+              <div style={{ fontSize: 11, color: "rgba(var(--tint),0.69)", fontFamily: "'Space Mono',monospace" }}>
                 {fmtRM(t.target)}
               </div>
               <div style={{ fontSize: 13.5, fontWeight: 700, fontFamily: "'Space Mono',monospace", color: t.balance > 0 ? "var(--st-bad)" : "var(--st-ok)" }}>
@@ -480,7 +480,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
           <div>
             {Eyebrow}
             <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginTop: 6 }}>No weekly data yet</div>
-            <div style={{ fontSize: 13, color: "rgba(var(--tint),0.65)", marginTop: 4, maxWidth: 520, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 13, color: "rgba(var(--tint),0.72)", marginTop: 4, maxWidth: 520, lineHeight: 1.6 }}>
               {isAdmin
                 ? "Upload a Stock Sales Analysis - Detail (or Customer Invoice Listing) file on the Data ⤴ tab — it syncs here automatically. The Sales Analysis by customer file feeds the other charts, not this card. Hit Refresh if the numbers haven't caught up yet."
                 : "Waiting for the admin to upload this week's numbers. Hit Refresh once they have."}
@@ -521,7 +521,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
           {Eyebrow}
           <div style={{ fontSize: 24, fontWeight: 700, color: "var(--text)", letterSpacing: -0.3, marginTop: 6, display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
             {periodLabel}
-            <span style={{ fontSize: 14, fontWeight: 500, color: "rgba(var(--tint),0.6)" }}>{monthName}</span>
+            <span style={{ fontSize: 14, fontWeight: 500, color: "rgba(var(--tint),0.7)" }}>{monthName}</span>
             <span style={{
               fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8,
               padding: "3px 9px", borderRadius: 20, alignSelf: "center",
@@ -533,7 +533,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
             </span>
           </div>
           {headerUploadedAt && (
-            <div style={{ fontSize: 11.5, color: "rgba(var(--tint),0.5)", marginTop: 4 }}>
+            <div style={{ fontSize: 11.5, color: "rgba(var(--tint),0.67)", marginTop: 4 }}>
               Last updated {new Date(headerUploadedAt).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
             </div>
           )}
@@ -594,7 +594,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
                 borderRadius: 8, padding: "7px 12px", fontSize: 13,
                 cursor: canGoNext ? "pointer" : "not-allowed", fontFamily: "'DM Sans',sans-serif",
               }}>▶</button>
-            <div style={{ marginLeft: "auto", fontSize: 11.5, color: "rgba(var(--tint),0.55)", fontFamily: "'Space Mono',monospace" }}>
+            <div style={{ marginLeft: "auto", fontSize: 11.5, color: "rgba(var(--tint),0.69)", fontFamily: "'Space Mono',monospace" }}>
               {monthKeys.length} month{monthKeys.length === 1 ? "" : "s"} · {monthLabelShort(monthKeys[0])}–{monthLabelShort(monthKeys[monthKeys.length - 1])}
             </div>
           </div>
@@ -613,7 +613,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
                   }}>{opt.label}</button>
               );
             })}
-            <span style={{ fontSize: 11.5, color: "rgba(var(--tint),0.5)", marginLeft: 2 }}>
+            <span style={{ fontSize: 11.5, color: "rgba(var(--tint),0.67)", marginLeft: 2 }}>
               {isMonthView ? "Every week this month, summed" : "Tap a week below to inspect it"}
             </span>
           </div>
@@ -948,7 +948,7 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
           }}>
           <div style={{ fontSize: 22, marginBottom: 6, opacity: 0.5 }}>⤴</div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>Drop weekly xlsx here</div>
-          <div style={{ fontSize: 12, color: "rgba(var(--tint),0.55)", marginTop: 4 }}>
+          <div style={{ fontSize: 12, color: "rgba(var(--tint),0.69)", marginTop: 4 }}>
             or click to browse · Customer Invoice Listing or the standard Sales Update layout
           </div>
           <input ref={fileRef} type="file" accept=".xlsx" style={{ display: "none" }}
@@ -965,9 +965,9 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:"'Space Mono',monospace"}}>
               <thead style={{position:"sticky",top:0,background:"rgba(15,15,20,0.95)",backdropFilter:"blur(8px)"}}>
                 <tr>
-                  <th style={{textAlign:"left",padding:"8px 12px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.6)",borderBottom:"1px solid rgba(var(--tint),0.1)"}}>Week</th>
+                  <th style={{textAlign:"left",padding:"8px 12px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.7)",borderBottom:"1px solid rgba(var(--tint),0.1)"}}>Week</th>
                   {REP_ORDER.map(sp => (
-                    <th key={sp} style={{textAlign:"right",padding:"8px 10px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.6)",borderBottom:"1px solid rgba(var(--tint),0.1)"}}>{sp.split(" ")[0]}</th>
+                    <th key={sp} style={{textAlign:"right",padding:"8px 10px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.7)",borderBottom:"1px solid rgba(var(--tint),0.1)"}}>{sp.split(" ")[0]}</th>
                   ))}
                   <th style={{textAlign:"right",padding:"8px 12px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"var(--st-accent)",borderBottom:"1px solid rgba(var(--tint),0.1)"}}>Total</th>
                 </tr>
@@ -1017,12 +1017,12 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
       {mode === "manual" && (
         <>
           <div style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "rgba(var(--tint),0.6)" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "rgba(var(--tint),0.7)" }}>
               Period start
               <input type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)}
                 style={{ background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.1)", color: "var(--text)", borderRadius: 6, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }} />
             </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "rgba(var(--tint),0.6)" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "rgba(var(--tint),0.7)" }}>
               Period end
               <input type="date" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)}
                 style={{ background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.1)", color: "var(--text)", borderRadius: 6, padding: "6px 10px", fontSize: 13, fontFamily: "'DM Sans',sans-serif" }} />
@@ -1031,8 +1031,8 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid rgba(var(--tint),0.1)" }}>
-                <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, color: "rgba(var(--tint),0.55)", fontWeight: 500, textTransform: "uppercase", letterSpacing: 1 }}>Salesperson</th>
-                <th style={{ textAlign: "right", padding: "8px 10px", fontSize: 11, color: "rgba(var(--tint),0.55)", fontWeight: 500, textTransform: "uppercase", letterSpacing: 1 }}>Amount (RM)</th>
+                <th style={{ textAlign: "left", padding: "8px 10px", fontSize: 11, color: "rgba(var(--tint),0.69)", fontWeight: 500, textTransform: "uppercase", letterSpacing: 1 }}>Salesperson</th>
+                <th style={{ textAlign: "right", padding: "8px 10px", fontSize: 11, color: "rgba(var(--tint),0.69)", fontWeight: 500, textTransform: "uppercase", letterSpacing: 1 }}>Amount (RM)</th>
               </tr>
             </thead>
             <tbody>
@@ -1074,7 +1074,7 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
           cursor: busy ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
         }}>{busy ? "Saving…" : "Save weekly update"}</button>
         <button onClick={onClose} style={{
-          background: "transparent", color: "rgba(var(--tint),0.6)", border: "1px solid rgba(var(--tint),0.12)",
+          background: "transparent", color: "rgba(var(--tint),0.7)", border: "1px solid rgba(var(--tint),0.12)",
           borderRadius: 8, padding: "10px 22px", fontSize: 13, cursor: "pointer",
         }}>Cancel</button>
         {info && <div style={{ fontSize: 12, color: "var(--st-ok)" }}>✓ {info}</div>}

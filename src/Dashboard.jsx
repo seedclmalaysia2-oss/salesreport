@@ -229,11 +229,11 @@ const CustomTooltip = ({active, payload, label}) => {
 
 const KPI = ({label, value, sub, trend, color}) => (
   <div style={{background:"rgba(var(--tint),0.03)",border:"1px solid rgba(var(--tint),0.06)",borderRadius:12,padding:"20px 24px",flex:1,minWidth:180}}>
-    <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:1.5,color:"rgba(var(--tint),0.4)",marginBottom:8,fontFamily:"'DM Sans',sans-serif"}}>{label}</div>
+    <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:1.5,color:"rgba(var(--tint),0.65)",marginBottom:8,fontFamily:"'DM Sans',sans-serif"}}>{label}</div>
     {/* Falls back to the theme ink, not #fff — a white value is invisible on
         the Paper and Crisp light themes. */}
     <div style={{fontSize:28,fontWeight:700,color:color||"var(--text)",fontFamily:"'Space Mono',monospace",lineHeight:1.1}}>{value}</div>
-    {sub && <div style={{fontSize:12,color:"rgba(var(--tint),0.5)",marginTop:6}}>{sub}</div>}
+    {sub && <div style={{fontSize:12,color:"rgba(var(--tint),0.67)",marginTop:6}}>{sub}</div>}
     {trend !== undefined && (
       <div style={{fontSize:12,marginTop:6,color:trend>=0?"var(--st-ok)":"var(--st-bad)",fontWeight:600}}>
         {trend>=0?"▲":"▼"} {Math.abs(trend).toFixed(1)}% vs prev year
@@ -834,7 +834,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
       }}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:16}}>
           <div>
-            <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:2,color:"rgba(var(--tint),0.35)",marginBottom:6,display:"flex",alignItems:"center",gap:10}}>
+            <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:2,color:"rgba(var(--tint),0.62)",marginBottom:6,display:"flex",alignItems:"center",gap:10}}>
               <span>SEED Malaysia</span>
               {user?.isAdmin && (
                 <span style={{padding:"2px 8px",background:"rgba(232,99,59,0.15)",color:STATUS.accent,borderRadius:10,fontSize:10,letterSpacing:0.5}}>ADMIN</span>
@@ -843,7 +843,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             <h1 style={{fontSize:26,fontWeight:700,margin:0,letterSpacing:-0.5,color:"var(--text)"}}>
               Sales Performance Dashboard
             </h1>
-            <div style={{fontSize:13,color:"rgba(var(--tint),0.4)",marginTop:4}}>
+            <div style={{fontSize:13,color:"rgba(var(--tint),0.65)",marginTop:4}}>
               {YEARS[0]} – {YEARS[YEARS.length-1]} ·{" "}
               {user?.canViewAll
                 ? `All teams · ${(data.salespeople || []).length} salespeople`
@@ -899,13 +899,13 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                 }}>{(user.sp || "?")[0]?.toUpperCase()}</div>
                 <div style={{display:"flex",flexDirection:"column",gap:0,lineHeight:1.1}}>
                   <div style={{fontSize:12,fontWeight:600}}>{user.isAdmin ? "Admin" : user.sp}</div>
-                  {user.email && <div style={{fontSize:10,color:"rgba(var(--tint),0.4)"}}>{user.email}</div>}
+                  {user.email && <div style={{fontSize:10,color:"rgba(var(--tint),0.65)"}}>{user.email}</div>}
                 </div>
                 {onLogout && (
                   <button onClick={onLogout} style={{
                     marginLeft:4,padding:"4px 10px",fontSize:11,fontWeight:600,
                     background:"transparent",border:"1px solid rgba(var(--tint),0.1)",
-                    color:"rgba(var(--tint),0.6)",borderRadius:14,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"
+                    color:"rgba(var(--tint),0.7)",borderRadius:14,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"
                   }}>Sign out</button>
                 )}
               </div>
@@ -999,7 +999,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                   <div style={{fontSize:14,fontWeight:600}}>Monthly Revenue vs Target — {selectedYear}</div>
                   {annualTarget > 0 && (
-                    <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11,color:"rgba(var(--tint),0.5)"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11,color:"rgba(var(--tint),0.67)"}}>
                       <span style={{display:"inline-block",width:14,height:2,borderTop:"2px dashed #94A3B8"}}></span>
                       target
                     </div>
@@ -1084,7 +1084,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   <thead>
                     <tr style={{borderBottom:"1px solid rgba(var(--tint),0.08)"}}>
                       {["Rank","Team","Revenue","Avg/Month","Customers","YoY Change"].map(h => (
-                        <th key={h} style={{padding:"10px 14px",textAlign:"left",color:"rgba(var(--tint),0.4)",fontWeight:500,fontSize:11,textTransform:"uppercase",letterSpacing:1}}>{h}</th>
+                        <th key={h} style={{padding:"10px 14px",textAlign:"left",color:"rgba(var(--tint),0.65)",fontWeight:500,fontSize:11,textTransform:"uppercase",letterSpacing:1}}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1106,7 +1106,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                           </div>
                         </td>
                         <td style={{padding:"12px 14px",fontFamily:"'Space Mono',monospace",fontWeight:600}}>{fmtFull(s.total)}</td>
-                        <td style={{padding:"12px 14px",fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.6)"}}>{fmtFull(s.avgMonthly)}</td>
+                        <td style={{padding:"12px 14px",fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)"}}>{fmtFull(s.avgMonthly)}</td>
                         <td style={{padding:"12px 14px",textAlign:"center"}}>{s.customers}</td>
                         <td style={{padding:"12px 14px"}}>
                           {s.prevTotal > 0 ? (
@@ -1117,7 +1117,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                             }}>
                               {s.change>=0?"▲":"▼"} {Math.abs(s.change).toFixed(1)}%
                             </span>
-                          ) : <span style={{color:"rgba(var(--tint),0.3)",fontSize:11}}>N/A</span>}
+                          ) : <span style={{color:"rgba(var(--tint),0.58)",fontSize:11}}>N/A</span>}
                         </td>
                       </tr>
                     ))}
@@ -1131,7 +1131,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         {tab === "monthly" && (
           <>
             <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:12,color:"rgba(var(--tint),0.4)",marginRight:8}}>Filter:</span>
+              <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>Filter:</span>
               <Pill label="All Teams" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
               {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
             </div>
@@ -1180,7 +1180,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
             <Card style={{marginBottom:20}}>
               <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>📦 Monthly Quantity Breakdown — {selectedYear}</div>
-              <div style={{fontSize:11,color:"rgba(var(--tint),0.4)",marginBottom:12}}>
+              <div style={{fontSize:11,color:"rgba(var(--tint),0.65)",marginBottom:12}}>
                 Derived per (SP, year) by apportioning annual brand-level quantity across months in proportion to monthly revenue.
               </div>
               <ResponsiveContainer width="100%" height={360}>
@@ -1254,7 +1254,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   <div style={{fontSize:22,fontWeight:700,fontFamily:"'Space Mono',monospace",color:COLORS[sp] || "#888",marginBottom:4}}>
                     {fmtFull(spData.find(s => s.year === selectedYear)?.total || 0)}
                   </div>
-                  <div style={{fontSize:11,color:"rgba(var(--tint),0.4)",marginBottom:14}}>{selectedYear} Revenue</div>
+                  <div style={{fontSize:11,color:"rgba(var(--tint),0.65)",marginBottom:14}}>{selectedYear} Revenue</div>
                   <ResponsiveContainer width="100%" height={120}>
                     <BarChart data={spData.map(s => ({year: s.year.toString(), total: s.total}))}>
                       <XAxis dataKey="year" tick={{fill:tk.chartTickFill,fontSize:10}} axisLine={false} tickLine={false} />
@@ -1281,10 +1281,10 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               <Card>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                   <div style={{fontSize:14,fontWeight:600}}>🇲🇾 Top 20 Local — All Time</div>
-                  <div style={{fontSize:11,color:"rgba(var(--tint),0.4)"}}>{YEARS[0]}–{YEARS[YEARS.length-1]}</div>
+                  <div style={{fontSize:11,color:"rgba(var(--tint),0.65)"}}>{YEARS[0]}–{YEARS[YEARS.length-1]}</div>
                 </div>
                 {topLocalCustomers.length === 0 ? (
-                  <div style={{padding:"60px 0",textAlign:"center",color:"rgba(var(--tint),0.4)"}}>No local customers in dataset.</div>
+                  <div style={{padding:"60px 0",textAlign:"center",color:"rgba(var(--tint),0.65)"}}>No local customers in dataset.</div>
                 ) : (
                   <ResponsiveContainer width="100%" height={Math.max(topLocalCustomers.length * 28, 200)}>
                     <BarChart data={topLocalCustomers} layout="vertical" margin={{left:140, right:70}}>
@@ -1304,10 +1304,10 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               <Card>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                   <div style={{fontSize:14,fontWeight:600}}>🌏 Top 20 Overseas / Export — All Time</div>
-                  <div style={{fontSize:11,color:"rgba(var(--tint),0.4)"}}>served by Seed Malaysia</div>
+                  <div style={{fontSize:11,color:"rgba(var(--tint),0.65)"}}>served by Seed Malaysia</div>
                 </div>
                 {topOverseasCustomers.length === 0 ? (
-                  <div style={{padding:"60px 0",textAlign:"center",color:"rgba(var(--tint),0.4)"}}>No overseas customers in dataset.</div>
+                  <div style={{padding:"60px 0",textAlign:"center",color:"rgba(var(--tint),0.65)"}}>No overseas customers in dataset.</div>
                 ) : (
                   <ResponsiveContainer width="100%" height={Math.max(topOverseasCustomers.length * 28, 200)}>
                     <BarChart data={topOverseasCustomers} layout="vertical" margin={{left:140, right:70}}>
@@ -1324,8 +1324,8 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                 )}
               </Card>
             </div>
-            <div style={{marginTop:14,fontSize:11,color:"rgba(var(--tint),0.35)",textAlign:"center"}}>
-              * Customers served by the <strong style={{color:"rgba(var(--tint),0.5)"}}>Seed Malaysia</strong> team in any year are classified as Overseas/Export. All others are Local.
+            <div style={{marginTop:14,fontSize:11,color:"rgba(var(--tint),0.62)",textAlign:"center"}}>
+              * Customers served by the <strong style={{color:"rgba(var(--tint),0.67)"}}>Seed Malaysia</strong> team in any year are classified as Overseas/Export. All others are Local.
             </div>
 
             <div style={{marginTop:32,marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
@@ -1360,7 +1360,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"
                   }}>≡ List</button>
                 </div>
-                <div style={{fontSize:11,color:"rgba(var(--tint),0.4)"}}>
+                <div style={{fontSize:11,color:"rgba(var(--tint),0.65)"}}>
                   {topCustomersBySpYear === "all"
                     ? `All-time · ${YEARS[0]}–${YEARS[YEARS.length-1]}`
                     : `Year ${topCustomersBySpYear}`}
@@ -1380,13 +1380,13 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                           <div style={{width:12,height:12,borderRadius:4,background:COLORS[sp] || "#888"}} />
                           <div style={{fontSize:14,fontWeight:700}}>{sp}</div>
                         </div>
-                        <div style={{fontSize:11,color:"rgba(var(--tint),0.4)"}}>top 10</div>
+                        <div style={{fontSize:11,color:"rgba(var(--tint),0.65)"}}>top 10</div>
                       </div>
-                      <div style={{fontSize:11,color:"rgba(var(--tint),0.45)",marginBottom:14,fontFamily:"'Space Mono',monospace"}}>
+                      <div style={{fontSize:11,color:"rgba(var(--tint),0.66)",marginBottom:14,fontFamily:"'Space Mono',monospace"}}>
                         Top-10 contribution: {fmtFull(spTotal)}
                       </div>
                       {list.length === 0 ? (
-                        <div style={{padding:"40px 0",textAlign:"center",color:"rgba(var(--tint),0.3)",fontSize:12}}>No customers in dataset</div>
+                        <div style={{padding:"40px 0",textAlign:"center",color:"rgba(var(--tint),0.58)",fontSize:12}}>No customers in dataset</div>
                       ) : (
                         <ResponsiveContainer width="100%" height={Math.max(list.length * 30, 220)}>
                           <BarChart data={list} layout="vertical" margin={{left:115, right: 60}}>
@@ -1419,13 +1419,13 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                           <div style={{width:12,height:12,borderRadius:4,background:COLORS[sp] || "#888"}} />
                           <div style={{fontSize:14,fontWeight:700}}>{sp}</div>
                         </div>
-                        <div style={{fontSize:11,color:"rgba(var(--tint),0.4)"}}>top {list.length}</div>
+                        <div style={{fontSize:11,color:"rgba(var(--tint),0.65)"}}>top {list.length}</div>
                       </div>
-                      <div style={{fontSize:11,color:"rgba(var(--tint),0.45)",marginBottom:14,fontFamily:"'Space Mono',monospace"}}>
+                      <div style={{fontSize:11,color:"rgba(var(--tint),0.66)",marginBottom:14,fontFamily:"'Space Mono',monospace"}}>
                         Top-10 contribution: {fmtFull(spTotal)}
                       </div>
                       {list.length === 0 ? (
-                        <div style={{padding:"40px 0",textAlign:"center",color:"rgba(var(--tint),0.3)",fontSize:12}}>No customers in dataset</div>
+                        <div style={{padding:"40px 0",textAlign:"center",color:"rgba(var(--tint),0.58)",fontSize:12}}>No customers in dataset</div>
                       ) : (
                         <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                           <tbody>
@@ -1433,7 +1433,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                               const pct = (c.total / maxVal) * 100;
                               return (
                                 <tr key={c.customer} style={{borderBottom: i === list.length - 1 ? "none" : "1px solid rgba(var(--tint),0.04)"}}>
-                                  <td style={{padding:"8px 8px 8px 0",width:24,color:"rgba(var(--tint),0.4)",fontSize:11,fontFamily:"'Space Mono',monospace",verticalAlign:"top"}}>
+                                  <td style={{padding:"8px 8px 8px 0",width:24,color:"rgba(var(--tint),0.65)",fontSize:11,fontFamily:"'Space Mono',monospace",verticalAlign:"top"}}>
                                     {String(i + 1).padStart(2, "0")}
                                   </td>
                                   <td style={{padding:"8px 8px",verticalAlign:"top"}}>
@@ -1462,7 +1462,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         {tab === "yoy" && (
           <>
             <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:12,color:"rgba(var(--tint),0.4)",marginRight:8}}>View:</span>
+              <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>View:</span>
               <Pill label="All Teams" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
               {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
             </div>
@@ -1535,7 +1535,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   )}
                 </LineChart>
               </ResponsiveContainer>
-              <div style={{fontSize:11,color:"rgba(var(--tint),0.35)",marginTop:10,textAlign:"center"}}>
+              <div style={{fontSize:11,color:"rgba(var(--tint),0.62)",marginTop:10,textAlign:"center"}}>
                 * Partial-year data is included as recorded
               </div>
             </Card>
@@ -1570,7 +1570,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                             </span>
                           )}
                         </div>
-                        <div style={{fontSize:11,color:"rgba(var(--tint),0.4)",marginBottom:12,fontFamily:"'Space Mono',monospace"}}>
+                        <div style={{fontSize:11,color:"rgba(var(--tint),0.65)",marginBottom:12,fontFamily:"'Space Mono',monospace"}}>
                           5-yr total: {fmtFull(spTotal)}
                         </div>
                         <ResponsiveContainer width="100%" height={140}>
@@ -1620,7 +1620,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       color:"var(--text)",borderRadius:6,cursor:"pointer",fontSize:12,textAlign:"left"
                     }}>
                     <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:8}}>{c.customer}</span>
-                    <span style={{fontFamily:"'Space Mono',monospace",fontSize:11,color:"rgba(var(--tint),0.5)"}}>{fmt(c.total)}</span>
+                    <span style={{fontFamily:"'Space Mono',monospace",fontSize:11,color:"rgba(var(--tint),0.67)"}}>{fmt(c.total)}</span>
                   </button>
                 ))}
               </div>
@@ -1630,13 +1630,13 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               {activeCustomer && (
                 <>
                   <Card style={{marginBottom:16}}>
-                    <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:1.5,color:"rgba(var(--tint),0.4)",marginBottom:6}}>Customer</div>
+                    <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:1.5,color:"rgba(var(--tint),0.65)",marginBottom:6}}>Customer</div>
                     <div style={{fontSize:24,fontWeight:700,marginBottom:8}}>{activeCustomer.customer}</div>
                     <div style={{display:"flex",gap:24,flexWrap:"wrap",fontSize:13,color:"rgba(var(--tint),0.7)"}}>
-                      <div><span style={{color:"rgba(var(--tint),0.4)"}}>Total all time:</span> <span style={{fontFamily:"'Space Mono',monospace",fontWeight:600,color:STATUS.accent}}>{fmtFull(activeCustomer.total)}</span></div>
-                      <div><span style={{color:"rgba(var(--tint),0.4)"}}>Active years:</span> {Object.keys(activeCustomer.perYear).filter(y => activeCustomer.perYear[y] > 0).length}</div>
+                      <div><span style={{color:"rgba(var(--tint),0.65)"}}>Total all time:</span> <span style={{fontFamily:"'Space Mono',monospace",fontWeight:600,color:STATUS.accent}}>{fmtFull(activeCustomer.total)}</span></div>
+                      <div><span style={{color:"rgba(var(--tint),0.65)"}}>Active years:</span> {Object.keys(activeCustomer.perYear).filter(y => activeCustomer.perYear[y] > 0).length}</div>
                       <div>
-                        <span style={{color:"rgba(var(--tint),0.4)"}}>Served by:</span>{" "}
+                        <span style={{color:"rgba(var(--tint),0.65)"}}>Served by:</span>{" "}
                         {activeCustomer.perSP.map(sp => (
                           <span key={sp} style={{display:"inline-flex",alignItems:"center",gap:4,marginRight:8}}>
                             <span style={{width:8,height:8,borderRadius:2,background:COLORS[sp] || "#888",display:"inline-block"}} />
@@ -1679,7 +1679,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     <Card>
                       <div style={{fontSize:14,fontWeight:600,marginBottom:14}}>💰 Top Brands by Revenue</div>
                       {customerTopBrandsByAmt.length === 0 ? (
-                        <div style={{color:"rgba(var(--tint),0.4)",fontSize:13,padding:"40px 0",textAlign:"center"}}>No brand revenue for this customer</div>
+                        <div style={{color:"rgba(var(--tint),0.65)",fontSize:13,padding:"40px 0",textAlign:"center"}}>No brand revenue for this customer</div>
                       ) : (
                         <ResponsiveContainer width="100%" height={Math.max(customerTopBrandsByAmt.length * 22, 220)}>
                           <BarChart data={customerTopBrandsByAmt} layout="vertical" margin={{left:80, right:60}}>
@@ -1699,7 +1699,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     <Card>
                       <div style={{fontSize:14,fontWeight:600,marginBottom:14}}>📦 Top Brands by Quantity</div>
                       {customerTopBrandsByQty.length === 0 ? (
-                        <div style={{color:"rgba(var(--tint),0.4)",fontSize:13,padding:"40px 0",textAlign:"center"}}>No quantity data for this customer</div>
+                        <div style={{color:"rgba(var(--tint),0.65)",fontSize:13,padding:"40px 0",textAlign:"center"}}>No quantity data for this customer</div>
                       ) : (
                         <ResponsiveContainer width="100%" height={Math.max(customerTopBrandsByQty.length * 22, 220)}>
                           <BarChart data={customerTopBrandsByQty} layout="vertical" margin={{left:80, right:60}}>
@@ -1724,7 +1724,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         {tab === "brands" && (
           <>
             <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:12,color:"rgba(var(--tint),0.4)",marginRight:8}}>Filter by SP:</span>
+              <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>Filter by SP:</span>
               <Pill label="All Teams" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
               {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
             </div>
@@ -1759,7 +1759,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               <Card>
                 <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>📦 Top 20 Brands by Quantity — {selectedYear}</div>
                 {brandYearTotalsByQty.length === 0 ? (
-                  <div style={{padding:"60px 0",textAlign:"center",color:"rgba(var(--tint),0.4)"}}>No quantity data for this scope.</div>
+                  <div style={{padding:"60px 0",textAlign:"center",color:"rgba(var(--tint),0.65)"}}>No quantity data for this scope.</div>
                 ) : (
                   <ResponsiveContainer width="100%" height={520}>
                     <BarChart data={brandYearTotalsByQty.slice(0,20)} layout="vertical" margin={{left:90, right:80}}>
@@ -1831,12 +1831,12 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         {tab === "cohort" && (
           <>
             <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:12,color:"rgba(var(--tint),0.4)",marginRight:8}}>SP:</span>
+              <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>SP:</span>
               <Pill label="All Teams" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
               {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
             </div>
 
-            <div style={{fontSize:13,color:"rgba(var(--tint),0.5)",marginBottom:16}}>
+            <div style={{fontSize:13,color:"rgba(var(--tint),0.67)",marginBottom:16}}>
               Comparing <strong style={{color:"var(--text)"}}>{selectedYear}</strong> vs <strong style={{color:"var(--text)"}}>{selectedYear-1}</strong>
               {" "} · scope: <strong style={{color:"var(--text)"}}>{selectedSP === "All" ? "all teams" : selectedSP}</strong>
             </div>
@@ -1857,9 +1857,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                 <Card key={col.title}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                     <div style={{fontSize:14,fontWeight:600,color:col.color}}>{col.title}</div>
-                    <div style={{fontSize:11,color:"rgba(var(--tint),0.4)"}}>{col.list.length} customers</div>
+                    <div style={{fontSize:11,color:"rgba(var(--tint),0.65)"}}>{col.list.length} customers</div>
                   </div>
-                  <div style={{fontSize:10,color:"rgba(var(--tint),0.35)",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>{col.valueLabel}</div>
+                  <div style={{fontSize:10,color:"rgba(var(--tint),0.62)",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>{col.valueLabel}</div>
                   <div style={{
                     maxHeight:480,
                     overflowY:"auto",
@@ -1870,14 +1870,14 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     scrollbarGutter:"stable",
                     paddingRight:6,
                   }}>
-                    {col.list.length === 0 && <div style={{color:"rgba(var(--tint),0.3)",fontSize:13,padding:"20px 0"}}>None</div>}
+                    {col.list.length === 0 && <div style={{color:"rgba(var(--tint),0.58)",fontSize:13,padding:"20px 0"}}>None</div>}
                     {col.list.slice(0, 50).map((c) => (
                       <div key={c.customer} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,padding:"6px 0",borderBottom:"1px solid rgba(var(--tint),0.04)",fontSize:12}}>
                         <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.customer}</span>
                         <span style={{fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",flexShrink:0,textAlign:"right",minWidth:44}}>{fmt(c[col.valueKey])}</span>
                       </div>
                     ))}
-                    {col.list.length > 50 && <div style={{fontSize:11,color:"rgba(var(--tint),0.3)",paddingTop:8}}>+ {col.list.length - 50} more</div>}
+                    {col.list.length > 50 && <div style={{fontSize:11,color:"rgba(var(--tint),0.58)",paddingTop:8}}>+ {col.list.length - 50} more</div>}
                   </div>
                 </Card>
               ))}
@@ -1888,14 +1888,14 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         {tab === "heatmap" && (
           <>
             <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:12,color:"rgba(var(--tint),0.4)",marginRight:8}}>SP:</span>
+              <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>SP:</span>
               <Pill label="All Teams" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
               {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
             </div>
 
             {heatmap.customers.length === 0 ? (
               <Card>
-                <div style={{padding:"40px 0",textAlign:"center",color:"rgba(var(--tint),0.4)"}}>
+                <div style={{padding:"40px 0",textAlign:"center",color:"rgba(var(--tint),0.65)"}}>
                   No brand-level data for this scope.
                 </div>
               </Card>
@@ -1903,14 +1903,14 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               <>
                 <Card style={{marginBottom:20}}>
                   <div style={{fontSize:14,fontWeight:600,marginBottom:6,color:STATUS.accent}}>💰 Revenue heatmap — Top 12 × Top 12 — {selectedYear}</div>
-                  <div style={{fontSize:12,color:"rgba(var(--tint),0.4)",marginBottom:16}}>Cell intensity = RM revenue. Hover for exact values (revenue + quantity).</div>
+                  <div style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginBottom:16}}>Cell intensity = RM revenue. Hover for exact values (revenue + quantity).</div>
                   <div style={{overflowX:"auto"}}>
                     <table style={{borderCollapse:"separate",borderSpacing:2,fontSize:11}}>
                       <thead>
                         <tr>
-                          <th style={{padding:"6px 10px",textAlign:"left",color:"rgba(var(--tint),0.4)",fontWeight:500,minWidth:200}}>Customer ↓ / Brand →</th>
+                          <th style={{padding:"6px 10px",textAlign:"left",color:"rgba(var(--tint),0.65)",fontWeight:500,minWidth:200}}>Customer ↓ / Brand →</th>
                           {heatmap.brands.map(b => (
-                            <th key={b} style={{padding:"6px 4px",color:"rgba(var(--tint),0.6)",fontWeight:500,fontSize:10,minWidth:60,textAlign:"center"}}>
+                            <th key={b} style={{padding:"6px 4px",color:"rgba(var(--tint),0.7)",fontWeight:500,fontSize:10,minWidth:60,textAlign:"center"}}>
                               <div style={{transform:"rotate(-30deg)",transformOrigin:"left bottom",whiteSpace:"nowrap",height:60,marginTop:30}}>{b}</div>
                             </th>
                           ))}
@@ -1944,14 +1944,14 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
                 <Card>
                   <div style={{fontSize:14,fontWeight:600,marginBottom:6,color:STATUS.qty}}>📦 Quantity heatmap — same Top 12 × Top 12 — {selectedYear}</div>
-                  <div style={{fontSize:12,color:"rgba(var(--tint),0.4)",marginBottom:16}}>Cell intensity = units sold. Same axes as the revenue grid above for direct comparison.</div>
+                  <div style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginBottom:16}}>Cell intensity = units sold. Same axes as the revenue grid above for direct comparison.</div>
                   <div style={{overflowX:"auto"}}>
                     <table style={{borderCollapse:"separate",borderSpacing:2,fontSize:11}}>
                       <thead>
                         <tr>
-                          <th style={{padding:"6px 10px",textAlign:"left",color:"rgba(var(--tint),0.4)",fontWeight:500,minWidth:200}}>Customer ↓ / Brand →</th>
+                          <th style={{padding:"6px 10px",textAlign:"left",color:"rgba(var(--tint),0.65)",fontWeight:500,minWidth:200}}>Customer ↓ / Brand →</th>
                           {heatmap.brands.map(b => (
-                            <th key={b} style={{padding:"6px 4px",color:"rgba(var(--tint),0.6)",fontWeight:500,fontSize:10,minWidth:60,textAlign:"center"}}>
+                            <th key={b} style={{padding:"6px 4px",color:"rgba(var(--tint),0.7)",fontWeight:500,fontSize:10,minWidth:60,textAlign:"center"}}>
                               <div style={{transform:"rotate(-30deg)",transformOrigin:"left bottom",whiteSpace:"nowrap",height:60,marginTop:30}}>{b}</div>
                             </th>
                           ))}
@@ -1990,14 +1990,14 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         {tab === "targets" && (
           <>
             <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:12,color:"rgba(var(--tint),0.4)",marginRight:8}}>Scope:</span>
+              <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>Scope:</span>
               <Pill label="Team total" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
               {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
             </div>
 
             {annualTarget === 0 ? (
               <Card>
-                <div style={{padding:"40px 0",textAlign:"center",color:"rgba(var(--tint),0.5)"}}>
+                <div style={{padding:"40px 0",textAlign:"center",color:"rgba(var(--tint),0.67)"}}>
                   No target set for {selectedSP === "All" ? "team" : selectedSP} in {selectedYear}.
                 </div>
               </Card>
@@ -2050,7 +2050,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       <thead>
                         <tr style={{borderBottom:"1px solid rgba(var(--tint),0.08)"}}>
                           {["Month","Target","Actual","Gap","Achievement"].map(h => (
-                            <th key={h} style={{padding:"10px 14px",textAlign:"left",color:"rgba(var(--tint),0.4)",fontWeight:500,fontSize:11,textTransform:"uppercase",letterSpacing:1}}>{h}</th>
+                            <th key={h} style={{padding:"10px 14px",textAlign:"left",color:"rgba(var(--tint),0.65)",fontWeight:500,fontSize:11,textTransform:"uppercase",letterSpacing:1}}>{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -2070,7 +2070,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                           return (
                             <tr key={m} style={{borderBottom:"1px solid rgba(var(--tint),0.04)"}}>
                               <td style={{padding:"10px 14px",fontWeight:600}}>{m}</td>
-                              <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.6)"}}>{fmtFull(target)}</td>
+                              <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)"}}>{fmtFull(target)}</td>
                               <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",fontWeight:600}}>{actual > 0 ? fmtFull(actual) : "—"}</td>
                               <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",color:gap >= 0 ? STATUS.ok : STATUS.bad}}>
                                 {actual > 0 ? `${gap >= 0 ? "+" : ""}${fmtFull(gap)}` : "—"}
@@ -2083,7 +2083,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                                     </div>
                                     <span style={{fontFamily:"'Space Mono',monospace",fontWeight:600,color,fontSize:12}}>{pct.toFixed(0)}%</span>
                                   </div>
-                                ) : <span style={{color:"rgba(var(--tint),0.3)",fontSize:11}}>—</span>}
+                                ) : <span style={{color:"rgba(var(--tint),0.58)",fontSize:11}}>—</span>}
                               </td>
                             </tr>
                           );
@@ -2100,7 +2100,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       <thead>
                         <tr style={{borderBottom:"1px solid rgba(var(--tint),0.08)"}}>
                           {["Rep","Annual Target","YTD Actual","YTD Target","Achievement"].map(h => (
-                            <th key={h} style={{padding:"10px 14px",textAlign:"left",color:"rgba(var(--tint),0.4)",fontWeight:500,fontSize:11,textTransform:"uppercase",letterSpacing:1}}>{h}</th>
+                            <th key={h} style={{padding:"10px 14px",textAlign:"left",color:"rgba(var(--tint),0.65)",fontWeight:500,fontSize:11,textTransform:"uppercase",letterSpacing:1}}>{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -2127,7 +2127,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                               </td>
                               <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace"}}>{fmtFull(annT)}</td>
                               <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",fontWeight:600}}>{fmtFull(ytdA)}</td>
-                              <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.6)"}}>{fmtFull(ytdT)}</td>
+                              <td style={{padding:"10px 14px",fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)"}}>{fmtFull(ytdT)}</td>
                               <td style={{padding:"10px 14px"}}>
                                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                                   <div style={{width:120,height:6,background:"rgba(var(--tint),0.06)",borderRadius:3,overflow:"hidden"}}>
@@ -2141,7 +2141,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                         })}
                       </tbody>
                     </table>
-                    <div style={{marginTop:14,fontSize:11,color:"rgba(var(--tint),0.4)",textAlign:"center"}}>
+                    <div style={{marginTop:14,fontSize:11,color:"rgba(var(--tint),0.65)",textAlign:"center"}}>
                       * Per-rep targets are derived from each rep's prior-year contribution share applied to the team monthly target.
                     </div>
                   </Card>
@@ -2155,22 +2155,22 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             control. Both panels also read through RLS / an admin-only function,
             so a non-admin who forced this state client-side still sees nothing. */}
         {tab === "data" && (user?.isAdmin
-          ? <Suspense fallback={<Card><div style={{fontSize:13,color:"rgba(var(--tint),0.5)"}}>Loading file manager…</div></Card>}>
+          ? <Suspense fallback={<Card><div style={{fontSize:13,color:"rgba(var(--tint),0.67)"}}>Loading file manager…</div></Card>}>
               <DataTab user={user} data={data} onRefresh={onRefresh} />
             </Suspense>
-          : <Card><div style={{fontSize:13,color:"rgba(var(--tint),0.5)"}}>Admins only.</div></Card>
+          : <Card><div style={{fontSize:13,color:"rgba(var(--tint),0.67)"}}>Admins only.</div></Card>
         )}
 
         {tab === "users" && (user?.isAdmin
-          ? <Suspense fallback={<Card><div style={{fontSize:13,color:"rgba(var(--tint),0.5)"}}>Loading users…</div></Card>}>
+          ? <Suspense fallback={<Card><div style={{fontSize:13,color:"rgba(var(--tint),0.67)"}}>Loading users…</div></Card>}>
               <AdminUsers user={user} />
             </Suspense>
-          : <Card><div style={{fontSize:13,color:"rgba(var(--tint),0.5)"}}>Admins only.</div></Card>
+          : <Card><div style={{fontSize:13,color:"rgba(var(--tint),0.67)"}}>Admins only.</div></Card>
         )}
 
       </div>
 
-      <div style={{textAlign:"center",fontSize:11,color:"rgba(var(--tint),0.2)",padding:"40px 0 20px",fontFamily:"'Space Mono',monospace"}}>
+      <div style={{textAlign:"center",fontSize:11,color:"rgba(var(--tint),0.5)",padding:"40px 0 20px",fontFamily:"'Space Mono',monospace"}}>
         SEED Malaysia Sales Dashboard · {CUSTOMERS.length.toLocaleString()} customer-year rows · {BRAND_SALES.length.toLocaleString()} brand-sale rows · signed in as {user?.email || "—"}
       </div>
     </div>
@@ -2231,7 +2231,7 @@ function ProductSalesTab({ year, years, salespeople, brandSales, colors, tk, red
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
           <div>
             <div style={{fontSize:14,fontWeight:700,marginBottom:2}}>📦 Product Sales by Salesperson</div>
-            <div style={{fontSize:12,color:"rgba(var(--tint),0.55)"}}>
+            <div style={{fontSize:12,color:"rgba(var(--tint),0.69)"}}>
               Rows aggregated from brand codes via <code style={{fontFamily:"'Space Mono',monospace",fontSize:11}}>src/lib/productCategories.js</code>. Edit that file to reclassify a brand.
             </div>
           </div>
@@ -2288,7 +2288,7 @@ function ProductSalesTab({ year, years, salespeople, brandSales, colors, tk, red
               <div style={{fontSize:20,fontWeight:700,fontFamily:"'Space Mono',monospace",color:"var(--text)"}}>
                 {fmtShort(v)}
               </div>
-              <div style={{fontSize:11,color:"rgba(var(--tint),0.5)",marginTop:2,fontFamily:"'Space Mono',monospace"}}>
+              <div style={{fontSize:11,color:"rgba(var(--tint),0.67)",marginTop:2,fontFamily:"'Space Mono',monospace"}}>
                 {share.toFixed(1)}% of {metric === "amt" ? "revenue" : "units"}
               </div>
             </div>
@@ -2302,12 +2302,12 @@ function ProductSalesTab({ year, years, salespeople, brandSales, colors, tk, red
           <div style={{fontSize:14,fontWeight:600}}>
             By salesperson — {selectedYear === "all" ? `all time (${years[0]}–${years[years.length-1]})` : `year ${selectedYear}`}
           </div>
-          <div style={{fontSize:11,color:"rgba(var(--tint),0.4)"}}>
+          <div style={{fontSize:11,color:"rgba(var(--tint),0.65)"}}>
             {metric === "amt" ? `Total ${fmtFull(grandTotal)}` : `Total ${Number(grandTotal).toLocaleString("en-MY")} units`}
           </div>
         </div>
         {chartData.length === 0 ? (
-          <div style={{padding:"60px 0",textAlign:"center",color:"rgba(var(--tint),0.4)"}}>
+          <div style={{padding:"60px 0",textAlign:"center",color:"rgba(var(--tint),0.65)"}}>
             No brand-sale rows for this year. Try All time.
           </div>
         ) : (
@@ -2345,7 +2345,7 @@ function ProductSalesTab({ year, years, salespeople, brandSales, colors, tk, red
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:640}}>
             <thead>
               <tr style={{background:"rgba(var(--tint),0.04)"}}>
-                <th style={{textAlign:"left",padding:"10px 14px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.55)",fontWeight:600,borderBottom:"1px solid rgba(var(--tint),0.08)"}}>Salesperson</th>
+                <th style={{textAlign:"left",padding:"10px 14px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.69)",fontWeight:600,borderBottom:"1px solid rgba(var(--tint),0.08)"}}>Salesperson</th>
                 {agg.categoriesUsed.map(cat => (
                   <th key={cat} style={{textAlign:"right",padding:"10px 14px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:CATEGORY_COLORS[cat],fontWeight:600,borderBottom:"1px solid rgba(var(--tint),0.08)",whiteSpace:"nowrap"}}>
                     <span style={{display:"inline-flex",alignItems:"center",gap:6,justifyContent:"flex-end"}}>
@@ -2382,7 +2382,7 @@ function ProductSalesTab({ year, years, salespeople, brandSales, colors, tk, red
             </tbody>
             <tfoot>
               <tr style={{background:"rgba(var(--tint),0.03)"}}>
-                <td style={{padding:"12px 14px",fontSize:11,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.55)",fontWeight:700}}>Grand total</td>
+                <td style={{padding:"12px 14px",fontSize:11,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.69)",fontWeight:700}}>Grand total</td>
                 {agg.categoriesUsed.map(cat => {
                   const v = agg.totalsByCategory[cat]?.[metric] || 0;
                   return (
