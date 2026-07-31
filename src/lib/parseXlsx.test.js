@@ -12,6 +12,18 @@ describe("parseFilename — classifies each Autocount export", () => {
       .toMatchObject({ kind: "Sales Analysis by customer", year: 2026, sp: "All" });
   });
 
+  it("year-last customer file (new naming)", () => {
+    expect(parseFilename("Sales Analysis 2026.xlsx"))
+      .toMatchObject({ kind: "Sales Analysis by customer", year: 2026, sp: "All" });
+    expect(parseFilename("Sales Analysis 2025.xlsx"))
+      .toMatchObject({ kind: "Sales Analysis by customer", year: 2025, sp: "All" });
+    expect(parseFilename("Sales Analysis by customer 2026.xlsx"))
+      .toMatchObject({ kind: "Sales Analysis by customer", year: 2026, sp: "All" });
+    // must NOT be mistaken for the brand file (which starts "Stock Sales Analysis")
+    expect(parseFilename("Alan 2026 Stock Sales Analysis - Summary by Brand.xlsx")?.kind)
+      .toMatch(/Summary by brand/i);
+  });
+
   it("per-rep customer file", () => {
     expect(parseFilename("Alan 2025 Sales Analysis by customer.xlsx"))
       .toMatchObject({ kind: "Sales Analysis by customer", year: 2025, sp: "Alan" });

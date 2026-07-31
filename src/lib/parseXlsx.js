@@ -21,6 +21,11 @@ const FNAME_RE = /^(.+?) (\d{4}) (Sales Analysis by customer|Stock Sales Analysi
 // prefix. Introduced when ops switched to a single team-wide export per year.
 const YEAR_ONLY_CUSTOMER_FNAME_RE = /^(\d{4}) Sales Analysis by customer\.xlsx$/i;
 
+// Same year-only customer export with the year moved to the END:
+// 'Sales Analysis 2026.xlsx' (optionally 'Sales Analysis by customer 2026.xlsx').
+// The naming the ops team now uses — treated identically to the year-first form.
+const SALES_ANALYSIS_YEAR_FNAME_RE = /^Sales Analysis(?: by customer)?\s+(\d{4})\.xlsx$/i;
+
 // The Customer Invoice Listing exports don't carry an SP or a fixed year in
 // their filename. The convention is 'Customer Invoice Listing <suffix>.xlsx'
 // where the suffix is a period stamp like '26jul2026', 'jul2026', 'July',
@@ -65,6 +70,10 @@ export function parseFilename(name) {
     // No SP in the filename — mark as 'All' so the ingest path stays uniform
     // with the year-only exports the ops team now ships.
     return { sp: "All", year: parseInt(ym[1], 10), kind: "Sales Analysis by customer" };
+  }
+  const say = name.match(SALES_ANALYSIS_YEAR_FNAME_RE);
+  if (say) {
+    return { sp: "All", year: parseInt(say[1], 10), kind: "Sales Analysis by customer" };
   }
   const im = name.match(INVOICE_FNAME_RE);
   if (im) {

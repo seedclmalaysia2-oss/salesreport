@@ -39,7 +39,7 @@ function detectedLabel(entryOrKind) {
   if (name) {
     if (/^Stock Sales Analysis - Detail\b/i.test(name))       return "Stock Sales Analysis - Detail";
     if (/^Customer Invoice Listing\b/i.test(name))            return "Customer Invoice Listing";
-    if (/Sales Analysis by customer\b/i.test(name))           return "Sales Analysis · Customer";
+    if (/Sales Analysis by customer\b/i.test(name) || /^Sales Analysis\s+\d{4}\b/i.test(name)) return "Sales Analysis · Customer";
     if (/Stock Sales Analysis - Summary by [Bb]rand\b/i.test(name)) return "Stock Sales · Brand";
   }
   if (kind === "customer") return "Sales Analysis · Customer";
