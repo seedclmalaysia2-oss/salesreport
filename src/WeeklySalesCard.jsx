@@ -372,6 +372,33 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
     return t ? t.target : 0;
   }, [activeMonth, targets]);
 
+  // Staleness signal: how long since the weekly SOURCE was last refreshed.
+  // Prefer the newest invoice / Stock-Detail file's upload time — that is what
+  // the "Source:" line shows, and it advances the moment an admin uploads a
+  // fresh Detail file. Fall back to the freshest weekly row when the file list
+  // is hidden by RLS (non-admins). We deliberately avoid keying off
+  // weekly_sales.uploaded_at alone: it only bumps when a NEW week is first
+  // created, so re-uploading a file that revises the current week would leave it
+  // looking stale. The file timestamp is the honest "is this current?" signal.
+  const STALE_AFTER_DAYS = 2;
+  const sourceUpdatedMs = useMemo(() => {
+    let ms = null;
+    for (const f of invoiceFiles || []) {
+      if (typeof f.uploadedAt === "number" && (ms == null || f.uploadedAt > ms)) ms = f.uploadedAt;
+    }
+    if (ms != null) return ms;
+    for (const w of weeklySales || []) {
+      if (!w.uploadedAt) continue;
+      const t = new Date(w.uploadedAt).getTime();
+      if (Number.isFinite(t) && (ms == null || t > ms)) ms = t;
+    }
+    return ms;
+  }, [invoiceFiles, weeklySales]);
+  const staleDays = sourceUpdatedMs != null
+    ? Math.floor((Date.now() - sourceUpdatedMs) / 86400000)
+    : null;
+  const showStale = staleDays != null && staleDays >= STALE_AFTER_DAYS;
+
   // Only Refresh lives in the header now — uploads happen exclusively on the
   // Data ⤴ tab so admins have one place to manage source files. For an admin,
   // Refresh recalculates every fact table from the newest files first, then
@@ -401,6 +428,31 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
       color: "var(--st-bad)",
     }}>
       ⚠ {refreshError}
+    </div>
+  ) : null;
+
+  // Staleness prompt — surfaces the exact confusion admins keep hitting: the
+  // weekly numbers look "stuck" because the Stock-Detail source hasn't been
+  // re-uploaded, not because anything is broken. Amber (watch), with a ⚠ glyph
+  // so the state survives greyscale / colour-blind reading.
+  const StaleBanner = showStale ? (
+    <div style={{
+      marginTop: 12, padding: "10px 14px", borderRadius: 8, fontSize: 12.5, lineHeight: 1.55,
+      display: "flex", alignItems: "flex-start", gap: 8,
+      background: "color-mix(in srgb, var(--st-watch) 12%, transparent)",
+      border: "1px solid color-mix(in srgb, var(--st-watch) 40%, transparent)",
+      color: "var(--st-watch)",
+    }}>
+      <span aria-hidden="true" style={{ fontWeight: 700, lineHeight: 1.2 }}>⚠</span>
+      <span>
+        Weekly data was last refreshed{" "}
+        <strong style={{ fontFamily: "'Space Mono',monospace" }}>
+          {new Date(sourceUpdatedMs).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+        </strong>{" "}· {staleDays} days ago.{" "}
+        {isAdmin
+          ? "Upload a fresh “Stock Sales Analysis - Detail” file on the Data ⤴ tab to bring it current — the “Sales Analysis by customer” file does not update this card."
+          : "Ask the admin to upload a fresh “Stock Sales Analysis - Detail” file."}
+      </span>
     </div>
   ) : null;
 
@@ -487,6 +539,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
         {HeaderActions}
       </div>
       {RefreshError}
+      {StaleBanner}
 
       {/* Month + week navigator. Prev/next hop between months that actually
           have data; the pill row lists every week of the active month, latest
