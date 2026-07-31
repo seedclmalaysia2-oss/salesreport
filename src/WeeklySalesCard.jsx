@@ -394,8 +394,14 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
     }
     return ms;
   }, [invoiceFiles, weeklySales]);
+  // Calendar-day difference (local), not a 24h floor — otherwise "2 days ago"
+  // flips to "1" just because it's the morning, making the threshold jittery.
+  const dayIndex = (ms) => {
+    const d = new Date(ms);
+    return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+  };
   const staleDays = sourceUpdatedMs != null
-    ? Math.floor((Date.now() - sourceUpdatedMs) / 86400000)
+    ? dayIndex(Date.now()) - dayIndex(sourceUpdatedMs)
     : null;
   const showStale = staleDays != null && staleDays >= STALE_AFTER_DAYS;
 
