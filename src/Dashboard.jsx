@@ -153,17 +153,17 @@ function ChartPatterns({ colors, order }) {
 // is split. The bright dark-theme values (#34D399 etc.) sit at ~2.3–3:1 on the
 // light "sunlight" themes, so a headline number or a trend arrow was failing
 // contrast exactly where daylight legibility matters most. The light variants
-// are darkened to clear 4.5:1 on both #F1F5F9 and #FAF7F2 while holding their
-// hue, and still give white text ≥5:1 so button fills work. ok=ahead,
-// bad=behind, watch=near-target, info=neutral, accent=Signal Orange,
+// are darkened to clear 4.5:1 on the soft-blue light background (#DCE9F7) while
+// holding their hue, and still give white text ≥5:1 so button fills work.
+// ok=ahead, bad=behind, watch=near-target, info=neutral, accent=Signal Orange,
 // qty=quantity charts, alt=incidental purple.
 const STATUS_DARK = {
   ok: "#34D399", bad: "#F87171", watch: "#F59E0B", info: "#3B82F6",
   accent: "#E8633B", qty: "#10B981", alt: "#A855F7", region: "#EC4899",
 };
 const STATUS_LIGHT = {
-  ok: "#177D58", bad: "#DD0606", watch: "#9A6204", info: "#0662F9",
-  accent: "#CA3C12", qty: "#077D56", alt: "#9831FA", region: "#B31069",
+  ok: "#157452", bad: "#D00606", watch: "#8F5B04", info: "#065BE8",
+  accent: "#BC3811", qty: "#077651", alt: "#8D2EE8", region: "#B31069",
 };
 
 // ============================================================
@@ -195,10 +195,10 @@ const SERIES_DARK = {
 };
 
 const SERIES_LIGHT = {
-  "Alan": "#E06711",
+  "Alan": "#D56210",
   "Dino": "#1832C6",
-  "Khen": "#2A9C70",
-  "Sakinah": "#C259E2",
+  "Khen": "#28946A",
+  "Sakinah": "#BC56DB",
   "Simon": "#5C5410",
   "Seed Malaysia": "#7C1968",
 };
@@ -308,17 +308,22 @@ const THEMES = {
   crisp: {
     series: SERIES_LIGHT,
     status: STATUS_LIGHT,
-    name: "Crisp", subtitle: "Cool light · pro", mode: "light",
-    bg: "#F1F5F9",
+    // Soft blue, not stark white: the near-white #F1F5F9 read as glary in
+    // daylight. A calmer blue (L≈0.80) cuts the glare; the ink stays near-black
+    // (14.6:1) and the tint is a darker navy so muted labels/borders read
+    // stronger. The status/series palettes above were re-darkened to hold AA on
+    // this background (all ≥4.58:1; series min ΔE 38).
+    name: "Light", subtitle: "Soft blue · daylight", mode: "light",
+    bg: "#DCE9F7",
     text: "#0F172A",
-    tintRgb: "30, 41, 59",
-    chartTickFill: "rgba(30, 41, 59, 0.68)",
-    chartTickFillDim: "rgba(30, 41, 59, 0.85)",
-    chartGrid: "rgba(30, 41, 59, 0.10)",
-    tooltipBg: "rgba(255, 255, 255, 0.98)",
-    tooltipBorder: "rgba(30, 41, 59, 0.18)",
+    tintRgb: "15, 26, 50",
+    chartTickFill: "rgba(15, 26, 50, 0.72)",
+    chartTickFillDim: "rgba(15, 26, 50, 0.88)",
+    chartGrid: "rgba(15, 26, 50, 0.12)",
+    tooltipBg: "rgba(247, 250, 254, 0.98)",
+    tooltipBorder: "rgba(15, 26, 50, 0.22)",
     tooltipText: "#0F172A",
-    cellTrack: "rgba(30, 41, 59, 0.06)",
+    cellTrack: "rgba(15, 26, 50, 0.07)",
     heatmapBaseAlpha: 0.05,
   },
 };
