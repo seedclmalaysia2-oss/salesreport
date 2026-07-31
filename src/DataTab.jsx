@@ -663,10 +663,24 @@ export default function DataTab({ data, onRefresh }) {
     // frozen. Best-effort: a sync failure surfaces as an inline error but does
     // not undo the upload itself.
     if (okCount > 0 && list) {
-      const kinds = new Set(valid.map((f) => parseFilename(f.name)?.kind));
+      // Map each uploaded file to its canonical fact-table kind. Two traps in
+      // filename-based detection this avoids: (1) "Stock Sales Analysis - Detail"
+      // is an INVOICE-kind file that feeds the Weekly board — NOT a brand file —
+      // even though its name starts "Stock Sales…" like the brand summary does;
+      // (2) the Weekly board is also fed by "Customer Invoice Listing". Deriving
+      // the kind explicitly means a Stock-Detail upload syncs weekly, not brands.
+      const parsedKindOf = (name) => {
+        const k = parseFilename(name)?.kind || "";
+        if (/Sales Analysis by customer/i.test(k)) return "customer";
+        if (/Summary by brand/i.test(k))           return "brand";
+        if (/Customer Invoice Listing/i.test(k) ||
+            /Stock Sales Analysis - Detail/i.test(k)) return "invoice";
+        return null;
+      };
+      const kinds = new Set(valid.map((f) => parsedKindOf(f.name)).filter(Boolean));
       const syncErrors = [];
       try {
-        if (kinds.has("Sales Analysis by customer")) {
+        if (kinds.has("customer")) {
           const r = await syncCustomersFromFiles(list);
           if (r.scopes > 0) setNotice(
             `Uploaded ${okCount} file${okCount === 1 ? "" : "s"} · pushed ${r.rows.toLocaleString()} customer rows to the dashboard.`
@@ -674,14 +688,16 @@ export default function DataTab({ data, onRefresh }) {
         }
       } catch (e) { syncErrors.push(`customer sync: ${fmtErr(e)}`); }
       try {
-        if ([...kinds].some((k) => /Stock Sales/i.test(k || ""))) {
+        if (kinds.has("brand")) {
           const r = await syncBrandsFromFiles(list);
           if (r.scopes > 0) setNotice(
             `Uploaded ${okCount} file${okCount === 1 ? "" : "s"} · pushed ${r.rows.toLocaleString()} brand rows to the dashboard.`
           );
         }
       } catch (e) { syncErrors.push(`brand sync: ${fmtErr(e)}`); }
-      if (kinds.has("Customer Invoice Listing")) {
+      if (kinds.has("invoice")) {
+        // Stock Sales Analysis - Detail / Customer Invoice Listing → Weekly board.
+        // runWeeklySync sets its own "Weekly Sales updated…" notice on success.
         await runWeeklySync(list, { silent: true });
       }
       if (syncErrors.length) {
@@ -690,6 +706,16 @@ export default function DataTab({ data, onRefresh }) {
           `Click Recalculate to retry.\n${syncErrors.join("\n")}`
         );
       } else {
+        // Same guardrail as the per-row Update: if this batch touched only
+        // customer/brand files (no invoice/stock-detail), the Weekly Sales card
+        // did NOT move — say so, so nobody reads that as a failure.
+        if (!kinds.has("invoice") && (kinds.has("customer") || kinds.has("brand"))) {
+          setNotice(prev =>
+            `${prev || `Uploaded ${okCount} file${okCount === 1 ? "" : "s"}.`} ` +
+            `Note: the Weekly Sales card is fed by the "Stock Sales Analysis - Detail" file — ` +
+            `upload that to refresh the weekly numbers.`
+          );
+        }
         // Force every chart on every tab to recompute against the freshly
         // pushed fact-table rows. Without this the upload lands but the
         // dashboard keeps rendering the previous fetch.

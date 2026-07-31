@@ -424,7 +424,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
             <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginTop: 6 }}>No weekly data yet</div>
             <div style={{ fontSize: 13, color: "rgba(var(--tint),0.65)", marginTop: 4, maxWidth: 520, lineHeight: 1.6 }}>
               {isAdmin
-                ? "Upload a Customer Invoice Listing on the Data ⤴ tab — it syncs here automatically. Hit Refresh if the numbers haven't caught up yet."
+                ? "Upload a Stock Sales Analysis - Detail (or Customer Invoice Listing) file on the Data ⤴ tab — it syncs here automatically. The Sales Analysis by customer file feeds the other charts, not this card. Hit Refresh if the numbers haven't caught up yet."
                 : "Waiting for the admin to upload this week's numbers. Hit Refresh once they have."}
             </div>
           </div>
