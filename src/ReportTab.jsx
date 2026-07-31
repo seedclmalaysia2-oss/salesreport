@@ -4,6 +4,7 @@ import { parseFile } from "./lib/parseXlsx.js";
 import {
   aggregateProductMonthly, REPORT_PRODUCTS, AMOUNT_ONLY_ROWS,
 } from "./lib/reportProducts.js";
+import templateUrl from "./assets/hq-sales-summary-template.xlsx?url";
 
 // HQ "SEED(M) Sales Summary" generator (admin-only). Prefills the monthly
 // per-product quantity + amount grid from the Stock Sales Analysis - Detail
@@ -14,6 +15,27 @@ import {
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 const YEARS = [2026, 2025, 2024, 2023, 2022];
 const AMOUNT_ROWS = [...REPORT_PRODUCTS, ...AMOUNT_ONLY_ROWS];
+
+// --- HQ template layout (sheet "monthly sales", SEED(M) Sales Summary) ---
+// The quantity section (rows 5–35) lists the 31 products in REPORT_PRODUCTS order,
+// so QTY row = 5 + index. The amount section (rows 39–70) uses a slightly different
+// order (Ultra Vision sits below Wohlk) and adds OTHER INCOME, so it needs an
+// explicit list. Only the 12 monthly cells (cols B–M = 2–13) are written; every
+// TOTAL / BALANCE / ACC% / target-block cell is a formula and recalculates on open.
+const TEMPLATE_SHEET = "monthly sales";
+const QTY_FIRST_ROW = 5;              // REPORT_PRODUCTS[i] -> row 5 + i
+const AMOUNT_FIRST_ROW = 39;          // AMOUNT_ROW_ORDER[i] -> row 39 + i
+const TARGET_ROWS = [74, 83];         // "Jpn Sales Target" and "Revised Sales Target"
+const AMOUNT_ROW_ORDER = [
+  "1 DAY PURE", "1 DAY PURE SILFA", "1 DAY PURE ASTIGMATISM", "1 DAY MULSTISTAGE",
+  "1 DAYPURE EDOF", "1 DAY VIEW SUPPORT", "2 WEEK PURE MULTISTAGE", "2 WEEK PURE UP TORIC",
+  "2 WEEK PURE UP", "EYE COFFRET-M", "EYE COFFRET-M 10 TORIC", "EYE COFFRET-M 30 TORIC",
+  "MONTHLY FINE PLUS", "MONTHLY PURE3", "MONTHLY PURE6",
+  "MONTHLY COLOR UV - PEGAVISION", "MONTHLY COLOR UV - BLUE", "MONTHLY COLOR UV - ORANGE", "MONTHLY COLOR UV  II",
+  "MINASOFT 1DAY COLOR UV", "MINASOFT CARE UV", "RGP UV-1 / UV-1 KC", "RGP AS-LUNA/O2 NOAH",
+  "IRIS LENS", "BREATH O CORRECT", "BREATH O CORRECT (OVERSEAS)", "Wohlk KE RGP", "ULTRA VISION",
+  "DISOP H2O2 SOLUTION", "DISOP ULTRA EYEDROP", "ACCESSORIES/OTHERS", "OTHER INCOME",
+];
 
 const fmtInt = (v) => Math.round(Number(v) || 0).toLocaleString("en-MY");
 const fmtAmt = (v) => (Number(v) || 0).toLocaleString("en-MY", { maximumFractionDigits: 0 });
@@ -55,6 +77,7 @@ export default function ReportTab({ user, data }) {
   const [unmapped, setUnmapped] = useState({});
   const [sourceFiles, setSourceFiles] = useState([]);
   const [section, setSection] = useState("qty"); // 'qty' | 'amount'
+  const [exporting, setExporting] = useState(false);
 
   // Monthly team target (Msia target) for the Jan–Dec target row, from sales_targets.
   const monthlyTarget = useMemo(() => {
@@ -101,6 +124,70 @@ export default function ReportTab({ user, data }) {
     });
   };
 
+  const hasData = useMemo(
+    () => AMOUNT_ROWS.some((p) => grid[p] && (grid[p].qty.some(Boolean) || grid[p].amount.some(Boolean))),
+    [grid],
+  );
+
+  // Fill the HQ template (preserving its styling/merges/formulas) and download it.
+  // Only the 12 monthly cells per product are written — a value of 0 clears the
+  // cell so the template's own reference figures don't bleed through; TOTAL /
+  // BALANCE / ACC% and the Msia/target blocks are formulas and recalc on open.
+  const exportExcel = async () => {
+    setExporting(true);
+    setStatus("Building the HQ Excel file…");
+    try {
+      const ExcelJSMod = await import("exceljs");
+      const ExcelJS = ExcelJSMod.default || ExcelJSMod;
+      const templateBuf = await (await fetch(templateUrl)).arrayBuffer();
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(templateBuf);
+      const ws = wb.getWorksheet(TEMPLATE_SHEET);
+      if (!ws) throw new Error(`template sheet "${TEMPLATE_SHEET}" missing`);
+
+      const writeMonths = (rowNum, arr, { round = true, clearZero = true } = {}) => {
+        const row = ws.getRow(rowNum);
+        for (let m = 0; m < 12; m++) {
+          let v = Number(arr[m]) || 0;
+          if (round) v = Math.round(v);
+          row.getCell(2 + m).value = v === 0 && clearZero ? null : v;
+        }
+        row.commit();
+      };
+
+      // Quantity section (rows 5–35) and amount section (rows 39–70).
+      REPORT_PRODUCTS.forEach((p, i) => writeMonths(QTY_FIRST_ROW + i, grid[p]?.qty || []));
+      AMOUNT_ROW_ORDER.forEach((p, i) => writeMonths(AMOUNT_FIRST_ROW + i, grid[p]?.amount || []));
+
+      // Targets from the Dashboard Targets tab — only overwrite a month that has a
+      // value, so an incomplete Targets tab falls back to the template's figures.
+      for (const tr of TARGET_ROWS) {
+        const row = ws.getRow(tr);
+        monthlyTarget.forEach((t, m) => { if ((Number(t) || 0) > 0) row.getCell(2 + m).value = Math.round(t); });
+        row.commit();
+      }
+
+      // Force Excel to recalculate every formula on open (so totals aren't stale).
+      wb.calcProperties.fullCalcOnLoad = true;
+
+      const out = await wb.xlsx.writeBuffer();
+      const blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `SEED(M) Sales Summary ${year}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setStatus(`Exported “SEED(M) Sales Summary ${year}.xlsx”. Totals recalculate when you open it in Excel.`);
+    } catch (e) {
+      setStatus(`Export failed: ${e.message || e}`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const rows = section === "qty" ? REPORT_PRODUCTS : AMOUNT_ROWS;
   const colTotal = (m) => sum(rows.map((p) => grid[p]?.[section][m] || 0));
   const rowTotal = (p) => sum(grid[p]?.[section] || []);
@@ -131,6 +218,10 @@ export default function ReportTab({ user, data }) {
         <button onClick={generate} disabled={loading}
           style={{ background: loading ? "rgba(232,99,59,0.4)" : "#E8633B", color: "#fff", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 700, cursor: loading ? "wait" : "pointer", fontFamily: "'DM Sans',sans-serif" }}>
           {loading ? "Working…" : "Prefill from files"}
+        </button>
+        <button onClick={exportExcel} disabled={exporting || !hasData} title={hasData ? "Download the HQ Excel file" : "Prefill or edit the grid first"}
+          style={{ background: "transparent", color: hasData ? "var(--st-info)" : "rgba(var(--tint),0.4)", border: `1px solid ${hasData ? "var(--st-info)" : "rgba(var(--tint),0.2)"}`, borderRadius: 8, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: exporting ? "wait" : (hasData ? "pointer" : "not-allowed"), fontFamily: "'DM Sans',sans-serif" }}>
+          {exporting ? "Exporting…" : "⬇ Export Excel"}
         </button>
       </div>
 
@@ -214,8 +305,8 @@ export default function ReportTab({ user, data }) {
       )}
 
       <div style={{ marginTop: 14, fontSize: 11.5, color: "rgba(var(--tint),0.65)", lineHeight: 1.6 }}>
-        Amounts prefill exactly from the Detail files; a few product quantities (trials, DISOP units, overseas BOC) may need a manual tweak above.
-        Excel export (byte-identical to the HQ template) is the next step. {sourceFiles.length > 0 && <>Source: {sourceFiles.join(", ")}.</>}
+        Amounts prefill exactly from the Detail files; a few product quantities (DISOP units, overseas BOC) may need a manual tweak above.
+        <strong> Export Excel</strong> fills HQ's template — same layout, merges and formulas — and totals recalculate when you open it. {sourceFiles.length > 0 && <>Source: {sourceFiles.join(", ")}.</>}
       </div>
     </div>
   );
