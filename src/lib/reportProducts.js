@@ -77,7 +77,7 @@ const RULES = [
 
   // --- Monthly Color: MCII- is the "II" line; MC- splits by colour (HQ mapping) ---
   { test: /^MCII-/i,                           product: "MONTHLY COLOR UV  II" },
-  { test: /^MC-(COCOA|GOLD|PINK)/i,            product: "MONTHLY COLOR UV - PEGAVISION" },
+  { test: /^MC-(COCOA|GOLD|PINK|GRAY|DGRY)/i,  product: "MONTHLY COLOR UV - PEGAVISION" },
   { test: /^MC-(NAT|GLIT|FIRE)/i,              product: "MONTHLY COLOR UV - BLUE" },
   { test: /^MC-(SPARK|JADE|SHINING)/i,         product: "MONTHLY COLOR UV - ORANGE" },
   { test: /MONTHLY FINE/i,                     product: "MONTHLY FINE PLUS" },
@@ -129,6 +129,11 @@ export function aggregateProductMonthly(rows, year) {
     const i = m - 1;
     const qty = Number(r.qty) || 0;
     const amount = Number(r.amount) || 0;
+    // NOTE: FOC tie-in goods are excluded for now. Amounts match the HQ report
+    // exactly this way (FOC = 0 revenue), but the report DOES count FOC units in
+    // its quantity column, so quantities read ~20% low. Including FOC naively
+    // overshoots (the FOC/promotional lines don't carry clean unit counts in the
+    // quantity column) — a targeted fix is pending investigation of that column.
     const product = brandToProduct(r.brand);
     if (!product) {
       if (r.brand && !isFreeOrSample(r.brand)) {
