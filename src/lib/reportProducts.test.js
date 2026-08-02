@@ -114,6 +114,27 @@ describe("aggregateProductMonthly", () => {
   });
 });
 
+describe("DISOP sample counting (HQ 2026-08-02)", () => {
+  it("counts DISOP samples in qty (0 revenue); excludes the 60ml H2O2 sample; vials/20", () => {
+    const rows = [
+      { date: "2026-05-01", brand: "DISOP HidroHealth 360ml (Protein Removal)", qty: 100, amount: 3300, uom: "BTL" },
+      { date: "2026-05-02", brand: "DISOP H202 360ML SAMPLE", qty: 20, amount: 0, uom: "BTL" },   // add
+      { date: "2026-05-03", brand: "DISOP H202 60ML SAMPLE", qty: 1037, amount: 0, uom: "BTL" },  // excluded
+      { date: "2026-05-04", brand: "DISOP ACUAISS ULTRA 10ml", qty: 50, amount: 1500, uom: "BTL" },
+      { date: "2026-05-05", brand: "DISOP ACUAISS ULTRA 10ml SAMPLE", qty: 5, amount: 0, uom: "BTL" }, // add
+      { date: "2026-05-06", brand: "DISOP AQUA DUAL GEL 20VL", qty: 40, amount: 1480, uom: "BTL" },
+      { date: "2026-05-07", brand: "DISOP ACUAISS DUAL GEL 20vial SAMPLE", qty: 6, amount: 0, uom: "BTL" }, // add as-is
+      { date: "2026-05-08", brand: "DISOP ACUAISS DUAL GEL Vial SAMPLE", qty: 200, amount: 0, uom: "PCS" }, // /20 = 10
+    ];
+    const { products, unmapped } = aggregateProductMonthly(rows, 2026);
+    expect(Object.keys(unmapped)).toHaveLength(0);
+    expect(products["DISOP H2O2 SOLUTION"].qty[4]).toBe(120);        // 100 + 20 (60ml out)
+    expect(products["DISOP H2O2 SOLUTION"].amount[4]).toBe(3300);    // samples add no revenue
+    expect(products["DISOP ULTRA EYEDROP"].qty[4]).toBe(111);        // 50+5 + 40+6 + 200/20(=10)
+    expect(products["DISOP ULTRA EYEDROP"].amount[4]).toBe(2980);    // 1500 + 1480
+  });
+});
+
 describe("product list", () => {
   it("has the 31 report rows in order, starting 1 DAY PURE", () => {
     expect(REPORT_PRODUCTS).toHaveLength(31);

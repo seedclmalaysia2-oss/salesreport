@@ -153,11 +153,21 @@ export function aggregateProductMonthly(rows, year) {
     const i = m - 1;
     const name = r.brand;
     if (!name) continue;
-    // Promotional giveaways (pens/bags/thermos) and evaluation samples aren't
-    // saleable lens units — dropped. FOC "tie-in goods" ARE product units, so
-    // strip the tag and classify by the underlying product (revenue is 0 anyway).
-    if (/\bSAMPLE\b/i.test(name) || /Promotion Use/i.test(name)) continue;
-    const clean = name.replace(/\[?\s*FOC tie in goods\s*\]?.*$/i, "").trim();
+    // Promotional giveaways (pens/bags/thermos) are never counted. Evaluation
+    // SAMPLE lines are dropped too — EXCEPT DISOP solution samples, which HQ
+    // counts as distributed product (quantity only; revenue is 0). Within DISOP
+    // the 60ml H2O2 sample is the one that stays excluded.
+    if (/Promotion Use/i.test(name)) continue;
+    const isDisop = /DISOP/i.test(name);
+    if (/\bSAMPLE\b/i.test(name)) {
+      if (!isDisop) continue;
+      if (/\b60\s*ML\b/i.test(name)) continue;
+    }
+    // Classify by the underlying product: strip the FOC tie-in and SAMPLE tags.
+    const clean = name
+      .replace(/\[?\s*FOC tie in goods\s*\]?.*$/i, "")
+      .replace(/\bSAMPLE\b/ig, "")
+      .trim();
     const product = brandToProduct(clean);
     const amount = Number(r.amount) || 0;
     let qty = Number(r.qty) || 0;
@@ -166,10 +176,12 @@ export function aggregateProductMonthly(rows, year) {
       u.qty += qty; u.amount += amount;
       continue;
     }
-    // Report quantity is in BOXES. Trial-lens lines (SKU code "TR" / "Trial" in
-    // the name) are counted in PIECES — convert to boxes by pack size. Non-trial
-    // lines (incl. FOC product boxes) are already in boxes and count as-is.
+    // Report quantity is in BOXES/BOTTLES. Trial-lens lines (SKU code "TR" /
+    // "Trial") are counted in PIECES — convert to boxes by pack size. DISOP is
+    // counted in bottles, and its vial lines (UOM=PCS) are 20 vials = 1 bottle.
+    // Everything else is already in boxes/bottles and counts as-is.
     if (/\btrial\b/i.test(name) && TRIAL_PCS_PER_BOX[product]) qty = qty / TRIAL_PCS_PER_BOX[product];
+    else if (isDisop && /^(PCS|PCE|PIECE|PC\b)/i.test(String(r.uom || "").trim())) qty = qty / 20;
     const p = products[product] ||
       (products[product] = { qty: new Array(12).fill(0), amount: new Array(12).fill(0) });
     p.qty[i] += qty;
