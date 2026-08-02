@@ -13,6 +13,9 @@ describe("brandToProduct — unambiguous rules", () => {
     expect(brandToProduct("ECB10-M BASE MAKE")).toBe("EYE COFFRET-M");
     expect(brandToProduct("ECR10-M TORIC -0.75X180")).toBe("EYE COFFRET-M 10 TORIC");
     expect(brandToProduct("ECW30-M TORIC -1.25X180")).toBe("EYE COFFRET-M 30 TORIC");
+    // Untagged toric trials (no 10/30) → 10-Toric, not base.
+    expect(brandToProduct("ECW-M Toric Trial Lens")).toBe("EYE COFFRET-M 10 TORIC");
+    expect(brandToProduct("ECR-M Toric Trial Lens")).toBe("EYE COFFRET-M 10 TORIC");
   });
   it("1 day pure EDOF / SILFA / view support", () => {
     expect(brandToProduct("1D PURE EDOF [HIGH]")).toBe("1 DAYPURE EDOF");

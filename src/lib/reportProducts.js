@@ -58,6 +58,9 @@ const RULES = [
   // --- Eye Coffret toric (must precede the plain EC*-M make rule) ---
   { test: /^EC\w*10-?M?\s*TORIC|^ECWT10-M/i, product: "EYE COFFRET-M 10 TORIC" },
   { test: /^EC\w*30-?M?\s*TORIC|Toric 30[RW]/i, product: "EYE COFFRET-M 30 TORIC" },
+  // Untagged Eye Coffret torics (e.g. "ECW-M Toric Trial Lens") have no 10/30 in
+  // the name — HQ counts them under 10-Toric. The trial pieces convert /10.
+  { test: /^EC.*\bTORIC\b/i,                   product: "EYE COFFRET-M 10 TORIC" },
   { test: /^EC[A-Z]*\d*-M\b/i,                 product: "EYE COFFRET-M" },
   { test: /Eye Coffret-M/i,                    product: "EYE COFFRET-M" },
   // Eye Coffret makes & trial lenses without the "-M" suffix (ECB/ECN/ECR, EC10/EC30).
