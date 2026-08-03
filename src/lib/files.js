@@ -125,6 +125,22 @@ export async function uploadFile(file, parsed, { visibility = VISIBILITY.PRIVATE
     }
     throw new Error(`Saving ${file.name} failed: ${error.message}`);
   }
+
+  // Same-name re-upload = REPLACEMENT. Soft-delete any older active copy of this
+  // filename so the library never shows two — and, critically for invoice files,
+  // so the weekly sync folds only the newest export. Without this a re-uploaded
+  // "Stock Sales Analysis - Detail <month>.xlsx" left the prior copy live, and
+  // dedupeInvoiceUnits kept invoices the revision had removed, so a downward
+  // correction never reached the weekly board. Non-fatal: the new row is already
+  // saved, so a supersede hiccup just leaves a duplicate to tidy on the Data tab.
+  const { error: supErr } = await supabase
+    .from("data_files")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("name", row.name)
+    .is("deleted_at", null)
+    .neq("id", data.id);
+  if (supErr) console.warn(`Could not supersede prior copies of ${row.name}:`, supErr.message);
+
   return rowToEntry(data);
 }
 
