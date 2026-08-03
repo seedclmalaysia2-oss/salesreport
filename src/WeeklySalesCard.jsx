@@ -228,7 +228,7 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
   );
 }
 
-export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], targets, isAdmin, onUploaded, onRefresh, seriesColors }) {
+export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], targets, custSummary = [], isAdmin, onUploaded, onRefresh, seriesColors }) {
   const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState(null);
@@ -372,6 +372,41 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
     return t ? t.target : 0;
   }, [activeMonth, targets]);
 
+  // ---- Cust Adj: reconcile the weekly board to the Sales Analysis grand total ----
+  // The board is bucketed from the Stock Sales Analysis - Detail (invoice) file;
+  // the authoritative monthly figure is the Sales Analysis by customer file
+  // (custSummary, i.e. customers_data). They drift by a few ringgit per rep from
+  // credit notes / customer adjustments. Per the owner's rule, we surface that
+  // gap as a per-rep "Cust Adj" placed on the FINAL week of the month, so each
+  // rep's month-to-date — and the grand total — tie exactly to Sales Analysis.
+  // Purely a display reconciliation: nothing is written back to weekly_sales.
+  const isMonthView = view === "month";
+  const finalWeekIdx = weeksInMonth.length - 1;
+  const isFinalWeekSelected = view === "week" && boundedWeekIndex === finalWeekIdx;
+  const { custAdjByRep, custAdjTotal } = useMemo(() => {
+    const m = new Map();
+    if (activeMonth && custSummary && custSummary.length) {
+      const [saY, saM] = activeMonth.split("-").map(Number);
+      const sa = new Map();
+      for (const s of custSummary) {
+        if (s.year !== saY) continue;
+        const v = Number(s.months?.[saM - 1]) || 0;
+        if (v) sa.set(s.sp, (sa.get(s.sp) || 0) + v);
+      }
+      const board = new Map(monthAgg.rows.map(r => [r.sp, r.amount]));
+      for (const rep of new Set([...sa.keys(), ...board.keys()])) {
+        const adj = Math.round(((sa.get(rep) || 0) - (board.get(rep) || 0)) * 100) / 100;
+        if (Math.abs(adj) >= 0.005) m.set(rep, adj);
+      }
+    }
+    return { custAdjByRep: m, custAdjTotal: [...m.values()].reduce((a, b) => a + b, 0) };
+  }, [custSummary, activeMonth, monthAgg]);
+  const hasCustAdj = custAdjByRep.size > 0;
+  // Fold the month's adjustment into the final week: it shows in Month-to-date
+  // (which spans the final week) and when the final week itself is selected.
+  const applyAdj = hasCustAdj && (isMonthView || isFinalWeekSelected);
+  const signedRM = (n) => `${n >= 0 ? "+" : "−"}${fmtRM(Math.abs(n))}`;
+
   // Staleness signal: how long since the weekly SOURCE was last refreshed.
   // Prefer the newest invoice / Stock-Detail file's upload time — that is what
   // the "Source:" line shows, and it advances the moment an admin uploads a
@@ -495,8 +530,16 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
 
   // The dataset feeding the two columns: cumulative month-to-date, or the one
   // selected week. Everything below (splits, totals, labels) reads from here.
-  const isMonthView = view === "month";
-  const sourceRows = isMonthView ? monthAgg.rows : periodRows;
+  // When the final week is in view, fold in the per-rep Cust Adj so the totals
+  // reconcile to the Sales Analysis grand total.
+  const sourceRowsRaw = isMonthView ? monthAgg.rows : periodRows;
+  const sourceRows = applyAdj
+    ? (() => {
+        const byRep = new Map(sourceRowsRaw.map(r => [r.sp, r.amount]));
+        for (const [rep, adj] of custAdjByRep) byRep.set(rep, (byRep.get(rep) || 0) + adj);
+        return [...byRep.entries()].map(([sp, amount]) => ({ sp, amount }));
+      })()
+    : sourceRowsRaw;
 
   // Split into Sales Team (retail trio) and full Seed Malaysia
   const teamRows = sourceRows
@@ -619,7 +662,10 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
           </div>
           <div className="seed-scroll-x" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {weeksInMonth.map((w, i) => {
-              const total = w.rows.reduce((a, r) => a + (r.amount || 0), 0);
+              // The final week carries the month's Cust Adj so the chips still
+              // sum to the Sales Analysis grand total.
+              const total = w.rows.reduce((a, r) => a + (r.amount || 0), 0)
+                + (hasCustAdj && i === finalWeekIdx ? custAdjTotal : 0);
               const active = view === "week" && i === boundedWeekIndex;
               return (
                 <button
@@ -644,6 +690,26 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
               );
             })}
           </div>
+          {hasCustAdj && (
+            <div
+              title={[...custAdjByRep.entries()].map(([r, a]) => `${r}: ${signedRM(a)}`).join("   ·   ")}
+              style={{
+                marginTop: 12, padding: "8px 12px", borderRadius: 10,
+                background: "rgba(232,99,59,0.08)", border: "1px solid rgba(232,99,59,0.28)",
+                fontSize: 11.5, color: "rgba(var(--tint),0.82)", display: "flex",
+                alignItems: "center", gap: 8, flexWrap: "wrap", fontFamily: "'DM Sans',sans-serif",
+              }}>
+              <span style={{
+                fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.6,
+                color: "var(--st-accent)", padding: "2px 7px", borderRadius: 6,
+                background: "rgba(232,99,59,0.14)", border: "1px solid rgba(232,99,59,0.35)",
+              }}>Cust Adj</span>
+              <span>
+                <strong style={{ fontFamily: "'Space Mono',monospace" }}>{signedRM(custAdjTotal)}</strong>
+                {" "}on Week {weeksInMonth.length} — weekly total reconciled to the Sales Analysis grand total. Hover for the per-rep split.
+              </span>
+            </div>
+          )}
         </div>
       )}
 

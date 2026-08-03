@@ -1038,6 +1038,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             <WeeklySalesCard
               weeklySales={data.weeklySales || []}
               invoiceFiles={data.invoiceFiles || []}
+              custSummary={data.summary || []}
               targets={TARGETS}
               isAdmin={!!user?.isAdmin}
               onUploaded={onRefresh}
