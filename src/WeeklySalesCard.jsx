@@ -394,9 +394,15 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
         if (v) sa.set(s.sp, (sa.get(s.sp) || 0) + v);
       }
       const board = new Map(monthAgg.rows.map(r => [r.sp, r.amount]));
-      for (const rep of new Set([...sa.keys(), ...board.keys()])) {
-        const adj = Math.round(((sa.get(rep) || 0) - (board.get(rep) || 0)) * 100) / 100;
-        if (Math.abs(adj) >= 0.005) m.set(rep, adj);
+      // The Sales Analysis (customer) file is exported periodically and lags the
+      // invoice feed, so the current month is usually not in it yet. When it has
+      // NO figure for this month at all, there is nothing to reconcile to — skip
+      // the adjustment rather than subtracting the whole month down to zero.
+      if (sa.size > 0) {
+        for (const rep of new Set([...sa.keys(), ...board.keys()])) {
+          const adj = Math.round(((sa.get(rep) || 0) - (board.get(rep) || 0)) * 100) / 100;
+          if (Math.abs(adj) >= 0.005) m.set(rep, adj);
+        }
       }
     }
     return { custAdjByRep: m, custAdjTotal: [...m.values()].reduce((a, b) => a + b, 0) };
