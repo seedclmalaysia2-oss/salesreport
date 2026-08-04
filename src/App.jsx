@@ -198,6 +198,24 @@ export default function App() {
             .catch(() => []),
         ]);
 
+        // Product-Group cross-tab (customer × Stock-Group). One small workbook
+        // per year, so we read its parsed rows straight from data_files rather
+        // than maintaining a fact table. RLS returns nothing to users who can't
+        // see the file, so the Group views simply stay empty for them.
+        let groupRows = [];
+        try {
+          const { data: gfiles } = await supabase
+            .from("data_files")
+            .select("year,rows_json")
+            .eq("kind", "group")
+            .is("deleted_at", null);
+          for (const f of gfiles || []) {
+            for (const r of f.rows_json || []) groupRows.push({ ...r, year: r.year ?? f.year });
+          }
+        } catch (e) {
+          console.warn("Group rows unavailable:", e);
+        }
+
         const withTotals = (brandSales) => {
           const aggregated = aggregateFromRaw(customers, brandSales);
           aggregated.targets = targets.map(t => ({
@@ -218,6 +236,9 @@ export default function App() {
             name: f.name, kind: f.kind, sp: f.sp, year: f.year,
             uploadedAt: f.uploaded_at ? new Date(f.uploaded_at).getTime() : null,
           }));
+          // Raw customer × Stock-Group rows { year, customer, sp, group, amount, qty }
+          // for the Product Group Performance and Customer × Group views.
+          aggregated.groupRows = groupRows;
           return aggregated;
         };
 

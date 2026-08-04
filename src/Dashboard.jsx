@@ -11,6 +11,7 @@ import { DARK_KEY, LIGHT_KEY, prefersLightScheme, migrateThemeKey } from "./lib/
 const DataTab = lazy(() => import("./DataTab.jsx"));
 const AdminUsers = lazy(() => import("./AdminUsers.jsx"));
 const ReportTab = lazy(() => import("./ReportTab.jsx"));
+import { groupLabel } from "./lib/groupLabels.js";
 
 // Uploads used to be parsed into these keys while the dashboard ran open to
 // everyone, and the cache took priority over the server's response. With
@@ -497,6 +498,24 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   const BRAND_SALES = data.brandSales || [];
   const TARGETS = data.targets || [];
 
+  // Brand ⇄ Product Group dimension. The Brand Performance and Customer × Brand
+  // views can pivot on either the SKU brand or the Autocount Stock-Group. Group
+  // rows { year, customer, sp, group, amount, qty } are mapped onto the same
+  // { year, sp, customer, brand, amt, qty } shape (brand = readable group label,
+  // variants sharing a label merge) so every chart below is dimension-agnostic.
+  const GROUP_ROWS = data.groupRows || [];
+  const hasGroupData = GROUP_ROWS.length > 0;
+  const [brandDim, setBrandDim] = useState("brand"); // 'brand' | 'group'
+  const dim = hasGroupData ? brandDim : "brand";
+  const dimNoun = dim === "group" ? "Product Group" : "Brand";
+  const dimRows = useMemo(() => {
+    if (dim !== "group") return BRAND_SALES;
+    return GROUP_ROWS.map(r => ({
+      year: r.year, sp: r.sp || "All", customer: r.customer,
+      brand: groupLabel(r.group), amt: r.amount || 0, qty: r.qty || 0,
+    }));
+  }, [dim, data]);
+
   const yearTotals = useMemo(() => {
     const t = {};
     YEARS.forEach(y => { t[y] = 0; });
@@ -756,7 +775,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
   const brandYearTotals = useMemo(() => {
     const m = new Map();
-    BRAND_SALES.filter(r => r.year === selectedYear && (selectedSP === "All" || r.sp === selectedSP)).forEach(r => {
+    dimRows.filter(r => r.year === selectedYear && (selectedSP === "All" || r.sp === selectedSP)).forEach(r => {
       const e = m.get(r.brand) || { amt: 0, qty: 0 };
       e.amt += r.amt; e.qty += r.qty || 0;
       m.set(r.brand, e);
@@ -764,7 +783,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
     return [...m.entries()]
       .map(([brand, v]) => ({ brand, amt: v.amt, qty: v.qty }))
       .sort((a, b) => b.amt - a.amt);
-  }, [selectedYear, selectedSP, data]);
+  }, [selectedYear, selectedSP, dimRows]);
 
   const brandYearTotalsByQty = useMemo(() => {
     return [...brandYearTotals].filter(x => x.qty > 0).sort((a, b) => b.qty - a.qty);
@@ -775,29 +794,29 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
     return top.map(b => {
       const row = { brand: b.brand };
       SALESPEOPLE.forEach(sp => { row[sp] = 0; });
-      BRAND_SALES.filter(r => r.year === selectedYear && r.brand === b.brand).forEach(r => {
+      dimRows.filter(r => r.year === selectedYear && r.brand === b.brand).forEach(r => {
         row[r.sp] = (row[r.sp] || 0) + r.amt;
       });
       return row;
     });
-  }, [selectedYear, brandYearTotals, data]);
+  }, [selectedYear, brandYearTotals, dimRows]);
 
   const top8BrandNames = useMemo(() => {
     const all = new Map();
-    BRAND_SALES.forEach(r => { all.set(r.brand, (all.get(r.brand) || 0) + r.amt); });
+    dimRows.forEach(r => { all.set(r.brand, (all.get(r.brand) || 0) + r.amt); });
     return [...all.entries()].sort((a,b) => b[1]-a[1]).slice(0,8).map(([b]) => b);
-  }, [data]);
+  }, [dimRows]);
 
   const brandYoY = useMemo(() => {
     return YEARS.map(y => {
       const row = { year: y.toString() };
       top8BrandNames.forEach(b => { row[b] = 0; });
-      BRAND_SALES.filter(r => r.year === y && top8BrandNames.includes(r.brand)).forEach(r => {
+      dimRows.filter(r => r.year === y && top8BrandNames.includes(r.brand)).forEach(r => {
         row[r.brand] = (row[r.brand] || 0) + r.amt;
       });
       return row;
     });
-  }, [top8BrandNames, data]);
+  }, [top8BrandNames, dimRows]);
 
   const cohort = useMemo(() => {
     const inSet = (sp, year) => {
@@ -830,7 +849,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   }, [selectedSP, selectedYear, data]);
 
   const heatmap = useMemo(() => {
-    const scope = BRAND_SALES.filter(r => r.year === selectedYear && (selectedSP === "All" || r.sp === selectedSP));
+    const scope = dimRows.filter(r => r.year === selectedYear && (selectedSP === "All" || r.sp === selectedSP));
 
     // Top 12 customers ranked by amount
     const custMap = new Map();
@@ -856,7 +875,32 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
     gridAmt.forEach(row => row.forEach(v => { if (v > maxAmt) maxAmt = v; }));
     gridQty.forEach(row => row.forEach(v => { if (v > maxQty) maxQty = v; }));
     return { customers: topCust, brands: topBrand, gridAmt, gridQty, maxAmt, maxQty };
-  }, [selectedSP, selectedYear, data]);
+  }, [selectedSP, selectedYear, dimRows]);
+
+  // Brand ⇄ Product Group segmented control, shown on the Brand Performance and
+  // Customer × Brand tabs when a Stock-Group workbook has been uploaded.
+  const dimToggle = hasGroupData ? (
+    <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18,flexWrap:"wrap"}}>
+      <span style={{fontSize:12,fontWeight:600,color:"rgba(var(--tint),0.6)",letterSpacing:0.2}}>View by</span>
+      <div role="tablist" aria-label="Dimension" style={{display:"inline-flex",background:"rgba(var(--tint),0.06)",border:"1px solid rgba(var(--tint),0.14)",borderRadius:11,padding:3,gap:2}}>
+        {[["brand","🏷️ Brand"],["group","📊 Product Group"]].map(([d,lbl]) => (
+          <button key={d} role="tab" aria-selected={dim===d} onClick={()=>setBrandDim(d)}
+            style={{
+              border:"none", cursor:"pointer", padding:"7px 16px", borderRadius:9,
+              fontSize:13, fontWeight:700, fontFamily:"'DM Sans',sans-serif", transition:"background .15s,color .15s",
+              background: dim===d ? "var(--st-accent)" : "transparent",
+              color: dim===d ? "#fff" : "rgba(var(--tint),0.68)",
+              boxShadow: dim===d ? "0 1px 4px rgba(0,0,0,0.15)" : "none",
+            }}>
+            {lbl}
+          </button>
+        ))}
+      </div>
+      {dim==="group"
+        ? <span style={{fontSize:11,color:"rgba(var(--tint),0.5)",fontFamily:"'Space Mono',monospace"}}>Stock-Group cross-tab · {selectedYear}</span>
+        : null}
+    </div>
+  ) : null;
 
   return (
     <div data-seed-theme={themeKey} style={{
@@ -1809,6 +1853,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
         {tab === "brands" && (
           <>
+            {dimToggle}
             <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
               <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>Filter by SP:</span>
               <Pill label="All Teams" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
@@ -1816,16 +1861,16 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             </div>
 
             <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
-              <KPI label="Total Brands" value={brandYearTotals.length} sub={`${selectedYear} · ${selectedSP === "All" ? "all teams" : selectedSP}`} color={STATUS.accent} />
-              <KPI label="Top Brand (Revenue)" value={brandYearTotals[0]?.brand || "—"} sub={`RM ${fmt(brandYearTotals[0]?.amt || 0)}`} color={STATUS.info} />
-              <KPI label="Top Brand (Qty)" value={brandYearTotalsByQty[0]?.brand || "—"} sub={`${(brandYearTotalsByQty[0]?.qty || 0).toLocaleString()} pcs/boxes`} color={STATUS.qty} />
-              <KPI label="Total Brand Revenue" value={`RM ${fmt(brandYearTotals.reduce((a,b) => a+b.amt, 0))}`} sub={`${selectedYear}`} color={STATUS.alt} />
+              <KPI label={`Total ${dimNoun}s`} value={brandYearTotals.length} sub={`${selectedYear} · ${selectedSP === "All" ? "all teams" : selectedSP}`} color={STATUS.accent} />
+              <KPI label={`Top ${dimNoun} (Revenue)`} value={brandYearTotals[0]?.brand || "—"} sub={`RM ${fmt(brandYearTotals[0]?.amt || 0)}`} color={STATUS.info} />
+              <KPI label={`Top ${dimNoun} (Qty)`} value={brandYearTotalsByQty[0]?.brand || "—"} sub={`${(brandYearTotalsByQty[0]?.qty || 0).toLocaleString()} pcs/boxes`} color={STATUS.qty} />
+              <KPI label={`Total ${dimNoun} Revenue`} value={`RM ${fmt(brandYearTotals.reduce((a,b) => a+b.amt, 0))}`} sub={`${selectedYear}`} color={STATUS.alt} />
               <KPI label="Total Quantity" value={brandYearTotals.reduce((a,b) => a+(b.qty||0), 0).toLocaleString()} sub="units sold" color={STATUS.watch} />
             </div>
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(min(420px,100%), 1fr))",gap:20,marginBottom:20}}>
               <Card>
-                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>💰 Top 20 Brands by Revenue — {selectedYear}</div>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>💰 Top 20 {dimNoun}s by Revenue — {selectedYear}</div>
                 <ResponsiveContainer width="100%" height={520}>
                   <BarChart data={brandYearTotals.slice(0,20)} layout="vertical" margin={{left:90, right:80}}>
                     <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} horizontal={false} />
@@ -1843,7 +1888,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               </Card>
 
               <Card>
-                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>📦 Top 20 Brands by Quantity — {selectedYear}</div>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>📦 Top 20 {dimNoun}s by Quantity — {selectedYear}</div>
                 {brandYearTotalsByQty.length === 0 ? (
                   <div style={{padding:"60px 0",textAlign:"center",color:"rgba(var(--tint),0.65)"}}>No quantity data for this scope.</div>
                 ) : (
@@ -1869,7 +1914,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
             <div style={{display:"grid",gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",gap:20}}>
               <Card>
-                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Top 15 Brands by Team — {selectedYear}</div>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Top 15 {dimNoun}s by Team — {selectedYear}</div>
                 <ResponsiveContainer width="100%" height={380}>
                   <BarChart data={brandSPBreakdown} layout="vertical" margin={{left:80}}>
                     <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} horizontal={false} />
@@ -1883,7 +1928,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               </Card>
 
               <Card>
-                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Top 8 Brands — Year over Year</div>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Top 8 {dimNoun}s — Year over Year</div>
                 <ResponsiveContainer width="100%" height={380}>
                   <LineChart data={brandYoY}>
                     <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} />
@@ -1973,6 +2018,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
         {tab === "heatmap" && (
           <>
+            {dimToggle}
             <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
               <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>SP:</span>
               <Pill label="All Teams" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
@@ -1982,7 +2028,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             {heatmap.customers.length === 0 ? (
               <Card>
                 <div style={{padding:"40px 0",textAlign:"center",color:"rgba(var(--tint),0.65)"}}>
-                  No brand-level data for this scope.
+                  No {dimNoun.toLowerCase()}-level data for this scope.
                 </div>
               </Card>
             ) : (
@@ -1994,7 +2040,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     <table style={{borderCollapse:"separate",borderSpacing:2,fontSize:11}}>
                       <thead>
                         <tr>
-                          <th style={{padding:"6px 10px",textAlign:"left",color:"rgba(var(--tint),0.65)",fontWeight:500,minWidth:200}}>Customer ↓ / Brand →</th>
+                          <th style={{padding:"6px 10px",textAlign:"left",color:"rgba(var(--tint),0.65)",fontWeight:500,minWidth:200}}>Customer ↓ / {dimNoun} →</th>
                           {heatmap.brands.map(b => (
                             <th key={b} style={{padding:"6px 4px",color:"rgba(var(--tint),0.7)",fontWeight:500,fontSize:10,minWidth:60,textAlign:"center"}}>
                               <div style={{transform:"rotate(-30deg)",transformOrigin:"left bottom",whiteSpace:"nowrap",height:60,marginTop:30}}>{b}</div>
@@ -2035,7 +2081,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     <table style={{borderCollapse:"separate",borderSpacing:2,fontSize:11}}>
                       <thead>
                         <tr>
-                          <th style={{padding:"6px 10px",textAlign:"left",color:"rgba(var(--tint),0.65)",fontWeight:500,minWidth:200}}>Customer ↓ / Brand →</th>
+                          <th style={{padding:"6px 10px",textAlign:"left",color:"rgba(var(--tint),0.65)",fontWeight:500,minWidth:200}}>Customer ↓ / {dimNoun} →</th>
                           {heatmap.brands.map(b => (
                             <th key={b} style={{padding:"6px 4px",color:"rgba(var(--tint),0.7)",fontWeight:500,fontSize:10,minWidth:60,textAlign:"center"}}>
                               <div style={{transform:"rotate(-30deg)",transformOrigin:"left bottom",whiteSpace:"nowrap",height:60,marginTop:30}}>{b}</div>

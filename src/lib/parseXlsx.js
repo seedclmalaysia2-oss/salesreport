@@ -39,6 +39,11 @@ const INVOICE_FNAME_RE = /^Customer Invoice Listing\s+(.+?)\.xlsx$/i;
 // (ddmmyy) or 'jul2026' etc.
 const STOCK_DETAIL_FNAME_RE = /^Stock Sales Analysis - Detail\s+(.+?)\.xlsx$/i;
 
+// Customer × Product-Group cross-tab: "Stock Sales Analysis - Summary <year>.xlsx"
+// (no salesman prefix, no "by Brand"). One workbook per year; columns are Autocount
+// Stock-Group codes, each with an Amt and a Qty sub-column.
+const GROUP_SUMMARY_FNAME_RE = /^Stock Sales Analysis - Summary\s+(\d{4})\.xlsx$/i;
+
 // Brand IDs ending in FC (Free of Charge / boxes), T or TR (Trial Lens / pieces)
 // have no revenue and must not be counted as paid sales. Filter at parse time.
 export function isSalesBrand(brand) {
@@ -94,6 +99,10 @@ export function parseFilename(name) {
       kind: "Stock Sales Analysis - Detail",
       periodLabel: suffix.trim(),
     };
+  }
+  const gm = name.match(GROUP_SUMMARY_FNAME_RE);
+  if (gm) {
+    return { sp: "All", year: parseInt(gm[1], 10), kind: "Stock Sales Analysis - Summary" };
   }
   return null;
 }
@@ -468,6 +477,71 @@ function parseStockDetailRows(rows) {
   return out;
 }
 
+// Parse the "Stock Sales Analysis - Summary <year>" customer × Stock-Group
+// cross-tab. Columns are group codes, each with an Amt and a Qty sub-column;
+// rows are customers (col 1) followed by a repeated "Total" row we skip. Header
+// rows are located by the Amt/Qty marker row (blank rows are kept, so indices
+// are not assumed). Emits one row per (customer, group) with a non-zero value:
+//   { customer, sp, group, amount, qty }
+function parseGroupRows(rows) {
+  // 1) Find the marker row: the header row carrying repeated "Amt"/"Qty" labels.
+  let markerRow = -1;
+  for (let r = 0; r < Math.min(rows.length, 12); r++) {
+    const row = rows[r];
+    if (!row) continue;
+    let n = 0;
+    for (const v of row) if (v === "Amt" || v === "Qty") n++;
+    if (n >= 3) { markerRow = r; break; }
+  }
+  if (markerRow < 1) return [];
+  const marks = rows[markerRow] || [];
+  const codes = rows[markerRow - 1] || []; // group codes align with the Amt cols
+
+  // 2) Build the group column map: each Amt col + the next Qty col.
+  const groups = []; // { code, amtCol, qtyCol }
+  for (let c = 0; c < marks.length; c++) {
+    if (marks[c] !== "Amt") continue;
+    const code = codes[c] != null ? String(codes[c]).trim() : "";
+    if (!code || /^total$/i.test(code) || /GroupingOption|AcSalesman|MasterData/i.test(code)) continue;
+    let q = c + 1;
+    while (q < marks.length && marks[q] !== "Qty") q++;
+    groups.push({ code, amtCol: c, qtyCol: q < marks.length ? q : -1 });
+  }
+  if (!groups.length) return [];
+
+  // 3) Salesman column, if the export carries one ("AcSalesmanID" header).
+  let smCol = -1;
+  for (let r = 0; r < markerRow; r++) {
+    const row = rows[r]; if (!row) continue;
+    for (let c = 0; c < row.length; c++) {
+      if (typeof row[c] === "string" && /AcSalesmanID/i.test(row[c])) { smCol = c; break; }
+    }
+    if (smCol >= 0) break;
+  }
+  const shortSp = (full) => {
+    const s = String(full || "").trim();
+    if (!s) return null;
+    if (/seed\s*malaysia/i.test(s)) return "Seed Malaysia";
+    const first = s.split(/\s+/)[0];
+    return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+  };
+
+  // 4) Read customer rows (col 1 has a name that isn't "Total").
+  const out = [];
+  for (let r = markerRow + 1; r < rows.length; r++) {
+    const row = rows[r]; if (!row) continue;
+    const name = row[1] != null ? String(row[1]).trim() : "";
+    if (!name || /^total$/i.test(name)) continue;
+    const sp = smCol >= 0 ? shortSp(row[smCol]) : null;
+    for (const g of groups) {
+      const amount = Number(row[g.amtCol]) || 0;
+      const qty = g.qtyCol >= 0 ? Number(row[g.qtyCol]) || 0 : 0;
+      if (amount || qty) out.push({ customer: name, sp, group: g.code, amount, qty });
+    }
+  }
+  return out;
+}
+
 export async function parseFile(file) {
   const fnameInfo = parseFilename(file.name);
   if (!fnameInfo) {
@@ -538,6 +612,17 @@ export async function parseFile(file) {
       year: fnameInfo.year ?? yearFromRows,
       rowCount: parsed.length,
       rows: parsed,
+    };
+  } else if (fnameInfo.kind === "Stock Sales Analysis - Summary") {
+    const parsed = parseGroupRows(rows);
+    return {
+      ok: true,
+      file: file.name,
+      kind: "group",
+      sp: "All",
+      year: fnameInfo.year,
+      rowCount: parsed.length,
+      rows: parsed.map(p => ({ year: fnameInfo.year, ...p })),
     };
   } else {
     const parsed = parseBrandRows(rows);

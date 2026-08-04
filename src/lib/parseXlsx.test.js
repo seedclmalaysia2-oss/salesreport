@@ -44,6 +44,16 @@ describe("parseFilename — classifies each Autocount export", () => {
       .toBe("Stock Sales Analysis - Detail");
   });
 
+  it("stock sales analysis - summary <year> (the customer × group cross-tab)", () => {
+    expect(parseFilename("Stock Sales Analysis - Summary 2026.xlsx"))
+      .toMatchObject({ kind: "Stock Sales Analysis - Summary", year: 2026, sp: "All" });
+    // must NOT collide with the per-rep "Summary by Brand" file or the Detail file
+    expect(parseFilename("Stock Sales Analysis - Summary 2026.xlsx")?.kind)
+      .not.toMatch(/by brand|detail/i);
+    expect(parseFilename("Alan 2026 Stock Sales Analysis - Summary by Brand.xlsx")?.kind)
+      .not.toBe("Stock Sales Analysis - Summary");
+  });
+
   it("returns null for unrecognised names", () => {
     expect(parseFilename("random.xlsx")).toBeNull();
     expect(parseFilename("notes.txt")).toBeNull();
