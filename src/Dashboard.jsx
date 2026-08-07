@@ -506,6 +506,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   const GROUP_ROWS = data.groupRows || [];
   const hasGroupData = GROUP_ROWS.length > 0;
   const [brandDim, setBrandDim] = useState("brand"); // 'brand' | 'group'
+  const [itemPick, setItemPick] = useState(""); // single-item explorer selection
   const dim = hasGroupData ? brandDim : "brand";
   const dimNoun = dim === "group" ? "Product Group" : "Brand";
   const dimRows = useMemo(() => {
@@ -789,6 +790,41 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
     return [...brandYearTotals].filter(x => x.qty > 0).sort((a, b) => b.qty - a.qty);
   }, [brandYearTotals]);
 
+  // --- Single-item explorer: one brand/group's revenue + quantity over the years ---
+  const dimOptions = useMemo(() => {
+    const m = new Map();
+    dimRows.forEach(r => m.set(r.brand, (m.get(r.brand) || 0) + r.amt));
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([b]) => b);
+  }, [dimRows]);
+  const dimYears = useMemo(
+    () => [...new Set(dimRows.map(r => r.year))].sort((a, b) => a - b),
+    [dimRows],
+  );
+  // Fall back to the top item when nothing is picked or the pick isn't in this dimension.
+  const activeItem = (itemPick && dimOptions.includes(itemPick)) ? itemPick : (dimOptions[0] || "");
+  const itemYoY = useMemo(() => {
+    const byYear = new Map();
+    dimRows.filter(r => r.brand === activeItem).forEach(r => {
+      const e = byYear.get(r.year) || { amt: 0, qty: 0 };
+      e.amt += r.amt; e.qty += r.qty || 0; byYear.set(r.year, e);
+    });
+    return dimYears.map(y => ({ year: String(y), amt: byYear.get(y)?.amt || 0, qty: byYear.get(y)?.qty || 0 }));
+  }, [dimRows, activeItem, dimYears]);
+  const itemStats = useMemo(() => {
+    const totAmt = itemYoY.reduce((a, r) => a + r.amt, 0);
+    const totQty = itemYoY.reduce((a, r) => a + r.qty, 0);
+    const best = [...itemYoY].sort((a, b) => b.amt - a.amt)[0];
+    return { totAmt, totQty, bestYear: best && best.amt > 0 ? best.year : "—" };
+  }, [itemYoY]);
+  const itemBySP = useMemo(() => {
+    const m = new Map();
+    dimRows.filter(r => r.brand === activeItem && r.year === selectedYear).forEach(r => {
+      const e = m.get(r.sp) || { amt: 0, qty: 0 };
+      e.amt += r.amt; e.qty += r.qty || 0; m.set(r.sp, e);
+    });
+    return [...m.entries()].map(([sp, v]) => ({ sp, ...v })).sort((a, b) => b.amt - a.amt);
+  }, [dimRows, activeItem, selectedYear]);
+
   const brandSPBreakdown = useMemo(() => {
     const top = brandYearTotals.slice(0, 15);
     return top.map(b => {
@@ -884,7 +920,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
       <span style={{fontSize:12,fontWeight:600,color:"rgba(var(--tint),0.6)",letterSpacing:0.2}}>View by</span>
       <div role="tablist" aria-label="Dimension" style={{display:"inline-flex",background:"rgba(var(--tint),0.06)",border:"1px solid rgba(var(--tint),0.14)",borderRadius:11,padding:3,gap:2}}>
         {[["brand","🏷️ Brand"],["group","📊 Product Group"]].map(([d,lbl]) => (
-          <button key={d} role="tab" aria-selected={dim===d} onClick={()=>setBrandDim(d)}
+          <button key={d} role="tab" aria-selected={dim===d} onClick={()=>{setBrandDim(d); setItemPick("");}}
             style={{
               border:"none", cursor:"pointer", padding:"7px 16px", borderRadius:9,
               fontSize:13, fontWeight:700, fontFamily:"'DM Sans',sans-serif", transition:"background .15s,color .15s",
@@ -1859,6 +1895,82 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               <Pill label="All Teams" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
               {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
             </div>
+
+            <Card style={{marginBottom:20}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:16,flexWrap:"wrap",marginBottom:16}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:600}}>🔍 {dimNoun} Explorer</div>
+                  <div style={{fontSize:12,color:"rgba(var(--tint),0.6)",marginTop:2}}>Pick one {dimNoun.toLowerCase()} to see its revenue &amp; quantity across the years.</div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                  <label htmlFor="dim-explorer-input" style={{fontSize:11,color:"rgba(var(--tint),0.55)",fontWeight:600,letterSpacing:0.3}}>{dimNoun.toUpperCase()}</label>
+                  <input id="dim-explorer-input" list="dim-explorer-opts" value={itemPick || activeItem}
+                    onChange={e=>setItemPick(e.target.value)}
+                    placeholder={`Type or select a ${dimNoun.toLowerCase()}…`}
+                    style={{minWidth:260,padding:"9px 12px",fontSize:13,borderRadius:9,background:"rgba(var(--tint),0.05)",border:"1px solid rgba(var(--tint),0.18)",color:"var(--text)",fontFamily:"'DM Sans',sans-serif"}} />
+                  <datalist id="dim-explorer-opts">
+                    {dimOptions.map(o => <option key={o} value={o} />)}
+                  </datalist>
+                </div>
+              </div>
+
+              {activeItem ? (
+                <>
+                  <div style={{display:"flex",gap:28,flexWrap:"wrap",marginBottom:18}}>
+                    <div>
+                      <div style={{fontSize:11,color:"rgba(var(--tint),0.55)",fontWeight:600,letterSpacing:0.3}}>TOTAL REVENUE</div>
+                      <div style={{fontSize:22,fontWeight:700,color:STATUS.info,fontFamily:"'Space Mono',monospace"}}>RM {fmt(itemStats.totAmt)}</div>
+                    </div>
+                    <div>
+                      <div style={{fontSize:11,color:"rgba(var(--tint),0.55)",fontWeight:600,letterSpacing:0.3}}>TOTAL QUANTITY</div>
+                      <div style={{fontSize:22,fontWeight:700,color:STATUS.qty,fontFamily:"'Space Mono',monospace"}}>{itemStats.totQty.toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div style={{fontSize:11,color:"rgba(var(--tint),0.55)",fontWeight:600,letterSpacing:0.3}}>BEST YEAR</div>
+                      <div style={{fontSize:22,fontWeight:700,color:STATUS.accent,fontFamily:"'Space Mono',monospace"}}>{itemStats.bestYear}</div>
+                    </div>
+                    <div style={{flex:1,minWidth:180,alignSelf:"center"}}>
+                      <div style={{fontSize:13,fontWeight:600,color:STATUS.accent,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeItem}</div>
+                      <div style={{fontSize:11,color:"rgba(var(--tint),0.55)"}}>{dimYears.length > 1 ? `${dimYears[0]}–${dimYears[dimYears.length-1]}` : `${dimYears[0] ?? ""} only`}</div>
+                    </div>
+                  </div>
+
+                  <ResponsiveContainer width="100%" height={300}>
+                    <ComposedChart data={itemYoY} margin={{left:10,right:10}}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} />
+                      <XAxis dataKey="year" tick={{fill:tk.chartTickFill,fontSize:12}} axisLine={false} />
+                      <YAxis yAxisId="amt" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
+                      <YAxis yAxisId="qty" orientation="right" tick={{fill:tk.chartTickFillDim,fontSize:11}} axisLine={false} tickFormatter={(v)=>v.toLocaleString()} />
+                      <Tooltip
+                        formatter={(v,n)=> n === "Revenue (RM)" ? [fmtFull(v), n] : [`${v.toLocaleString()} units`, n]}
+                        contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}}
+                        labelStyle={{color:tk.text,fontWeight:600,marginBottom:4}} itemStyle={{color:tk.tooltipText}} />
+                      <Legend formatter={(v)=><span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />
+                      <Bar yAxisId="amt" dataKey="amt" name="Revenue (RM)" fill={STATUS.accent} radius={[4,4,0,0]} isAnimationActive={!reduceMotion}>
+                        <LabelList dataKey="amt" position="top" formatter={(v)=>v?fmt(v):""} fill={tk.text} fontSize={10} fontFamily="'Space Mono',monospace" />
+                      </Bar>
+                      <Line yAxisId="qty" type="monotone" dataKey="qty" name="Quantity" stroke={STATUS.qty} strokeWidth={2} dot={{r:3,fill:STATUS.qty}} isAnimationActive={!reduceMotion} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+
+                  {itemBySP.length > 0 && (
+                    <div style={{marginTop:10}}>
+                      <div style={{fontSize:12,color:"rgba(var(--tint),0.6)",marginBottom:8}}>By salesperson — {selectedYear}</div>
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                        {itemBySP.map(s => (
+                          <div key={s.sp} style={{fontSize:12,padding:"5px 11px",borderRadius:8,background:"rgba(var(--tint),0.05)",border:"1px solid rgba(var(--tint),0.12)"}}>
+                            <span style={{fontWeight:600}}>{s.sp}</span>{" "}
+                            <span style={{fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)"}}>RM {fmt(s.amt)} · {s.qty.toLocaleString()}u</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{padding:"30px 0",textAlign:"center",color:"rgba(var(--tint),0.6)"}}>No {dimNoun.toLowerCase()} data available.</div>
+              )}
+            </Card>
 
             <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
               <KPI label={`Total ${dimNoun}s`} value={brandYearTotals.length} sub={`${selectedYear} · ${selectedSP === "All" ? "all teams" : selectedSP}`} color={STATUS.accent} />
