@@ -247,6 +247,55 @@ const KPI = ({label, value, sub, trend, color}) => (
 // role="tab" + roving tabindex so a screen reader announces the group as tabs
 // with a selected state, and the arrow keys move between them (WAI-ARIA tabs
 // pattern). Only the active tab is in the page tab-order; the container's
+// A searchable dropdown (combobox): shows ALL options in a scrollable list and
+// filters by substring anywhere in the name as you type, and can be cleared —
+// unlike a native <datalist>, which only reveals prefix matches of the current
+// text, caps the list, and (as a controlled input) couldn't be reset to browse.
+function SearchSelect({ options, value, onChange, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const boxRef = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  const ql = q.trim().toLowerCase();
+  const filtered = ql ? options.filter(o => o.toLowerCase().includes(ql)) : options;
+  const pick = (o) => { onChange(o); setQ(""); setOpen(false); };
+  return (
+    <div ref={boxRef} style={{position:"relative",minWidth:280}}>
+      <div style={{position:"relative"}}>
+        <input
+          value={open ? q : value}
+          onFocus={() => { setOpen(true); setQ(""); }}
+          onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+          placeholder={placeholder}
+          style={{width:"100%",boxSizing:"border-box",padding:"9px 30px 9px 12px",fontSize:13,borderRadius:9,background:"rgba(var(--tint),0.05)",border:`1px solid ${open?"var(--st-accent)":"rgba(var(--tint),0.18)"}`,color:"var(--text)",fontFamily:"'DM Sans',sans-serif"}}
+        />
+        <span onClick={() => { setOpen(o => !o); setQ(""); }} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",cursor:"pointer",color:"rgba(var(--tint),0.5)",fontSize:10,userSelect:"none"}}>▼</span>
+      </div>
+      {open && (
+        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:60,maxHeight:300,overflowY:"auto",background:"var(--bg)",border:"1px solid rgba(var(--tint),0.2)",borderRadius:10,boxShadow:"0 10px 28px rgba(0,0,0,0.28)",padding:4}}>
+          {filtered.length === 0 && <div style={{padding:"10px 12px",fontSize:12,color:"rgba(var(--tint),0.55)"}}>No matches for “{q}”.</div>}
+          {filtered.map(o => (
+            <div key={o} role="option" aria-selected={o===value}
+              onMouseDown={(e) => { e.preventDefault(); pick(o); }}
+              onMouseEnter={(e) => { if (o!==value) e.currentTarget.style.background="rgba(var(--tint),0.07)"; }}
+              onMouseLeave={(e) => { if (o!==value) e.currentTarget.style.background="transparent"; }}
+              style={{padding:"8px 12px",fontSize:13,borderRadius:7,cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
+                background:o===value?"rgba(232,99,59,0.14)":"transparent",
+                color:o===value?"var(--st-accent)":"var(--text)",fontWeight:o===value?700:450}}>
+              {o}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // onKeyDown owns arrow/Home/End navigation.
 const TabButton = ({active, children, onClick, onKeyDown, accent, tabKey}) => (
   <button
@@ -1903,14 +1952,13 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   <div style={{fontSize:12,color:"rgba(var(--tint),0.6)",marginTop:2}}>Pick one {dimNoun.toLowerCase()} to see its revenue &amp; quantity across the years.</div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                  <label htmlFor="dim-explorer-input" style={{fontSize:11,color:"rgba(var(--tint),0.55)",fontWeight:600,letterSpacing:0.3}}>{dimNoun.toUpperCase()}</label>
-                  <input id="dim-explorer-input" list="dim-explorer-opts" value={itemPick || activeItem}
-                    onChange={e=>setItemPick(e.target.value)}
-                    placeholder={`Type or select a ${dimNoun.toLowerCase()}…`}
-                    style={{minWidth:260,padding:"9px 12px",fontSize:13,borderRadius:9,background:"rgba(var(--tint),0.05)",border:"1px solid rgba(var(--tint),0.18)",color:"var(--text)",fontFamily:"'DM Sans',sans-serif"}} />
-                  <datalist id="dim-explorer-opts">
-                    {dimOptions.map(o => <option key={o} value={o} />)}
-                  </datalist>
+                  <label style={{fontSize:11,color:"rgba(var(--tint),0.55)",fontWeight:600,letterSpacing:0.3}}>{dimNoun.toUpperCase()} <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400}}>· {dimOptions.length}</span></label>
+                  <SearchSelect
+                    options={dimOptions}
+                    value={activeItem}
+                    onChange={setItemPick}
+                    placeholder={`Search ${dimOptions.length} ${dimNoun.toLowerCase()}s…`}
+                  />
                 </div>
               </div>
 
