@@ -23,9 +23,12 @@ const AMOUNT_ROWS = [...REPORT_PRODUCTS, ...AMOUNT_ONLY_ROWS];
 // explicit list. Only the 12 monthly cells (cols B–M = 2–13) are written; every
 // TOTAL / BALANCE / ACC% / target-block cell is a formula and recalculates on open.
 const TEMPLATE_SHEET = "monthly sales";
-const QTY_FIRST_ROW = 5;              // REPORT_PRODUCTS[i] -> row 5 + i
-const AMOUNT_FIRST_ROW = 39;          // AMOUNT_ROW_ORDER[i] -> row 39 + i
-const TARGET_ROWS = [74, 83];         // "Jpn Sales Target" and "Revised Sales Target"
+// Template was extended with a "DISOP ACUAISS DUAL GEL EYEDROP" row in both the
+// quantity section (after DISOP ULTRA EYEDROP) and the amount section, so the
+// amount section and the target block sit one/two rows lower than the original.
+const QTY_FIRST_ROW = 5;              // REPORT_PRODUCTS[i] -> row 5 + i (32 products, rows 5-36)
+const AMOUNT_FIRST_ROW = 40;          // AMOUNT_ROW_ORDER[i] -> row 40 + i (33 rows, 40-72)
+const TARGET_ROWS = [76, 85];         // "Jpn Sales Target" and "Revised Sales Target"
 const AMOUNT_ROW_ORDER = [
   "1 DAY PURE", "1 DAY PURE SILFA", "1 DAY PURE ASTIGMATISM", "1 DAY MULSTISTAGE",
   "1 DAYPURE EDOF", "1 DAY VIEW SUPPORT", "2 WEEK PURE MULTISTAGE", "2 WEEK PURE UP TORIC",
@@ -34,7 +37,7 @@ const AMOUNT_ROW_ORDER = [
   "MONTHLY COLOR UV - PEGAVISION", "MONTHLY COLOR UV - BLUE", "MONTHLY COLOR UV - ORANGE", "MONTHLY COLOR UV  II",
   "MINASOFT 1DAY COLOR UV", "MINASOFT CARE UV", "RGP UV-1 / UV-1 KC", "RGP AS-LUNA/O2 NOAH",
   "IRIS LENS", "BREATH O CORRECT", "BREATH O CORRECT (OVERSEAS)", "Wohlk KE RGP", "ULTRA VISION",
-  "DISOP H2O2 SOLUTION", "DISOP ULTRA EYEDROP", "ACCESSORIES/OTHERS", "OTHER INCOME",
+  "DISOP H2O2 SOLUTION", "DISOP ULTRA EYEDROP", "DISOP ACUAISS DUAL GEL EYEDROP", "ACCESSORIES/OTHERS", "OTHER INCOME",
 ];
 
 const fmtInt = (v) => Math.round(Number(v) || 0).toLocaleString("en-MY");

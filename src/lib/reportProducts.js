@@ -44,6 +44,7 @@ export const REPORT_PRODUCTS = [
   "Wohlk KE RGP",
   "DISOP H2O2 SOLUTION",
   "DISOP ULTRA EYEDROP",
+  "DISOP ACUAISS DUAL GEL EYEDROP",
   "ACCESSORIES/OTHERS",
 ];
 
@@ -105,7 +106,11 @@ const RULES = [
   { test: /Wohlk|WHCL/i,                       product: "Wohlk KE RGP" },
 
   // --- DISOP solutions / drops (HQ: DUAL GEL & ACUAISS are eyedrop; HidroHealth is H2O2) ---
-  { test: /DISOP.*(ULTRA|DUAL GEL|ACUAISS)/i,  product: "DISOP ULTRA EYEDROP" },
+  // Split DISOP eyedrops: "Dual Gel" is its own report row; "Ultra"/"Acuaiss"
+  // (Acuaiss Ultra) is the plain Ultra Eyedrop. Test DUAL GEL first — the dual
+  // gel SKU also contains "ACUAISS", so it must win before the Ultra rule.
+  { test: /DISOP.*DUAL GEL/i,                  product: "DISOP ACUAISS DUAL GEL EYEDROP" },
+  { test: /DISOP.*(ULTRA|ACUAISS)/i,           product: "DISOP ULTRA EYEDROP" },
   { test: /DISOP.*(H2O2|H202|HidroHealth)/i,   product: "DISOP H2O2 SOLUTION" },
   { test: /DISOP/i,                            product: "DISOP H2O2 SOLUTION" },
 

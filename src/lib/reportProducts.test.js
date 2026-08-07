@@ -39,8 +39,9 @@ describe("HQ-confirmed mappings (2026-07-31)", () => {
     expect(brandToProduct("MC-SHINING HONEY")).toBe("MONTHLY COLOR UV - ORANGE");
     expect(brandToProduct("MCII-DARK GRAY")).toBe("MONTHLY COLOR UV  II");
   });
-  it("DISOP eyedrop vs H2O2", () => {
-    expect(brandToProduct("DISOP AQUA DUAL GEL 20VL")).toBe("DISOP ULTRA EYEDROP");
+  it("DISOP eyedrop split: Ultra vs Acuaiss Dual Gel vs H2O2", () => {
+    expect(brandToProduct("DISOP AQUA DUAL GEL 20VL")).toBe("DISOP ACUAISS DUAL GEL EYEDROP");
+    expect(brandToProduct("DISOP ACUAISS DUAL GEL 20vial")).toBe("DISOP ACUAISS DUAL GEL EYEDROP");
     expect(brandToProduct("DISOP ACUAISS ULTRA 10ml")).toBe("DISOP ULTRA EYEDROP");
     expect(brandToProduct("DISOP HidroHealth 360ml (Protein Removal)")).toBe("DISOP H2O2 SOLUTION");
   });
@@ -133,14 +134,16 @@ describe("DISOP sample counting (HQ 2026-08-02)", () => {
     expect(Object.keys(unmapped)).toHaveLength(0);
     expect(products["DISOP H2O2 SOLUTION"].qty[4]).toBe(120);        // 100 + 20 (60ml out)
     expect(products["DISOP H2O2 SOLUTION"].amount[4]).toBe(3300);    // samples add no revenue
-    expect(products["DISOP ULTRA EYEDROP"].qty[4]).toBe(111);        // 50+5 + 40+6 + 200/20(=10)
-    expect(products["DISOP ULTRA EYEDROP"].amount[4]).toBe(2980);    // 1500 + 1480
+    expect(products["DISOP ULTRA EYEDROP"].qty[4]).toBe(55);         // 50 + 5 sample (Acuaiss Ultra)
+    expect(products["DISOP ULTRA EYEDROP"].amount[4]).toBe(1500);
+    expect(products["DISOP ACUAISS DUAL GEL EYEDROP"].qty[4]).toBe(56);   // 40 + 6 + 200/20(=10)
+    expect(products["DISOP ACUAISS DUAL GEL EYEDROP"].amount[4]).toBe(1480);
   });
 });
 
 describe("product list", () => {
   it("has the 31 report rows in order, starting 1 DAY PURE", () => {
-    expect(REPORT_PRODUCTS).toHaveLength(31);
+    expect(REPORT_PRODUCTS).toHaveLength(32);
     expect(REPORT_PRODUCTS[0]).toBe("1 DAY PURE");
     expect(REPORT_PRODUCTS.at(-1)).toBe("ACCESSORIES/OTHERS");
   });
