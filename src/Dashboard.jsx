@@ -840,17 +840,29 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   }, [brandYearTotals]);
 
   // --- Single-item explorer: one brand/group's revenue + quantity over the years ---
-  const dimOptions = useMemo(() => {
+  const dimAgg = useMemo(() => {
     const m = new Map();
     dimRows.forEach(r => m.set(r.brand, (m.get(r.brand) || 0) + r.amt));
-    return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([b]) => b);
+    return m;
   }, [dimRows]);
+  // Dropdown sorted by NAME (numeric-aware, case-insensitive) so families like
+  // "SEED …", "DISOP …", "Monthly …", "Eye Coffret …" cluster together and scan
+  // cleanly — not by revenue, which scattered related items.
+  const dimOptions = useMemo(
+    () => [...dimAgg.keys()].sort((a, b) => a.localeCompare(b, "en", { numeric: true, sensitivity: "base" })),
+    [dimAgg],
+  );
+  // The explorer still DEFAULTS to the highest-revenue item, not the A-Z first.
+  const dimTopItem = useMemo(
+    () => [...dimAgg.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "",
+    [dimAgg],
+  );
   const dimYears = useMemo(
     () => [...new Set(dimRows.map(r => r.year))].sort((a, b) => a - b),
     [dimRows],
   );
   // Fall back to the top item when nothing is picked or the pick isn't in this dimension.
-  const activeItem = (itemPick && dimOptions.includes(itemPick)) ? itemPick : (dimOptions[0] || "");
+  const activeItem = (itemPick && dimAgg.has(itemPick)) ? itemPick : dimTopItem;
   const itemYoY = useMemo(() => {
     const byYear = new Map();
     dimRows.filter(r => r.brand === activeItem).forEach(r => {
