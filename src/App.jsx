@@ -200,8 +200,9 @@ export default function App() {
 
         // Product-Group cross-tab (customer × Stock-Group). One small workbook
         // per year, so we read its parsed rows straight from data_files rather
-        // than maintaining a fact table. RLS returns nothing to users who can't
-        // see the file, so the Group views simply stay empty for them.
+        // than maintaining a fact table. Migration 0016 makes kind='group' rows
+        // readable by every signed-in user (a shared board, like weekly_sales),
+        // so the Group views work for the whole sales team, not just admins.
         let groupRows = [];
         try {
           const { data: gfiles } = await supabase
