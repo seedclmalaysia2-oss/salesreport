@@ -228,7 +228,7 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
   );
 }
 
-export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], targets, custSummary = [], isAdmin, onUploaded, onRefresh, seriesColors }) {
+export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], targets, custSummary = [], isAdmin, canViewAll = true, onUploaded, onRefresh, seriesColors }) {
   const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState(null);
@@ -385,7 +385,13 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
   const isFinalWeekSelected = view === "week" && boundedWeekIndex === finalWeekIdx;
   const { custAdjByRep, custAdjTotal } = useMemo(() => {
     const m = new Map();
-    if (activeMonth && custSummary && custSummary.length) {
+    // Reconcile only for users who actually have the FULL company Sales Analysis
+    // (admins + unrestricted viewers). A user scoped to a subset of reps has a
+    // partial custSummary, and reconciling against it would subtract every
+    // rep it can't see down to zero — collapsing the board to just their own
+    // reps. Those users see the raw (unfiltered) weekly board instead, which is
+    // exactly what the admin sees.
+    if (canViewAll && activeMonth && custSummary && custSummary.length) {
       const [saY, saM] = activeMonth.split("-").map(Number);
       const sa = new Map();
       for (const s of custSummary) {
@@ -406,7 +412,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
       }
     }
     return { custAdjByRep: m, custAdjTotal: [...m.values()].reduce((a, b) => a + b, 0) };
-  }, [custSummary, activeMonth, monthAgg]);
+  }, [custSummary, activeMonth, monthAgg, canViewAll]);
   const hasCustAdj = custAdjByRep.size > 0;
   // Fold the month's adjustment into the final week: it shows in Month-to-date
   // (which spans the final week) and when the final week itself is selected.

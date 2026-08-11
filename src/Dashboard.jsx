@@ -1182,6 +1182,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               custSummary={data.summary || []}
               targets={TARGETS}
               isAdmin={!!user?.isAdmin}
+              canViewAll={!!user?.canViewAll}
               onUploaded={onRefresh}
               onRefresh={onRefresh}
               seriesColors={COLORS}
