@@ -21,7 +21,7 @@ create or replace function public.admin_create_user(
 returns uuid
 language plpgsql
 security definer
-set search_path = public, auth
+set search_path = public, auth, extensions
 as $$
 declare
   v_user_id uuid;
@@ -98,7 +98,7 @@ create or replace function public.admin_update_user_email(
 returns void
 language plpgsql
 security definer
-set search_path = public, auth
+set search_path = public, auth, extensions
 as $$
 declare
   v_email text := lower(trim(p_email));
@@ -141,7 +141,7 @@ create or replace function public.admin_reset_user_password(
 returns void
 language plpgsql
 security definer
-set search_path = public, auth
+set search_path = public, auth, extensions
 as $$
 begin
   if not public.current_user_is_admin() then
@@ -171,7 +171,7 @@ create or replace function public.admin_delete_user(p_user_id uuid)
 returns void
 language plpgsql
 security definer
-set search_path = public, auth
+set search_path = public, auth, extensions
 as $$
 begin
   if not public.current_user_is_admin() then
