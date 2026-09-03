@@ -51,13 +51,40 @@ function rowToEntry(r) {
 
 // Non-admins never receive trashed rows (RLS filters them), so the trash view
 // is naturally admin-only without a second query.
+//
+// Each data_files row carries a large rows_json blob (a file's full parsed
+// rows). A single `select *` over every file grew big enough that Postgres
+// canceled it — "canceling statement due to statement timeout" — and the Data
+// tab could not load, nor could Recalculate read the library back. So page the
+// query in small chunks fired in parallel: each statement stays tiny, total
+// wall-time is roughly one page, and the returned shape is unchanged (still the
+// full entries, rows included, ordered newest-first).
+const LIST_PAGE = 5;
 export async function listFiles() {
-  const { data, error } = await supabase
+  const { count, error: cErr } = await supabase
     .from("data_files")
-    .select("*")
-    .order("uploaded_at", { ascending: false });
-  if (error) throw error;
-  return (data || []).map(rowToEntry);
+    .select("id", { count: "exact", head: true });
+  if (cErr) throw cErr;
+  if (!count) return [];
+
+  const ranges = [];
+  for (let from = 0; from < count; from += LIST_PAGE) {
+    ranges.push([from, Math.min(from + LIST_PAGE - 1, count - 1)]);
+  }
+  const pages = await Promise.all(
+    ranges.map(([from, to]) =>
+      supabase
+        .from("data_files")
+        .select("*")
+        .order("uploaded_at", { ascending: false })
+        .range(from, to)
+        .then((r) => {
+          if (r.error) throw r.error;
+          return r.data || [];
+        })
+    )
+  );
+  return pages.flat().map(rowToEntry);
 }
 
 function storagePathFor(file) {
