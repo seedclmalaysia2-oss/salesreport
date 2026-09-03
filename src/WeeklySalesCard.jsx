@@ -262,8 +262,9 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
       try {
         // files.js pulls in the xlsx parser transitively; import it on demand so
         // it never weighs down the initial bundle (parser loads xlsx lazily too).
-        const { listFiles } = await import("./lib/files.js");
-        const files = await listFiles();
+        const { listFiles, hydrateFileRows } = await import("./lib/files.js");
+        // listFiles() is metadata-only; recalcAllFacts needs the parsed rows.
+        const files = await hydrateFileRows(await listFiles());
         await recalcAllFacts(files);
       } catch (e) {
         setRefreshError(

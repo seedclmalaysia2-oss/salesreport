@@ -12,7 +12,7 @@ import { parseFile, parseFilename } from "./lib/parseXlsx.js";
 import {
   listFiles, uploadFile, replaceFile,
   softDeleteFile, restoreFile, purgeFile, downloadUrl,
-  reprocessAllFiles,
+  reprocessAllFiles, hydrateFileRows, getFileRows,
 } from "./lib/files.js";
 import {
   syncWeeklyFromFiles, invoiceFilesFrom,
@@ -190,7 +190,10 @@ export default function DataTab({ data, onRefresh }) {
     setSyncing(true);
     setError(null);
     try {
-      const res = await syncWeeklyFromFiles(list ?? files);
+      // listFiles() is metadata-only, so pull the parsed rows for the invoice
+      // files before the sync can bucket them into weeks.
+      const hydrated = await hydrateFileRows(list ?? files);
+      const res = await syncWeeklyFromFiles(hydrated);
       if (res.rows > 0) {
         setNotice(
           `Weekly Sales updated — ${res.weeks} week${res.weeks === 1 ? "" : "s"} ` +
@@ -210,7 +213,12 @@ export default function DataTab({ data, onRefresh }) {
     }
   };
 
-  const invoiceFileCount = useMemo(() => invoiceFilesFrom(files).length, [files]);
+  // Count by kind, not invoiceFilesFrom() — the file list is metadata-only
+  // (no parsed rows), and invoiceFilesFrom() gates on Array.isArray(f.rows).
+  const invoiceFileCount = useMemo(
+    () => files.filter(f => f.kind === "invoice" && !f.deletedAt).length,
+    [files]
+  );
 
   // Step-by-step recalculate with a visible checklist. Each stage sets its own
   // status (pending / running / done / error) plus a short numeric result so the
@@ -343,14 +351,18 @@ export default function DataTab({ data, onRefresh }) {
     };
 
     let list = [];
+    let hydrated = [];
     try {
       // 1. File library. runStage returns the DETAIL string for the UI, so we
       // capture the real list into the outer scope for later stages instead of
       // reusing the return value (which would leave `list` as the detail text
-      // — the "(s || []).filter is not a function" bug).
+      // — the "(s || []).filter is not a function" bug). listFiles() is
+      // metadata-only, so hydrate the parsed rows here — every push/sync stage
+      // below needs them, and doing it once keeps it to a single fetch pass.
       await runStage("files", async () => {
         list = await listFiles();
         setFiles(list);
+        hydrated = await hydrateFileRows(list);
         const n = list.filter(f => !f.deletedAt).length;
         return `${n} active file${n === 1 ? "" : "s"}`;
       });
@@ -362,7 +374,7 @@ export default function DataTab({ data, onRefresh }) {
       // the newest and it wins. Empty files are skipped (see weekly.js) — the
       // skip list is echoed on the checklist row so a coverage gap is visible.
       await runStage("pushCust", async () => {
-        const res = await syncCustomersFromFiles(list);
+        const res = await syncCustomersFromFiles(hydrated);
         if (res.scopes === 0 && (!res.skipped || res.skipped.length === 0)) {
           return "no customer files to push";
         }
@@ -376,7 +388,7 @@ export default function DataTab({ data, onRefresh }) {
 
       // 3. Push brand files → brand_sales_data (same shape as step 2).
       await runStage("pushBrand", async () => {
-        const res = await syncBrandsFromFiles(list);
+        const res = await syncBrandsFromFiles(hydrated);
         if (res.scopes === 0 && (!res.skipped || res.skipped.length === 0)) {
           return "no brand files to push";
         }
@@ -391,12 +403,12 @@ export default function DataTab({ data, onRefresh }) {
       // 4. Invoice → weekly sync (idempotent). Skip cleanly when no invoice
       // files are present, but still mark the step "done" so the checklist
       // reads as complete rather than stuck.
-      const invoiceCount = invoiceFilesFrom(list).length;
+      const invoiceCount = list.filter(f => f.kind === "invoice" && !f.deletedAt).length;
       if (invoiceCount === 0) {
         setStep("weekly", { status: "done", detail: "no invoice files to sync" });
       } else {
         await runStage("weekly", async () => {
-          const res = await syncWeeklyFromFiles(list);
+          const res = await syncWeeklyFromFiles(hydrated);
           if (res.rows === 0) return `already in sync (${invoiceCount} file${invoiceCount === 1 ? "" : "s"})`;
           return `${res.weeks} week${res.weeks === 1 ? "" : "s"} · ${res.rows} rep-week rows`;
         });
@@ -670,10 +682,12 @@ export default function DataTab({ data, onRefresh }) {
         return null;
       };
       const kinds = new Set(valid.map((f) => parsedKindOf(f.name)).filter(Boolean));
+      // listFiles() is metadata-only — pull the parsed rows before any sync.
+      const hydrated = await hydrateFileRows(list);
       const syncErrors = [];
       try {
         if (kinds.has("customer")) {
-          const r = await syncCustomersFromFiles(list);
+          const r = await syncCustomersFromFiles(hydrated);
           if (r.scopes > 0) setNotice(
             `Uploaded ${okCount} file${okCount === 1 ? "" : "s"} · pushed ${r.rows.toLocaleString()} customer rows to the dashboard.`
           );
@@ -681,7 +695,7 @@ export default function DataTab({ data, onRefresh }) {
       } catch (e) { syncErrors.push(`customer sync: ${fmtErr(e)}`); }
       try {
         if (kinds.has("brand")) {
-          const r = await syncBrandsFromFiles(list);
+          const r = await syncBrandsFromFiles(hydrated);
           if (r.scopes > 0) setNotice(
             `Uploaded ${okCount} file${okCount === 1 ? "" : "s"} · pushed ${r.rows.toLocaleString()} brand rows to the dashboard.`
           );
@@ -690,7 +704,7 @@ export default function DataTab({ data, onRefresh }) {
       if (kinds.has("invoice")) {
         // Stock Sales Analysis - Detail / Customer Invoice Listing → Weekly board.
         // runWeeklySync sets its own "Weekly Sales updated…" notice on success.
-        await runWeeklySync(list, { silent: true });
+        await runWeeklySync(hydrated, { silent: true });
       }
       if (syncErrors.length) {
         setError(
@@ -1524,7 +1538,23 @@ function DataSourceStatus({ data }) {
 }
 
 function FilePreviewModal({ entry, onClose }) {
-  const rows = Array.isArray(entry.rows) ? entry.rows : [];
+  // listFiles() no longer carries rows_json (metadata-only for speed), so pull
+  // this one file's parsed rows on open. A just-uploaded/reprocessed entry may
+  // still have them in memory, in which case we skip the fetch.
+  const [fetched, setFetched] = useState(Array.isArray(entry.rows) ? entry.rows : null);
+  const [loading, setLoading] = useState(!Array.isArray(entry.rows));
+  const [loadErr, setLoadErr] = useState(null);
+  useEffect(() => {
+    if (Array.isArray(entry.rows)) return;
+    let alive = true;
+    setLoading(true); setLoadErr(null);
+    getFileRows(entry.id)
+      .then((r) => { if (alive) setFetched(r); })
+      .catch((e) => { if (alive) setLoadErr(e.message || String(e)); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [entry.id]);
+  const rows = Array.isArray(fetched) ? fetched : [];
   const cols = entry.kind === "customer"
     ? ["sp","year","customer","total",...MONTH_NAMES]
     : entry.kind === "invoice"
@@ -1576,7 +1606,17 @@ function FilePreviewModal({ entry, onClose }) {
               Showing first 1000 of {rows.length} rows.
             </div>
           )}
-          {!rows.length && (
+          {loading && (
+            <div style={{padding:"40px 20px",fontSize:12,color:"rgba(var(--tint),0.67)",textAlign:"center"}}>
+              Loading rows…
+            </div>
+          )}
+          {loadErr && !loading && (
+            <div style={{padding:"20px",fontSize:12,color:"#F87171",textAlign:"center"}}>
+              Couldn't load rows: {loadErr}
+            </div>
+          )}
+          {!loading && !loadErr && !rows.length && (
             <div style={{padding:"40px 20px",fontSize:12,color:"rgba(var(--tint),0.67)",textAlign:"center"}}>
               No rows stored for this file.
             </div>

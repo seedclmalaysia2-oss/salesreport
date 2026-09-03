@@ -52,39 +52,61 @@ function rowToEntry(r) {
 // Non-admins never receive trashed rows (RLS filters them), so the trash view
 // is naturally admin-only without a second query.
 //
-// Each data_files row carries a large rows_json blob (a file's full parsed
-// rows). A single `select *` over every file grew big enough that Postgres
-// canceled it — "canceling statement due to statement timeout" — and the Data
-// tab could not load, nor could Recalculate read the library back. So page the
-// query in small chunks fired in parallel: each statement stays tiny, total
-// wall-time is roughly one page, and the returned shape is unchanged (still the
-// full entries, rows included, ordered newest-first).
-const LIST_PAGE = 5;
+// METADATA ONLY. Each data_files row also carries a large rows_json blob (a
+// file's full parsed rows); selecting it for every file grew big enough that
+// Postgres canceled the query — "canceling statement due to statement timeout"
+// — and the Data tab couldn't load. The library table only needs the light
+// columns, so we never fetch rows_json here. `rows` comes back null; the paths
+// that actually need it (fact-table sync, the preview modal) pull it on demand
+// via hydrateFileRows() / getFileRows(). Keeps opening the Data tab instant no
+// matter how many megabytes of parsed rows are archived.
+const FILE_META_COLS =
+  "id,name,kind,sp,year,row_count,size_bytes,storage_path,visibility,allowed_sps,uploaded_by,uploaded_at,deleted_at";
 export async function listFiles() {
-  const { count, error: cErr } = await supabase
+  const { data, error } = await supabase
     .from("data_files")
-    .select("id", { count: "exact", head: true });
-  if (cErr) throw cErr;
-  if (!count) return [];
+    .select(FILE_META_COLS)
+    .order("uploaded_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(rowToEntry);
+}
 
-  const ranges = [];
-  for (let from = 0; from < count; from += LIST_PAGE) {
-    ranges.push([from, Math.min(from + LIST_PAGE - 1, count - 1)]);
-  }
-  const pages = await Promise.all(
-    ranges.map(([from, to]) =>
-      supabase
+// The parsed rows for a single file (the preview modal, or any one-off need).
+// Small query — one row's rows_json — so it never approaches the timeout.
+export async function getFileRows(id) {
+  const { data, error } = await supabase
+    .from("data_files")
+    .select("rows_json")
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+  return Array.isArray(data?.rows_json) ? data.rows_json : [];
+}
+
+// Fill in `rows` for the given metadata entries (those still missing it), in
+// small parallel batches so no single statement is huge. Returns NEW entries
+// with rows populated; entries that already have rows (e.g. a just-uploaded or
+// just-reprocessed file) are passed through untouched. This is the counterpart
+// to the metadata-only listFiles(): sync paths call it right before they need
+// the parsed rows, so the heavy JSON is fetched only when it's actually used.
+export async function hydrateFileRows(files) {
+  const need = (files || []).filter((f) => f && f.id && f.rows == null && !f.deletedAt);
+  if (!need.length) return files || [];
+  const byId = new Map();
+  const CHUNK = 5;
+  const batches = [];
+  for (let i = 0; i < need.length; i += CHUNK) batches.push(need.slice(i, i + CHUNK));
+  await Promise.all(
+    batches.map(async (grp) => {
+      const { data, error } = await supabase
         .from("data_files")
-        .select("*")
-        .order("uploaded_at", { ascending: false })
-        .range(from, to)
-        .then((r) => {
-          if (r.error) throw r.error;
-          return r.data || [];
-        })
-    )
+        .select("id,rows_json")
+        .in("id", grp.map((f) => f.id));
+      if (error) throw error;
+      for (const r of data || []) byId.set(r.id, Array.isArray(r.rows_json) ? r.rows_json : []);
+    })
   );
-  return pages.flat().map(rowToEntry);
+  return (files || []).map((f) => (byId.has(f.id) ? { ...f, rows: byId.get(f.id) } : f));
 }
 
 function storagePathFor(file) {
