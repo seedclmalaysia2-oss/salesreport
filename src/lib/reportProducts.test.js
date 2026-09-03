@@ -141,6 +141,21 @@ describe("DISOP sample counting (HQ 2026-08-02)", () => {
   });
 });
 
+describe("Breath-O-Correct overseas split by salesman (HQ 2026-09)", () => {
+  it("routes Seed Malaysia (house/overseas) BOC to the OVERSEAS row; all other BOC stays local", () => {
+    const rows = [
+      { date: "2026-07-01", brand: "SEED BOC ORTHO-K std", qty: 57, amount: 27946, uom: "PCS", sp: "Seed Malaysia" },
+      { date: "2026-07-02", brand: "SEED BOC ORTHO-K std", qty: 4, amount: 2240, uom: "PCS", sp: "Wani" },
+      { date: "2026-07-03", brand: "SEED BOC ORTHO-K TD [RX-TORIC]", qty: 2, amount: 1120, uom: "PCS", sp: "Khen" },
+    ];
+    const { products } = aggregateProductMonthly(rows, 2026);
+    expect(products["BREATH O CORRECT (OVERSEAS)"].qty[6]).toBe(57);
+    expect(products["BREATH O CORRECT (OVERSEAS)"].amount[6]).toBe(27946);
+    expect(products["BREATH O CORRECT"].qty[6]).toBe(6);
+    expect(products["BREATH O CORRECT"].amount[6]).toBe(3360);
+  });
+});
+
 describe("product list", () => {
   it("has the 31 report rows in order, starting 1 DAY PURE", () => {
     expect(REPORT_PRODUCTS).toHaveLength(32);

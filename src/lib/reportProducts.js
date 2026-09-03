@@ -176,7 +176,15 @@ export function aggregateProductMonthly(rows, year) {
       .replace(/\[?\s*FOC tie in goods\s*\]?.*$/i, "")
       .replace(/\bSAMPLE\b/ig, "")
       .trim();
-    const product = brandToProduct(clean);
+    let product = brandToProduct(clean);
+    // Overseas Breath-O-Correct: HQ books BOC sold through the house
+    // "Seed Malaysia" account (Glodisa / overseas customers) to the OVERSEAS
+    // row; every other BOC line is local. The Stock-Detail export carries no
+    // customer column, but these overseas sales all run under the Seed Malaysia
+    // salesman — which ties out to HQ's local/overseas split exactly.
+    if (product === "BREATH O CORRECT" && r.sp === "Seed Malaysia") {
+      product = "BREATH O CORRECT (OVERSEAS)";
+    }
     const amount = Number(r.amount) || 0;
     let qty = Number(r.qty) || 0;
     if (!product) {
