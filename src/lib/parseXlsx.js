@@ -581,8 +581,12 @@ export async function parseFile(file) {
     };
   } else if (fnameInfo.kind === "Customer Invoice Listing") {
     const parsed = parseInvoiceRows(rows);
-    // Derive a year from the invoice dates when the filename didn't carry one,
-    // so the entry still sorts and filters correctly in the file manager.
+    // Prefer the year the invoice DATES actually fall in, over the filename's
+    // date suffix. The suffix is just a label the ops team stamps by hand; the
+    // dates in the data are the truth, and keying the file's year off them means
+    // the per-year overwrite (newest upload per year wins) never depends on the
+    // filename being stamped correctly. Suffix is only a fallback for an empty
+    // or dateless file.
     const yearFromRows = parsed
       .map(r => r.date && parseInt(r.date.slice(0, 4), 10))
       .find(y => Number.isFinite(y)) ?? null;
@@ -591,12 +595,15 @@ export async function parseFile(file) {
       file: file.name,
       kind: "invoice",
       sp: null,
-      year: fnameInfo.year ?? yearFromRows,
+      year: yearFromRows ?? fnameInfo.year,
       rowCount: parsed.length,
       rows: parsed,
     };
   } else if (fnameInfo.kind === "Stock Sales Analysis - Detail") {
     const parsed = parseStockDetailRows(rows);
+    // Same rule as the Invoice Listing above — the year comes from the invoice
+    // dates in the file, not the "10092026" style suffix, so the daily
+    // overwrite keys on real data + upload timestamp, never the filename stamp.
     const yearFromRows = parsed
       .map(r => r.date && parseInt(r.date.slice(0, 4), 10))
       .find(y => Number.isFinite(y)) ?? null;
@@ -609,7 +616,7 @@ export async function parseFile(file) {
       // {date, invoice, customer, amount, sp}, so no downstream changes.
       kind: "invoice",
       sp: null,
-      year: fnameInfo.year ?? yearFromRows,
+      year: yearFromRows ?? fnameInfo.year,
       rowCount: parsed.length,
       rows: parsed,
     };
