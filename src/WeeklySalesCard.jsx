@@ -3,9 +3,11 @@ import { useEffect, useMemo, useState, useRef } from "react";
 // upload needs it, so it must not sit in the initial bundle.
 import { supabase } from "./lib/supabase.js";
 // weekBounds + the rep order are shared with the Data-tab → weekly sync so both
-// paths bucket dates into the exact same Mon–Sun weeks. recalcAllFacts lets the
-// Refresh button rebuild every fact table (admins only) before reloading.
-import { weekBounds, REP_ORDER, recalcAllFacts } from "./lib/weekly.js";
+// paths bucket dates into the exact same Mon–Sun weeks. syncWeeklyFromFiles lets
+// the Refresh button rebuild the weekly board (admins only) from the invoice
+// files before reloading — a focused, weekly-only sync (the full customer/brand
+// recalc lives on the Data tab's "Recalculate now").
+import { weekBounds, REP_ORDER, syncWeeklyFromFiles } from "./lib/weekly.js";
 
 // Retail Sales Team = the three reps who count toward the "Sales Team" column.
 // Everyone else only contributes to the "Seed Malaysia" total.
@@ -232,6 +234,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
   const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState(null);
+  const [refreshNote, setRefreshNote] = useState(null);
   // onUploaded is retained in the props for backward compatibility with any
   // future ad-hoc upload button, but the card no longer opens an inline
   // upload panel — all uploads live on the Data tab now.
@@ -246,35 +249,55 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
   }, [weeklySales]);
 
   // Refresh does two different jobs depending on who's pressing it:
-  //   • Admin — a true recalc. Pull the newest files from Supabase (the ones
-  //     just Updated on the Data tab), rebuild every fact table, THEN reload.
-  //     So a file replaced on the Data tab shows on the board in one press,
-  //     without a separate trip to the Data-tab "Recalculate" button.
-  //   • Everyone else — a plain reload. Reps can't write (RLS), so recalc would
+  //   • Admin — rebuild the weekly board from the newest invoice files in
+  //     Supabase (the ones just Updated on the Data tab), THEN reload. So a
+  //     Stock-Detail / Invoice Listing file replaced on the Data tab shows on
+  //     the board in one press. Deliberately WEEKLY-ONLY: it hydrates just the
+  //     invoice files and runs only syncWeeklyFromFiles — it does NOT run the
+  //     full customer/brand recalc. That recalc is heavy (big workbooks) and, in
+  //     the old combined path, ran BEFORE the weekly step, so any error in it —
+  //     or a timeout hydrating every file — aborted before the weekly upsert
+  //     ever happened, and the board looked "stuck" no matter how good the
+  //     invoice file was. Full recalc still lives on the Data ⤴ tab.
+  //   • Everyone else — a plain reload. Reps can't write (RLS), so a sync would
   //     only error; they just re-fetch whatever the admin's last sync produced.
-  // Either way it stays robust: a recalc error falls through to the reload and
+  // Either way it stays robust: a sync error falls through to the reload and
   // surfaces a small note rather than leaving the board stuck.
   const handleRefresh = async () => {
     if (refreshing || !onRefresh) return;
     setRefreshing(true);
     setRefreshError(null);
+    setRefreshNote(null);
     if (isAdmin) {
       try {
         // files.js pulls in the xlsx parser transitively; import it on demand so
         // it never weighs down the initial bundle (parser loads xlsx lazily too).
         const { listFiles, hydrateFileRows } = await import("./lib/files.js");
-        // listFiles() is metadata-only; recalcAllFacts needs the parsed rows.
-        const files = await hydrateFileRows(await listFiles());
-        await recalcAllFacts(files);
+        // listFiles() is metadata-only. The weekly board is fed ONLY by invoice
+        // files, so hydrate just those (skip the heavy customer/brand blobs) and
+        // run the weekly sync directly.
+        const all = await listFiles();
+        const invoiceMeta = all.filter((f) => f.kind === "invoice" && !f.deletedAt);
+        const files = await hydrateFileRows(invoiceMeta);
+        const res = await syncWeeklyFromFiles(files);
+        if (!res.files) {
+          setRefreshNote(
+            "No “Stock Sales Analysis - Detail” (or Customer Invoice Listing) file is uploaded, so the weekly board has nothing to build from. Upload that file on the Data ⤴ tab — the “Sales Analysis by customer” and “Group by Customer” files do not feed this card."
+          );
+        } else {
+          setRefreshNote(
+            `Rebuilt from ${res.invoices.toLocaleString()} invoice${res.invoices === 1 ? "" : "s"} across ${res.files} file${res.files === 1 ? "" : "s"} → ${res.rows} rep-week row${res.rows === 1 ? "" : "s"}${res.periodStart ? ` (${res.periodStart} → ${res.periodEnd})` : ""}. If the totals look unchanged, the uploaded file matched what was already there.`
+          );
+        }
       } catch (e) {
         setRefreshError(
-          `Couldn't recalculate from the files — reloaded the existing numbers instead. ${e?.message || e}`
+          `Couldn't rebuild the weekly board from the files — reloaded the existing numbers instead. ${e?.message || e}`
         );
       }
     }
     onRefresh();
     // Failsafe: the weeklySales-arrival effect normally stops the spinner, but a
-    // recalc + refetch can take several seconds, so give the admin path room
+    // sync + refetch can take several seconds, so give the admin path room
     // before force-clearing.
     setTimeout(() => setRefreshing(false), isAdmin ? 15000 : 6000);
   };
@@ -485,6 +508,20 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
     </div>
   ) : null;
 
+  // Info note after an admin refresh — says what the weekly sync did (how many
+  // invoices/weeks) or, when no invoice file exists, exactly which file to
+  // upload. This is the answer to "I pressed Refresh but nothing changed".
+  const RefreshNote = refreshNote ? (
+    <div style={{
+      marginTop: 12, padding: "8px 12px", borderRadius: 8, fontSize: 12, lineHeight: 1.5,
+      background: "color-mix(in srgb, var(--st-info) 12%, transparent)",
+      border: "1px solid color-mix(in srgb, var(--st-info) 35%, transparent)",
+      color: "var(--st-info)",
+    }}>
+      ↻ {refreshNote}
+    </div>
+  ) : null;
+
   // Staleness prompt — surfaces the exact confusion admins keep hitting: the
   // weekly numbers look "stuck" because the Stock-Detail source hasn't been
   // re-uploaded, not because anything is broken. Amber (watch), with a ⚠ glyph
@@ -537,6 +574,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
           {HeaderActions}
         </div>
         {RefreshError}
+        {RefreshNote}
       </div>
     );
   }
@@ -601,6 +639,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
         {HeaderActions}
       </div>
       {RefreshError}
+      {RefreshNote}
       {StaleBanner}
 
       {/* Month + week navigator. Prev/next hop between months that actually
