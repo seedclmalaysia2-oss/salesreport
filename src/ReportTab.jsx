@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { supabase } from "./lib/supabase.js";
 import { parseFile } from "./lib/parseXlsx.js";
 import {
@@ -6,11 +6,16 @@ import {
 } from "./lib/reportProducts.js";
 import templateUrl from "./assets/hq-sales-summary-template.xlsx?url";
 
-// HQ "SEED(M) Sales Summary" generator (admin-only). Prefills the monthly
-// per-product quantity + amount grid from the Stock Sales Analysis - Detail
-// files, every cell editable before export. The Detail files are re-parsed
-// fresh from storage on demand (they carry brand + quantity + UOM), so nothing
-// needs reprocessing and no bulky per-line data is stored.
+// HQ "SEED(M) Sales Summary" generator (admin-only). The monthly per-product
+// quantity + amount grid loads AUTOMATICALLY from the Stock Sales Analysis -
+// Detail file(s) held online (Supabase storage) the moment the tab opens or the
+// year changes — there is no manual "prefill" step. Whatever file is currently
+// uploaded for the year is the source of truth; re-uploading a newer file on the
+// Data tab overwrites what shows here (the grid re-reads the latest bytes), and
+// the header names the source file(s) and their upload time. Every cell stays
+// editable before export. The Detail files are re-parsed fresh from storage
+// (they carry brand + quantity + UOM), so nothing needs reprocessing and no
+// bulky per-line data is stored.
 
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 const YEARS = [2026, 2025, 2024, 2023, 2022];
@@ -43,6 +48,11 @@ const AMOUNT_ROW_ORDER = [
 const fmtInt = (v) => Math.round(Number(v) || 0).toLocaleString("en-MY");
 const fmtAmt = (v) => (Number(v) || 0).toLocaleString("en-MY", { maximumFractionDigits: 0 });
 const sum = (arr) => arr.reduce((a, b) => a + (Number(b) || 0), 0);
+// "10 Sep 2026, 3:42 pm" — the upload time of the file this page was built from.
+const fmtWhen = (ms) =>
+  Number.isFinite(ms)
+    ? new Date(ms).toLocaleString("en-MY", { day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })
+    : "—";
 
 function emptyGrid() {
   const g = {};
@@ -51,15 +61,20 @@ function emptyGrid() {
 }
 
 // Pull the year's Stock-Detail files from storage and parse them (brand+qty+uom).
+// Newest upload first, so the "as of" timestamp reflects the latest file. Each
+// parsed source is returned with its own upload time so the header can show what
+// this page was built from and when.
 async function loadStockDetailRows(year) {
   const { data: files, error } = await supabase
     .from("data_files")
-    .select("id,name,storage_path")
+    .select("id,name,storage_path,uploaded_at")
     .eq("kind", "invoice")
     .eq("year", year)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .order("uploaded_at", { ascending: false });
   if (error) throw error;
   const all = [];
+  const sources = [];
   for (const f of files || []) {
     const { data: signed, error: se } = await supabase.storage
       .from("data-files").createSignedUrl(f.storage_path, 300);
@@ -67,9 +82,15 @@ async function loadStockDetailRows(year) {
     const resp = await fetch(signed.signedUrl);
     if (!resp.ok) throw new Error(`${f.name}: download HTTP ${resp.status}`);
     const parsed = await parseFile(new File([await resp.blob()], f.name));
-    if (parsed.ok) all.push(...parsed.rows);
+    if (parsed.ok) {
+      all.push(...parsed.rows);
+      sources.push({
+        name: f.name,
+        uploadedAt: f.uploaded_at ? new Date(f.uploaded_at).getTime() : null,
+      });
+    }
   }
-  return { rows: all, fileNames: (files || []).map((f) => f.name) };
+  return { rows: all, sources };
 }
 
 export default function ReportTab({ user, data }) {
@@ -78,9 +99,15 @@ export default function ReportTab({ user, data }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [unmapped, setUnmapped] = useState({});
-  const [sourceFiles, setSourceFiles] = useState([]);
+  const [sources, setSources] = useState([]); // [{ name, uploadedAt }] used to build this page
   const [section, setSection] = useState("qty"); // 'qty' | 'amount'
   const [exporting, setExporting] = useState(false);
+
+  // Newest upload time across the source files = "data as of" stamp for the page.
+  const lastUpdated = useMemo(() => {
+    const ts = sources.map((s) => s.uploadedAt).filter((t) => Number.isFinite(t));
+    return ts.length ? Math.max(...ts) : null;
+  }, [sources]);
 
   // Monthly team target (Msia target) for the Jan–Dec target row, from sales_targets.
   const monthlyTarget = useMemo(() => {
@@ -91,17 +118,19 @@ export default function ReportTab({ user, data }) {
     return t;
   }, [data, year]);
 
-  const generate = async () => {
+  // Load (or reload) the grid straight from the latest online file for the year.
+  // Runs automatically on open / year change, and from the small ↻ control after
+  // a fresh upload — no manual "prefill" step.
+  const load = useCallback(async () => {
     setLoading(true);
-    setStatus("Loading Stock Sales Analysis - Detail file(s)…");
+    setStatus("Loading Stock Sales Analysis - Detail file(s) from the Data tab…");
     try {
-      const { rows, fileNames } = await loadStockDetailRows(year);
+      const { rows, sources } = await loadStockDetailRows(year);
       if (!rows.length) {
-        setStatus(`No “Stock Sales Analysis - Detail” file found for ${year}. Upload one on the Data tab first.`);
-        setGrid(emptyGrid()); setUnmapped({}); setSourceFiles([]);
+        setStatus(`No “Stock Sales Analysis - Detail” file found for ${year}. Upload one on the Data tab and it appears here automatically.`);
+        setGrid(emptyGrid()); setUnmapped({}); setSources([]);
         return;
       }
-      setStatus("Aggregating by product and month…");
       const { products, unmapped } = aggregateProductMonthly(rows, year);
       const g = emptyGrid();
       for (const [p, d] of Object.entries(products)) {
@@ -109,14 +138,18 @@ export default function ReportTab({ user, data }) {
         g[p].qty = d.qty.map((v) => Math.round(v));
         g[p].amount = d.amount.map((v) => Math.round(v));
       }
-      setGrid(g); setUnmapped(unmapped); setSourceFiles(fileNames);
-      setStatus(`Prefilled from ${fileNames.length} file(s) · ${rows.length.toLocaleString()} lines — edit any cell, then export.`);
+      setGrid(g); setUnmapped(unmapped); setSources(sources);
+      setStatus(`Loaded ${sources.length} file(s) · ${rows.length.toLocaleString()} lines — edit any cell, then export.`);
     } catch (e) {
       setStatus(`Failed: ${e.message || e}`);
     } finally {
       setLoading(false);
     }
-  };
+  }, [year]);
+
+  // Auto-load whenever the tab opens or the year changes — the data shows up on
+  // its own and stays until a newer file is uploaded to overwrite it.
+  useEffect(() => { load(); }, [load]);
 
   const setCell = (product, m, val) => {
     setGrid((prev) => {
@@ -211,18 +244,23 @@ export default function ReportTab({ user, data }) {
         <div style={{ flex: "1 1 240px", minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>HQ Sales Summary report</div>
           <div style={{ fontSize: 12, color: "rgba(var(--tint),0.7)", lineHeight: 1.5 }}>
-            Prefills monthly quantity + amount per product from the Stock-Detail file(s), editable before export.
+            {loading
+              ? "Loading the latest Stock-Detail file from the Data tab…"
+              : sources.length > 0
+                ? <>Built from <strong style={{ color: "var(--text)" }}>{sources.map((s) => s.name).join(", ")}</strong> · data as of <strong style={{ color: "var(--text)" }}>{fmtWhen(lastUpdated)}</strong>. Edit any cell, then export. Upload a newer file on the Data tab to overwrite this.</>
+                : `No online Stock-Detail file for ${year} yet — upload one on the Data tab and it appears here automatically.`}
           </div>
         </div>
         <select value={year} onChange={(e) => setYear(Number(e.target.value))}
           style={{ background: "rgba(var(--tint),0.05)", border: "1px solid rgba(var(--tint),0.15)", color: "var(--text)", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: "pointer", colorScheme: "dark light" }}>
           {YEARS.map((y) => <option key={y} value={y} style={{ background: "#0A0A0F", color: "#fff" }}>{y}</option>)}
         </select>
-        <button onClick={generate} disabled={loading}
-          style={{ background: loading ? "rgba(232,99,59,0.4)" : "#E8633B", color: "#fff", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 700, cursor: loading ? "wait" : "pointer", fontFamily: "'DM Sans',sans-serif" }}>
-          {loading ? "Working…" : "Prefill from files"}
+        <button onClick={load} disabled={loading} title="Reload from the latest file uploaded on the Data tab"
+          aria-label="Reload from the latest uploaded file"
+          style={{ background: "rgba(var(--tint),0.05)", color: "rgba(var(--tint),0.8)", border: "1px solid rgba(var(--tint),0.18)", borderRadius: 8, padding: "9px 12px", fontSize: 14, fontWeight: 700, cursor: loading ? "wait" : "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+          {loading ? "…" : "↻"}
         </button>
-        <button onClick={exportExcel} disabled={exporting || !hasData} title={hasData ? "Download the HQ Excel file" : "Prefill or edit the grid first"}
+        <button onClick={exportExcel} disabled={exporting || !hasData} title={hasData ? "Download the HQ Excel file" : "Waiting for the online file to load"}
           style={{ background: "transparent", color: hasData ? "var(--st-info)" : "rgba(var(--tint),0.4)", border: `1px solid ${hasData ? "var(--st-info)" : "rgba(var(--tint),0.2)"}`, borderRadius: 8, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: exporting ? "wait" : (hasData ? "pointer" : "not-allowed"), fontFamily: "'DM Sans',sans-serif" }}>
           {exporting ? "Exporting…" : "⬇ Export Excel"}
         </button>
@@ -308,8 +346,9 @@ export default function ReportTab({ user, data }) {
       )}
 
       <div style={{ marginTop: 14, fontSize: 11.5, color: "rgba(var(--tint),0.65)", lineHeight: 1.6 }}>
-        Amounts prefill exactly from the Detail files; a few product quantities (DISOP units, overseas BOC) may need a manual tweak above.
-        <strong> Export Excel</strong> fills HQ's template — same layout, merges and formulas — and totals recalculate when you open it. {sourceFiles.length > 0 && <>Source: {sourceFiles.join(", ")}.</>}
+        Amounts load exactly from the online Detail file(s); a few product quantities (DISOP units, overseas BOC) may need a manual tweak above.
+        <strong> Export Excel</strong> fills HQ's template — same layout, merges and formulas — and totals recalculate when you open it.
+        {sources.length > 0 && <> Source: {sources.map((s) => `${s.name} (uploaded ${fmtWhen(s.uploadedAt)})`).join(", ")}.</>}
       </div>
     </div>
   );
