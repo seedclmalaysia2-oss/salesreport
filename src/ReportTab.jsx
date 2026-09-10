@@ -73,9 +73,16 @@ async function loadStockDetailRows(year) {
     .is("deleted_at", null)
     .order("uploaded_at", { ascending: false });
   if (error) throw error;
+  // Invoice (Stock-Detail) exports are cumulative year-to-date and re-uploaded
+  // (often daily) under date-stamped names. Summing every live copy would count
+  // the same invoices several times, so use ONLY the newest upload for the year
+  // — it already contains the whole year. Uploads now also supersede older
+  // same-year invoice files, so normally there is just one; taking the newest
+  // keeps the report correct even if an older copy is still lingering.
+  const newest = (files || []).slice(0, 1);
   const all = [];
   const sources = [];
-  for (const f of files || []) {
+  for (const f of newest) {
     const { data: signed, error: se } = await supabase.storage
       .from("data-files").createSignedUrl(f.storage_path, 300);
     if (se) throw new Error(`${f.name}: ${se.message}`);
