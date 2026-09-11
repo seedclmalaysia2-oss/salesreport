@@ -76,7 +76,9 @@ function LoadingScreen({ stage }) {
       }}>
         <div style={{
           position: "absolute", top: 0, height: "100%", width: "40%", borderRadius: 2,
-          background: `linear-gradient(90deg,transparent,${t.accent},transparent)`,
+          // A solid travelling block, not a gradient sweep. The system has no
+          // gradients, and a flat bar reads at least as clearly in sunlight.
+          background: t.accent,
           animation: "seedbar 1.2s ease-in-out infinite",
         }} />
       </div>
@@ -134,9 +136,23 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
 
+    // Guard against a stale run landing last. `session` and `refreshTick` can
+    // both change while a previous run's fetchAll calls are still in flight
+    // (fast sign-out → sign-in, or Refresh pressed twice). Without this the
+    // older closure — holding the *previous* session — resolves afterwards and
+    // overwrites the correct user/data with the one we already moved on from.
+    let cancelled = false;
+    const live = (fn) => (...args) => { if (!cancelled) fn(...args); };
+    const setProfileErrorLive = live(setProfileError);
+    const setLoadStageLive = live(setLoadStage);
+    const setUserLive = live(setUser);
+    const setDataLive = live(setData);
+    const setStaleDataLive = live(setStaleData);
+    const setBrandsLoadingLive = live(setBrandsLoading);
+
     (async () => {
-      setProfileError(null);
-      setLoadStage("Verifying your access…");
+      setProfileErrorLive(null);
+      setLoadStageLive("Verifying your access…");
 
       // Role first, and on its own. If this read fails we must not guess —
       // an unknown role is treated as "no access", never as admin.
@@ -150,7 +166,7 @@ export default function App() {
         if (error) throw error;
         profile = row;
       } catch (e) {
-        setProfileError(
+        setProfileErrorLive(
           "Could not verify your account permissions. Please try again — " +
           "if this persists, contact your admin. " + (e.message || e)
         );
@@ -158,14 +174,14 @@ export default function App() {
       }
 
       if (!profile) {
-        setProfileError(
+        setProfileErrorLive(
           `${session.user.email} is signed in but is not mapped to a salesperson yet, ` +
           "so there is no data to show. Ask your admin to add you in the Users panel."
         );
         return;
       }
 
-      setUser({
+      setUserLive({
         email: session.user.email,
         sp: profile.sp,
         isAdmin: !!profile.is_admin,
@@ -184,7 +200,7 @@ export default function App() {
       // brand rows in when they arrive — the charts that use them recompute on
       // the new object.
       try {
-        setLoadStage("Loading sales data…");
+        setLoadStageLive("Loading sales data…");
         // invoiceFiles: metadata only (no rows_json) so the Weekly Sales card
         // can show which archived files feed the current view. RLS on
         // data_files returns empty for non-admins, so the extra fetch is a
@@ -243,27 +259,29 @@ export default function App() {
           return aggregated;
         };
 
-        setData(withTotals([]));       // dashboard is usable from here
-        setStaleData(false);
-        setBrandsLoading(true);
+        setDataLive(withTotals([]));   // dashboard is usable from here
+        setStaleDataLive(false);
+        setBrandsLoadingLive(true);
 
         fetchAll("brand_sales_data", "sp,year,customer,brand,amt,qty")
-          .then(brandSales => { setData(withTotals(brandSales)); })
+          .then(brandSales => { setDataLive(withTotals(brandSales)); })
           .catch(e => { console.warn("Brand rows unavailable:", e); })
-          .finally(() => setBrandsLoading(false));
+          .finally(() => setBrandsLoadingLive(false));
       } catch (e) {
         // Showing the baked-in snapshot to an already-authenticated user is a
         // display fallback, not an access decision — their role stays as read.
         console.warn("Live tables unreachable, falling back to baked-in snapshot:", e);
-        setLoadStage("Loading offline snapshot…");
+        setLoadStageLive("Loading offline snapshot…");
         try {
-          setData(await loadBakedData());
-          setStaleData(true);
+          setDataLive(await loadBakedData());
+          setStaleDataLive(true);
         } catch (err) {
-          setProfileError(`Could not load any data: ${err.message || err}`);
+          setProfileErrorLive(`Could not load any data: ${err.message || err}`);
         }
       }
     })();
+
+    return () => { cancelled = true; };
   }, [session, refreshTick]);
 
   // Palette for the chrome App renders around the app (sign-out button on the

@@ -79,7 +79,8 @@ export default function LoginScreen() {
       minHeight: "100vh", background: t.bg, color: t.ink,
       display: "flex", alignItems: "center", justifyContent: "center",
       fontFamily: "'DM Sans',sans-serif",
-      backgroundImage: "linear-gradient(135deg, rgba(232,99,59,0.05) 0%, rgba(59,130,246,0.04) 100%)",
+      // Flat field. The login card is the single object on this screen — the
+      // Gateway shadow below is what lifts it, not a wash behind it.
     }}>
       <div style={{
         background: t.cardBg, border: `1px solid ${t.cardBorder}`,

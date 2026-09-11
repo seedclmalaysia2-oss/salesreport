@@ -23,14 +23,33 @@ export const CATEGORY_ORDER = [
   "Other Product",
 ];
 
-// Distinct accent per category, used for chart bars and the pill legend.
-export const CATEGORY_COLORS = {
-  "Japan Product":       "#E8633B", // Signal Orange — Seed / Japan
-  "Spain Product":       "#34D399", // Ok Green — Disop
-  "Taiwan Product":      "#EAB308", // Amber — Taiwanese lens maker
-  "Ultravision Product": "#3B82F6", // Info Blue — UK
-  "Wohlk Product":       "#A855F7", // Region Purple — Germany
-  "Other Product":       "#94A3B8", // Neutral slate
+// Category identity palette — a third vocabulary alongside status (how it is
+// going) and series (which rep). It used to borrow Signal Orange, Ahead Mint and
+// Info Blue verbatim, which broke two rules at once: Signal Orange appeared as a
+// chart fill and a table heading, and a "category" was legible as a performance
+// state. It was also a single hardcoded set, so it never resolved on the light
+// theme (the Daylight Rule).
+//
+// These hues are deliberately outside the status and series sets, and there are
+// two of them — the dark values clear 3:1 on Slate (#0F172A), the light values
+// clear 3:1 on the daylight background (#DCE9F7). Identity in the stacked bar is
+// carried by the legend and stack position as well as colour.
+export const CATEGORY_COLORS_DARK = {
+  "Japan Product":       "#5EC8C4", // teal
+  "Spain Product":       "#E4B363", // sand
+  "Taiwan Product":      "#8C9EFF", // periwinkle
+  "Ultravision Product": "#7DD87D", // sage
+  "Wohlk Product":       "#E07BA8", // rose
+  "Other Product":       "#9AA7B8", // slate
+};
+
+export const CATEGORY_COLORS_LIGHT = {
+  "Japan Product":       "#0F6F6B",
+  "Spain Product":       "#7A5104",
+  "Taiwan Product":      "#3B48B8",
+  "Ultravision Product": "#2C6E31",
+  "Wohlk Product":       "#A02A5E",
+  "Other Product":       "#44525F",
 };
 
 // Order-preserving prefix rules. Each entry is [prefixOrRegex, category].

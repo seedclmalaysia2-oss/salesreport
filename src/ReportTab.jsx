@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./lib/supabase.js";
 import { parseFile } from "./lib/parseXlsx.js";
 import {
@@ -128,11 +128,18 @@ export default function ReportTab({ user, data }) {
   // Load (or reload) the grid straight from the latest online file for the year.
   // Runs automatically on open / year change, and from the small ↻ control after
   // a fresh upload — no manual "prefill" step.
+  // Generation counter: loadStockDetailRows downloads and parses an xlsx, so a
+  // fast year switch can leave an older request resolving last and painting the
+  // previous year's grid under the newly selected year.
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
+    const stale = () => seq !== loadSeq.current;
     setLoading(true);
     setStatus("Loading Stock Sales Analysis - Detail file(s) from the Data tab…");
     try {
       const { rows, sources } = await loadStockDetailRows(year);
+      if (stale()) return;
       if (!rows.length) {
         setStatus(`No “Stock Sales Analysis - Detail” file found for ${year}. Upload one on the Data tab and it appears here automatically.`);
         setGrid(emptyGrid()); setUnmapped({}); setSources([]);
@@ -148,9 +155,9 @@ export default function ReportTab({ user, data }) {
       setGrid(g); setUnmapped(unmapped); setSources(sources);
       setStatus(`Loaded ${sources.length} file(s) · ${rows.length.toLocaleString()} lines — edit any cell, then export.`);
     } catch (e) {
-      setStatus(`Failed: ${e.message || e}`);
+      if (!stale()) setStatus(`Failed: ${e.message || e}`);
     } finally {
-      setLoading(false);
+      if (!stale()) setLoading(false);
     }
   }, [year]);
 
@@ -246,7 +253,7 @@ export default function ReportTab({ user, data }) {
   return (
     <div>
       {/* Controls */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14, padding: "14px 18px", borderRadius: 12, background: "linear-gradient(135deg, rgba(232,99,59,0.08), rgba(59,130,246,0.06))", border: "1px solid rgba(232,99,59,0.28)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14, padding: "14px 18px", borderRadius: 12, background: "color-mix(in srgb, var(--st-accent) 6%, transparent)", border: "1px solid color-mix(in srgb, var(--st-accent) 28%, transparent)" }}>
         <div style={{ fontSize: 22, lineHeight: 1 }} aria-hidden="true">📄</div>
         <div style={{ flex: "1 1 240px", minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>HQ Sales Summary report</div>
@@ -260,7 +267,7 @@ export default function ReportTab({ user, data }) {
         </div>
         <select value={year} onChange={(e) => setYear(Number(e.target.value))}
           style={{ background: "rgba(var(--tint),0.05)", border: "1px solid rgba(var(--tint),0.15)", color: "var(--text)", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontWeight: 700, fontFamily: "'DM Sans',sans-serif", cursor: "pointer", colorScheme: "dark light" }}>
-          {YEARS.map((y) => <option key={y} value={y} style={{ background: "#0A0A0F", color: "#fff" }}>{y}</option>)}
+          {YEARS.map((y) => <option key={y} value={y} style={{ background: "var(--bg)", color: "var(--text)" }}>{y}</option>)}
         </select>
         <button onClick={load} disabled={loading} title="Reload from the latest file uploaded on the Data tab"
           aria-label="Reload from the latest uploaded file"
@@ -283,7 +290,7 @@ export default function ReportTab({ user, data }) {
           const on = section === o.k;
           return (
             <button key={o.k} onClick={() => setSection(o.k)}
-              style={{ background: on ? "rgba(232,99,59,0.16)" : "rgba(var(--tint),0.05)", color: on ? "var(--st-accent)" : "rgba(var(--tint),0.75)", border: `1px solid ${on ? "rgba(232,99,59,0.55)" : "rgba(var(--tint),0.12)"}`, borderRadius: 8, padding: "7px 15px", fontSize: 12.5, fontWeight: on ? 700 : 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+              style={{ background: on ? "color-mix(in srgb, var(--st-accent) 16%, transparent)" : "rgba(var(--tint),0.05)", color: on ? "var(--st-accent)" : "rgba(var(--tint),0.75)", border: `1px solid ${on ? "color-mix(in srgb, var(--st-accent) 55%, transparent)" : "rgba(var(--tint),0.12)"}`, borderRadius: 8, padding: "7px 15px", fontSize: 12.5, fontWeight: on ? 700 : 600, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
               {o.label}
             </button>
           );
@@ -308,7 +315,7 @@ export default function ReportTab({ user, data }) {
                   <td key={m} style={{ padding: "1px 2px", textAlign: "right" }}>
                     <input type="number" value={grid[p]?.[section][m] ?? 0}
                       onChange={(e) => setCell(p, m, e.target.value)}
-                      onFocus={(e) => { e.target.style.border = "1px solid rgba(232,99,59,0.5)"; e.target.style.background = "rgba(232,99,59,0.06)"; }}
+                      onFocus={(e) => { e.target.style.border = "1px solid color-mix(in srgb, var(--st-accent) 50%, transparent)"; e.target.style.background = "color-mix(in srgb, var(--st-accent) 6%, transparent)"; }}
                       onBlur={(e) => { e.target.style.border = "1px solid transparent"; e.target.style.background = "transparent"; }}
                       style={cellInput} />
                   </td>

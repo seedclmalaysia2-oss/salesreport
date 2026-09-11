@@ -7,7 +7,7 @@
 // experience, not for security. A user who forges a request still gets nothing
 // back, because the database, not the browser, decides what is visible.
 
-import { supabase } from "./supabase.js";
+import { supabase, fetchAll } from "./supabase.js";
 import { aggregate, parseFile } from "./parseXlsx.js";
 
 const BUCKET = "data-files";
@@ -63,12 +63,17 @@ function rowToEntry(r) {
 const FILE_META_COLS =
   "id,name,kind,sp,year,row_count,size_bytes,storage_path,visibility,allowed_sps,uploaded_by,uploaded_at,deleted_at";
 export async function listFiles() {
-  const { data, error } = await supabase
-    .from("data_files")
-    .select(FILE_META_COLS)
-    .order("uploaded_at", { ascending: false });
-  if (error) throw error;
-  return (data || []).map(rowToEntry);
+  // Paginated like every other bulk read (see fetchAll). A plain .select() stops
+  // at PostgREST's 1000-row cap, and data_files keeps every superseded and
+  // soft-deleted upload — past the cap, older files silently vanished from the
+  // library and the Trash view, making them unrestorable.
+  const rows = await fetchAll("data_files", FILE_META_COLS);
+  rows.sort((a, b) => {
+    const ta = a.uploaded_at ? Date.parse(a.uploaded_at) : 0;
+    const tb = b.uploaded_at ? Date.parse(b.uploaded_at) : 0;
+    return tb - ta;
+  });
+  return rows.map(rowToEntry);
 }
 
 // The parsed rows for a single file (the preview modal, or any one-off need).
