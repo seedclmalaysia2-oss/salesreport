@@ -1,0 +1,33 @@
+-- 0019_fix_default_function_privileges.sql
+--
+-- Corrects a defect in 0017.
+--
+-- 0017 part 1 did two things: a one-time revoke over every existing function,
+-- and an ALTER DEFAULT PRIVILEGES meant to stop the problem coming back. The
+-- first worked. The second did not.
+--
+--   alter default privileges in schema public revoke execute on functions from public;
+--
+-- That revokes the implicit PUBLIC grant. But Supabase does not rely on the
+-- PUBLIC grant — it installs explicit per-role default ACLs, and `anon` is one
+-- of them:
+--
+--   select defaclacl from pg_default_acl d
+--   join pg_namespace n on n.oid = d.defaclnamespace
+--   where n.nspname = 'public' and defaclobjtype = 'f';
+--   -> {postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+--
+-- So `anon` survives, and the next function added to `public` is exposed to
+-- unauthenticated callers again by default — exactly the recurrence 0017 was
+-- written to prevent. Naming the role directly is what fixes it.
+--
+-- ALTER DEFAULT PRIVILEGES only affects objects created by the role that set
+-- it. Migrations run as `postgres`, so that is the grantor that matters here.
+-- The parallel supabase_admin entry is Supabase's own and is left alone.
+
+alter default privileges in schema public revoke execute on functions from anon;
+
+-- Verify (expect no `anon=X` in the result):
+--   select defaclacl::text from pg_default_acl d
+--   join pg_namespace n on n.oid = d.defaclnamespace
+--   where n.nspname = 'public' and defaclobjtype = 'f';
