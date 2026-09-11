@@ -20,6 +20,8 @@ const H = vi.hoisted(() => ({
     insertError: null,
     updateError: null,
     uploadError: null,
+    // Rows handed back by the mocked fetchAll, for the listFiles paging test.
+    allRows: [],
   },
 }));
 
@@ -64,11 +66,14 @@ vi.mock("./supabase.js", () => ({
       },
     }),
   },
+  // listFiles() reads through fetchAll so it pages past PostgREST's 1000-row
+  // cap. Without this export the module would fail to evaluate.
+  fetchAll: async () => H.state.allRows,
   aggregate: () => ({}),
   parseFile: async () => ({ ok: false }),
 }));
 
-import { uploadFile } from "./files.js";
+import { listFiles, uploadFile } from "./files.js";
 
 beforeEach(() => {
   H.state.updates.length = 0;
@@ -77,6 +82,35 @@ beforeEach(() => {
   H.state.insertError = null;
   H.state.updateError = null;
   H.state.uploadError = null;
+  H.state.allRows = [];
+});
+
+// The library used to do a single unbounded .select(), which silently stopped at
+// PostgREST's 1000-row cap — past that, older uploads vanished from the list and
+// from Trash. It now reads through the paginated fetchAll and sorts client-side,
+// so the newest-first order has to be asserted here rather than trusted to the
+// server's ORDER BY.
+describe("listFiles", () => {
+  it("returns newest-first regardless of the order the pages arrive in", async () => {
+    H.state.allRows = [
+      { id: "b", name: "mid.xlsx",    uploaded_at: "2026-05-02T00:00:00Z" },
+      { id: "c", name: "oldest.xlsx", uploaded_at: "2026-01-09T00:00:00Z" },
+      { id: "a", name: "newest.xlsx", uploaded_at: "2026-09-11T00:00:00Z" },
+    ];
+    const out = await listFiles();
+    expect(out.map(e => e.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("does not drop rows that carry no uploaded_at", async () => {
+    H.state.allRows = [
+      { id: "dated",   name: "d.xlsx", uploaded_at: "2026-03-01T00:00:00Z" },
+      { id: "undated", name: "u.xlsx", uploaded_at: null },
+    ];
+    const out = await listFiles();
+    expect(out).toHaveLength(2);
+    expect(out[0].id).toBe("dated");
+    expect(out[1].uploadedAt).toBeNull();
+  });
 });
 
 const fakeFile = (name) => ({ name, size: 123 });

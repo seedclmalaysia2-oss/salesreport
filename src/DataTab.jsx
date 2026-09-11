@@ -49,10 +49,10 @@ function detectedLabel(entryOrKind) {
 }
 
 function kindColor(kind) {
-  if (kind === "customer") return "#34D399";
-  if (kind === "brand") return "#A855F7";
-  if (kind === "invoice") return "#3B82F6";
-  return "#94A3B8";
+  if (kind === "customer") return "var(--st-ok)";
+  if (kind === "brand") return "var(--st-alt)";
+  if (kind === "invoice") return "var(--st-info)";
+  return "rgba(var(--tint),0.55)";
 }
 
 function fmtDate(ts) {
@@ -105,7 +105,10 @@ const tdStyle = {
 function actionBtn(color, disabled = false) {
   return {
     background: "transparent",
-    border: `1px solid ${disabled ? "rgba(255,255,255,0.08)" : color + "55"}`,
+    // `color + "55"` only worked while `color` was a raw hex; it is a CSS var
+    // now. The disabled border also derives from the tint ramp rather than a
+    // flat white alpha, which was near-invisible on the light theme.
+    border: `1px solid ${disabled ? "rgba(var(--tint),0.10)" : `color-mix(in srgb, ${color} 33%, transparent)`}`,
     color: disabled ? "rgba(var(--tint),0.25)" : color,
     borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 600,
     cursor: disabled ? "not-allowed" : "pointer",
@@ -164,18 +167,25 @@ export default function DataTab({ data, onRefresh }) {
   const updateInputRef = useRef(null);
   const updateTargetRef = useRef(null);
 
+  // listFiles() is a paginated read that can outlive this panel if the admin
+  // switches tabs while it is in flight. FilePreviewModal already guards this
+  // way; the file list did not.
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
   const refresh = async () => {
     setLoading(true);
     try {
       const list = await listFiles();
+      if (!mountedRef.current) return list;
       setFiles(list);
       setError(null);
       return list;
     } catch (e) {
-      setError(`Could not load files: ${fmtErr(e)}`);
+      if (mountedRef.current) setError(`Could not load files: ${fmtErr(e)}`);
       return null;
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
@@ -887,7 +897,7 @@ export default function DataTab({ data, onRefresh }) {
       <th
         onClick={() => toggleSort(k)}
         title={`Sort by ${label} (${nextDir})`}
-        style={{...thStyle, cursor:"pointer", userSelect:"none", color: on ? "#E8633B" : thStyle.color}}>
+        style={{...thStyle, cursor:"pointer", userSelect:"none", color: on ? "var(--st-accent)" : thStyle.color}}>
         <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
           {label}
           <span style={{fontSize:9,opacity: on ? 1 : 0.35}}>
@@ -901,10 +911,10 @@ export default function DataTab({ data, onRefresh }) {
   return (
     <>
       <div style={{display:"flex",gap:16,marginBottom:16,flexWrap:"wrap"}}>
-        <KPI label="Uploaded files" value={active.length} sub="admin-only · not visible to users" color="#E8633B" />
-        <KPI label="Customer-year rows" value={data.customers?.length.toLocaleString() ?? "0"} sub="loaded into the dashboard" color="#34D399" />
-        <KPI label="Brand-sale rows" value={data.brandSales?.length.toLocaleString() ?? "0"} sub={`across ${(data.brands || []).length} brands`} color="#A855F7" />
-        <KPI label="Years covered" value={(data.years || []).join(", ") || "—"} sub={`${(data.salespeople || []).length} salespeople`} color="#3B82F6" />
+        <KPI label="Uploaded files" value={active.length} sub="admin-only · not visible to users" />
+        <KPI label="Customer-year rows" value={data.customers?.length.toLocaleString() ?? "0"} sub="loaded into the dashboard" />
+        <KPI label="Brand-sale rows" value={data.brandSales?.length.toLocaleString() ?? "0"} sub={`across ${(data.brands || []).length} brands`} />
+        <KPI label="Years covered" value={(data.years || []).join(", ") || "—"} sub={`${(data.salespeople || []).length} salespeople`} />
       </div>
 
       {/* One-click "refresh everything the dashboard reads". Each stage renders
@@ -912,8 +922,8 @@ export default function DataTab({ data, onRefresh }) {
           instead of clicking a button that runs invisibly. */}
       <div style={{
         marginBottom:20,padding:"14px 18px",borderRadius:12,
-        background:"linear-gradient(135deg, rgba(232,99,59,0.08), rgba(59,130,246,0.06))",
-        border:"1px solid rgba(232,99,59,0.28)",
+        background:"color-mix(in srgb, var(--st-accent) 6%, transparent)",
+        border:"1px solid color-mix(in srgb, var(--st-accent) 28%, transparent)",
       }}>
         <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
           <div style={{fontSize:22,lineHeight:1,flexShrink:0}} aria-hidden="true">🔄</div>
@@ -935,9 +945,9 @@ export default function DataTab({ data, onRefresh }) {
             disabled={recalculating}
             style={{
               display:"inline-flex",alignItems:"center",gap:8,
-              background: recalculating ? "rgba(232,99,59,0.15)" : "#E8633B",
-              color: recalculating ? "rgba(232,99,59,0.9)" : "#fff",
-              border: recalculating ? "1px solid rgba(232,99,59,0.4)" : "none",
+              background: recalculating ? "color-mix(in srgb, var(--st-accent) 15%, transparent)" : "var(--st-accent)",
+              color: recalculating ? "color-mix(in srgb, var(--st-accent) 90%, transparent)" : "#fff",
+              border: recalculating ? "1px solid color-mix(in srgb, var(--st-accent) 40%, transparent)" : "none",
               borderRadius:8,padding:"10px 20px",fontSize:13,fontWeight:700,
               cursor: recalculating ? "wait" : "pointer",
               fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
@@ -946,7 +956,7 @@ export default function DataTab({ data, onRefresh }) {
               <>
                 <span style={{
                   width:13,height:13,borderRadius:"50%",display:"inline-block",
-                  border:"2px solid rgba(232,99,59,0.35)",borderTopColor:"#E8633B",
+                  border:"2px solid color-mix(in srgb, var(--st-accent) 35%, transparent)",borderTopColor:"var(--st-accent)",
                   animation:"seedspin 0.8s linear infinite",
                 }} />
                 Recalculating…
@@ -967,9 +977,9 @@ export default function DataTab({ data, onRefresh }) {
                 s.status === "running" ? "" :
                 s.status === "error"   ? "✕" : "○";
               const color =
-                s.status === "done"    ? "#34D399" :
-                s.status === "running" ? "#3B82F6" :
-                s.status === "error"   ? "#F87171" : "rgba(var(--tint),0.35)";
+                s.status === "done"    ? "var(--st-ok)" :
+                s.status === "running" ? "var(--st-info)" :
+                s.status === "error"   ? "var(--st-bad)" : "rgba(var(--tint),0.35)";
               return (
                 <li key={stage.id} style={{
                   display:"flex",alignItems:"center",gap:10,
@@ -1020,8 +1030,8 @@ export default function DataTab({ data, onRefresh }) {
       <div style={{
         display:"flex",alignItems:"center",gap:14,flexWrap:"wrap",marginBottom:20,
         padding:"12px 16px",borderRadius:12,
-        background:"rgba(245,158,11,0.06)",
-        border:"1px dashed rgba(245,158,11,0.4)",
+        background:"color-mix(in srgb, var(--st-watch) 6%, transparent)",
+        border:"1px dashed color-mix(in srgb, var(--st-watch) 40%, transparent)",
       }}>
         <div style={{fontSize:22,lineHeight:1,flexShrink:0}} aria-hidden="true">🔁</div>
         <div style={{flex:"1 1 260px",minWidth:0}}>
@@ -1032,7 +1042,7 @@ export default function DataTab({ data, onRefresh }) {
             When a chart is missing scopes despite the files being uploaded (e.g. the earlier 2026 wipe). Re-downloads every archived workbook from storage, re-parses it, and pushes fresh rows into customers_data / brand_sales_data / weekly_sales. Slower than Recalculate but self-healing — no need to re-upload from disk.
           </div>
           {reprocessProgress && (
-            <div style={{fontSize:11,color:"rgba(245,158,11,0.9)",marginTop:6,fontFamily:"'Space Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+            <div style={{fontSize:11,color:"color-mix(in srgb, var(--st-watch) 90%, transparent)",marginTop:6,fontFamily:"'Space Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
               [{Math.min(reprocessProgress.index + 1, reprocessProgress.total)}/{reprocessProgress.total}] {reprocessProgress.kind ? `${reprocessProgress.kind} · ` : ""}{reprocessProgress.name}
             </div>
           )}
@@ -1042,9 +1052,9 @@ export default function DataTab({ data, onRefresh }) {
           disabled={reprocessing || recalculating}
           style={{
             display:"inline-flex",alignItems:"center",gap:8,
-            background: "rgba(245,158,11,0.15)",
-            color: "#F59E0B",
-            border: "1px solid rgba(245,158,11,0.55)",
+            background: "color-mix(in srgb, var(--st-watch) 15%, transparent)",
+            color: "var(--st-watch)",
+            border: "1px solid color-mix(in srgb, var(--st-watch) 55%, transparent)",
             borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,
             cursor: (reprocessing || recalculating) ? "not-allowed" : "pointer",
             fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
@@ -1054,7 +1064,7 @@ export default function DataTab({ data, onRefresh }) {
             <>
               <span style={{
                 width:13,height:13,borderRadius:"50%",display:"inline-block",
-                border:"2px solid rgba(245,158,11,0.35)",borderTopColor:"#F59E0B",
+                border:"2px solid color-mix(in srgb, var(--st-watch) 35%, transparent)",borderTopColor:"var(--st-watch)",
                 animation:"seedspin 0.8s linear infinite",
               }} />
               Reprocessing…
@@ -1074,14 +1084,14 @@ export default function DataTab({ data, onRefresh }) {
           on invoice rows still uses it. */}
 
       {error && (
-        <div style={{marginBottom:16,padding:"10px 14px",background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:8,fontSize:12,color:"#F87171",whiteSpace:"pre-wrap"}}>
+        <div style={{marginBottom:16,padding:"10px 14px",background:"color-mix(in srgb, var(--st-bad) 10%, transparent)",border:"1px solid color-mix(in srgb, var(--st-bad) 30%, transparent)",borderRadius:8,fontSize:12,color:"var(--st-bad)",whiteSpace:"pre-wrap"}}>
           ⚠ {error}
         </div>
       )}
       {notice && (
-        <div style={{marginBottom:16,padding:"10px 14px",background:"rgba(52,211,153,0.08)",border:"1px solid rgba(52,211,153,0.25)",borderRadius:8,fontSize:12,color:"#34D399",display:"flex",justifyContent:"space-between",gap:10}}>
+        <div style={{marginBottom:16,padding:"10px 14px",background:"color-mix(in srgb, var(--st-ok) 8%, transparent)",border:"1px solid color-mix(in srgb, var(--st-ok) 25%, transparent)",borderRadius:8,fontSize:12,color:"var(--st-ok)",display:"flex",justifyContent:"space-between",gap:10}}>
           <span>✓ {notice}</span>
-          <button onClick={() => setNotice(null)} style={{background:"transparent",border:"none",color:"#34D399",cursor:"pointer",fontSize:13}}>✕</button>
+          <button onClick={() => setNotice(null)} style={{background:"transparent",border:"none",color:"var(--st-ok)",cursor:"pointer",fontSize:13}}>✕</button>
         </div>
       )}
 
@@ -1130,7 +1140,7 @@ export default function DataTab({ data, onRefresh }) {
                 <span style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.67)",padding:"0 10px",fontWeight:600}}>Group by</span>
                 {["type","month"].map((g, i) => (
                   <button key={g} onClick={() => setGroupBy(g)} style={{
-                    background: groupBy === g ? "rgba(232,99,59,0.15)" : "transparent",
+                    background: groupBy === g ? "color-mix(in srgb, var(--st-accent) 15%, transparent)" : "transparent",
                     color: groupBy === g ? "var(--st-accent)" : "rgba(var(--tint),0.65)",
                     border:"none",
                     borderLeft: i === 0 ? "1px solid rgba(var(--tint),0.12)" : "1px solid rgba(var(--tint),0.12)",
@@ -1142,11 +1152,11 @@ export default function DataTab({ data, onRefresh }) {
             )}
             {grouped.length > 1 && (
               <>
-                <button onClick={expandAllGroups} style={actionBtn("#3B82F6")} title="Expand every group">Expand all</button>
-                <button onClick={collapseAllGroups} style={actionBtn("#3B82F6")} title="Collapse every group">Collapse all</button>
+                <button onClick={expandAllGroups} style={actionBtn("var(--st-info)")} title="Expand every group">Expand all</button>
+                <button onClick={collapseAllGroups} style={actionBtn("var(--st-info)")} title="Collapse every group">Collapse all</button>
               </>
             )}
-            <button onClick={refresh} style={actionBtn("#3B82F6")}>↻ Refresh</button>
+            <button onClick={refresh} style={actionBtn("var(--st-info)")}>↻ Refresh</button>
           </div>
         </div>
 
@@ -1169,7 +1179,7 @@ export default function DataTab({ data, onRefresh }) {
         ) : !active.length ? (
           <div style={{fontSize:12,color:"rgba(var(--tint),0.67)",padding:"14px 0",textAlign:"center"}}>
             No file matches “{query}”.{" "}
-            <button onClick={() => setQuery("")} style={{background:"transparent",border:"none",color:"#3B82F6",cursor:"pointer",fontSize:12,textDecoration:"underline",padding:0}}>
+            <button onClick={() => setQuery("")} style={{background:"transparent",border:"none",color:"var(--st-info)",cursor:"pointer",fontSize:12,textDecoration:"underline",padding:0}}>
               Clear search
             </button>
           </div>
@@ -1179,7 +1189,7 @@ export default function DataTab({ data, onRefresh }) {
               <div style={{
                 display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:12,
                 padding:"10px 14px",borderRadius:10,
-                background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.3)",
+                background:"color-mix(in srgb, var(--st-bad) 8%, transparent)",border:"1px solid color-mix(in srgb, var(--st-bad) 30%, transparent)",
               }}>
                 <span style={{fontSize:12,fontWeight:600,color:"var(--text)"}}>
                   {selectedLive.length} file{selectedLive.length===1?"":"s"} selected
@@ -1189,7 +1199,7 @@ export default function DataTab({ data, onRefresh }) {
                   disabled={bulkBusy}
                   style={{
                     display:"inline-flex",alignItems:"center",gap:6,
-                    background: bulkBusy ? "rgba(248,113,113,0.4)" : "#F87171",
+                    background: bulkBusy ? "color-mix(in srgb, var(--st-bad) 40%, transparent)" : "var(--st-bad)",
                     color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",
                     fontSize:12,fontWeight:700,cursor: bulkBusy ? "wait" : "pointer",
                     fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
@@ -1211,7 +1221,7 @@ export default function DataTab({ data, onRefresh }) {
                       ref={el => { if (el) el.indeterminate = someActiveSelected; }}
                       onChange={toggleSelectAll}
                       title="Select all files"
-                      style={{cursor:"pointer",accentColor:"#F87171"}}
+                      style={{cursor:"pointer",accentColor:"var(--st-bad)"}}
                     />
                   </th>
                   <SortHeader label="File" k="name" />
@@ -1245,14 +1255,14 @@ export default function DataTab({ data, onRefresh }) {
                         </td>
                       </tr>
                       {isOpen && group.entries.map(entry => (
-                        <tr key={entry.id} style={selectedIds.has(entry.id) ? {background:"rgba(248,113,113,0.06)"} : undefined}>
+                        <tr key={entry.id} style={selectedIds.has(entry.id) ? {background:"color-mix(in srgb, var(--st-bad) 6%, transparent)"} : undefined}>
                           <td style={{...tdStyle,textAlign:"center",width:34,padding:"10px 8px"}}>
                             <input
                               type="checkbox"
                               checked={selectedIds.has(entry.id)}
                               onChange={() => toggleSelectOne(entry.id)}
                               title="Select this file"
-                              style={{cursor:"pointer",accentColor:"#F87171"}}
+                              style={{cursor:"pointer",accentColor:"var(--st-bad)"}}
                             />
                           </td>
                           <td style={{...tdStyle,minWidth:280}}>
@@ -1267,7 +1277,7 @@ export default function DataTab({ data, onRefresh }) {
                             </div>
                           </td>
                           <td style={tdStyle}>
-                            <span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,background:`${kindColor(entry.kind)}15`,color: kindColor(entry.kind),fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>
+                            <span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,background:`color-mix(in srgb, ${kindColor(entry.kind)} 15%, transparent)`,color: kindColor(entry.kind),fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>
                               {detectedLabel(entry)}
                             </span>
                           </td>
@@ -1275,10 +1285,10 @@ export default function DataTab({ data, onRefresh }) {
                           <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",color:"rgba(var(--tint),0.7)",whiteSpace:"nowrap",fontSize:11}}>{fmtDate(entry.uploadedAt)}</td>
                           <td style={tdStyle}>
                             <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                              <button onClick={() => setViewing(entry)} style={actionBtn("#3B82F6")}>👁 View</button>
-                              <button onClick={() => onDownload(entry)} disabled={busyId === entry.id} style={actionBtn("#34D399", busyId === entry.id)}>⬇ Save</button>
-                              <button onClick={() => onUpdateFile(entry)} disabled={busyId === entry.id} style={actionBtn("#E8633B", busyId === entry.id)}>↻ Update</button>
-                              <button onClick={() => onDelete(entry)} disabled={busyId === entry.id} style={actionBtn("#F87171", busyId === entry.id)}>🗑 Remove</button>
+                              <button onClick={() => setViewing(entry)} style={actionBtn("var(--st-info)")}>👁 View</button>
+                              <button onClick={() => onDownload(entry)} disabled={busyId === entry.id} style={actionBtn("var(--st-ok)", busyId === entry.id)}>⬇ Save</button>
+                              <button onClick={() => onUpdateFile(entry)} disabled={busyId === entry.id} style={actionBtn("var(--st-accent)", busyId === entry.id)}>↻ Update</button>
+                              <button onClick={() => onDelete(entry)} disabled={busyId === entry.id} style={actionBtn("var(--st-bad)", busyId === entry.id)}>🗑 Remove</button>
                             </div>
                           </td>
                         </tr>
@@ -1317,9 +1327,9 @@ export default function DataTab({ data, onRefresh }) {
                         <td style={{...tdStyle,fontFamily:"'Space Mono',monospace",fontSize:11,color:"rgba(var(--tint),0.7)"}}>{fmtDate(entry.deletedAt)}</td>
                         <td style={tdStyle}>
                           <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                            <button onClick={() => setViewing(entry)} style={actionBtn("#3B82F6")}>👁 View</button>
-                            <button onClick={() => onRestore(entry)} disabled={busyId === entry.id} style={actionBtn("#34D399", busyId === entry.id)}>↺ Restore</button>
-                            <button onClick={() => onPurge(entry)} disabled={busyId === entry.id} style={actionBtn("#F87171", busyId === entry.id)}>✕ Delete forever</button>
+                            <button onClick={() => setViewing(entry)} style={actionBtn("var(--st-info)")}>👁 View</button>
+                            <button onClick={() => onRestore(entry)} disabled={busyId === entry.id} style={actionBtn("var(--st-ok)", busyId === entry.id)}>↺ Restore</button>
+                            <button onClick={() => onPurge(entry)} disabled={busyId === entry.id} style={actionBtn("var(--st-bad)", busyId === entry.id)}>✕ Delete forever</button>
                           </div>
                         </td>
                       </tr>
@@ -1338,15 +1348,15 @@ export default function DataTab({ data, onRefresh }) {
           Drag <strong>.xlsx</strong> files matching one of these naming patterns:
           <ul style={{margin:"8px 0 0",paddingLeft:18,display:"flex",flexDirection:"column",gap:4}}>
             <li>
-              <code style={{fontFamily:"'Space Mono',monospace",color:"#34D399",fontSize:11}}>{"<SP> <YYYY> Sales Analysis by customer.xlsx"}</code>
+              <code style={{fontFamily:"'Space Mono',monospace",color:"var(--st-ok)",fontSize:11}}>{"<SP> <YYYY> Sales Analysis by customer.xlsx"}</code>
               <span style={{color:"rgba(var(--tint),0.65)"}}> — yearly customer summary</span>
             </li>
             <li>
-              <code style={{fontFamily:"'Space Mono',monospace",color:"#A855F7",fontSize:11}}>{"<SP> <YYYY> Stock Sales Analysis - Summary by Brand.xlsx"}</code>
+              <code style={{fontFamily:"'Space Mono',monospace",color:"var(--st-alt)",fontSize:11}}>{"<SP> <YYYY> Stock Sales Analysis - Summary by Brand.xlsx"}</code>
               <span style={{color:"rgba(var(--tint),0.65)"}}> — yearly brand summary</span>
             </li>
             <li>
-              <code style={{fontFamily:"'Space Mono',monospace",color:"#3B82F6",fontSize:11}}>{"Stock Sales Analysis - Detail <period>.xlsx"}</code>
+              <code style={{fontFamily:"'Space Mono',monospace",color:"var(--st-info)",fontSize:11}}>{"Stock Sales Analysis - Detail <period>.xlsx"}</code>
               <span style={{color:"rgba(var(--tint),0.65)"}}> — line-level sales incl. CN/DN (feeds the weekly view; supersedes the old Customer Invoice Listing)</span>
             </li>
           </ul>
@@ -1355,7 +1365,7 @@ export default function DataTab({ data, onRefresh }) {
         <div
           ref={dropRef}
           onClick={() => inputRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); if (dropRef.current) dropRef.current.style.borderColor = "rgba(232,99,59,0.6)"; }}
+          onDragOver={(e) => { e.preventDefault(); if (dropRef.current) dropRef.current.style.borderColor = "color-mix(in srgb, var(--st-accent) 60%, transparent)"; }}
           onDragLeave={() => { if (dropRef.current) dropRef.current.style.borderColor = "rgba(var(--tint),0.1)"; }}
           onDrop={onDrop}
           style={{
@@ -1377,20 +1387,20 @@ export default function DataTab({ data, onRefresh }) {
             <div style={{
               display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",
               marginTop:16,padding:"12px 14px",borderRadius:10,
-              background:"rgba(232,99,59,0.08)",border:"1px solid rgba(232,99,59,0.28)",
+              background:"color-mix(in srgb, var(--st-accent) 8%, transparent)",border:"1px solid color-mix(in srgb, var(--st-accent) 28%, transparent)",
             }}>
               <div style={{flex:"1 1 220px",fontSize:12,lineHeight:1.5}}>
                 <strong style={{color:"var(--text)"}}>{validNames.length} file{validNames.length===1?"":"s"} ready</strong>
                 <span style={{color:"rgba(var(--tint),0.72)"}}> — still on your computer, not uploaded yet</span>
                 {invalidNames.length > 0 && (
-                  <span style={{color:"#F87171"}}> · {invalidNames.length} skipped (filename doesn't match the pattern)</span>
+                  <span style={{color:"var(--st-bad)"}}> · {invalidNames.length} skipped (filename doesn't match the pattern)</span>
                 )}
               </div>
               <button
                 onClick={onUploadClick}
                 disabled={uploading || !validNames.length}
                 style={{
-                  background: uploading || !validNames.length ? "rgba(var(--tint),0.05)" : "#E8633B",
+                  background: uploading || !validNames.length ? "rgba(var(--tint),0.05)" : "var(--st-accent)",
                   color: uploading || !validNames.length ? "rgba(var(--tint),0.3)" : "#fff",
                   border:"none",borderRadius:8,padding:"10px 22px",fontSize:13,fontWeight:700,
                   cursor: uploading || !validNames.length ? "not-allowed" : "pointer",
@@ -1416,7 +1426,7 @@ export default function DataTab({ data, onRefresh }) {
                 <div style={{height:6,background:"rgba(var(--tint),0.06)",borderRadius:3,overflow:"hidden"}}>
                   <div style={{
                     width:`${Math.round((progress.index / Math.max(progress.total,1)) * 100)}%`,
-                    height:"100%",background:"#E8633B",transition:"width 0.2s",
+                    height:"100%",background:"var(--st-accent)",transition:"width 0.2s",
                   }} />
                 </div>
               </div>
@@ -1431,7 +1441,7 @@ export default function DataTab({ data, onRefresh }) {
                 return (
                   <div key={f.name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",borderBottom:"1px solid rgba(var(--tint),0.03)",fontSize:12}}>
                     <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0}}>
-                      <span style={{color: info ? "#34D399" : "#F87171",fontWeight:600,flexShrink:0}}>{info ? "✓" : "✗"}</span>
+                      <span style={{color: info ? "var(--st-ok)" : "var(--st-bad)",fontWeight:600,flexShrink:0}}>{info ? "✓" : "✗"}</span>
                       <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{f.name}</span>
                       {info && <span style={{color:"rgba(var(--tint),0.65)",fontSize:10,fontFamily:"'Space Mono',monospace",flexShrink:0}}>
                         {info.kind === "Customer Invoice Listing"
@@ -1504,7 +1514,7 @@ function DataSourceStatus({ data }) {
               <tr key={sp} style={{borderTop:"1px solid rgba(var(--tint),0.05)"}}>
                 <td style={{...tdStyle,fontWeight:600}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <div style={{width:8,height:8,borderRadius:2,background:"#E8633B"}} />
+                    <div style={{width:8,height:8,borderRadius:2,background:"var(--st-accent)"}} />
                     {sp}
                   </div>
                 </td>
@@ -1566,7 +1576,7 @@ function FilePreviewModal({ entry, onClose }) {
   };
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-      <div onClick={(e) => e.stopPropagation()} style={{background:"var(--bg, #0A0A0F)",border:"1px solid rgba(var(--tint),0.1)",borderRadius:14,maxWidth:1200,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div onClick={(e) => e.stopPropagation()} style={{background:"var(--bg)",border:"1px solid rgba(var(--tint),0.1)",borderRadius:14,boxShadow:"0 12px 40px rgba(0,0,0,0.5)",maxWidth:1200,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:"1px solid rgba(var(--tint),0.06)"}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:14,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.name}</div>
@@ -1578,7 +1588,7 @@ function FilePreviewModal({ entry, onClose }) {
         </div>
         <div style={{overflow:"auto",flex:1}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'Space Mono',monospace"}}>
-            <thead style={{position:"sticky",top:0,background:"rgba(15,15,20,0.95)",backdropFilter:"blur(8px)"}}>
+            <thead style={{position:"sticky",top:0,background:"var(--bg)"}}>
               <tr>
                 {cols.map(c => (
                   <th key={c} style={{textAlign:"left",padding:"8px 10px",borderBottom:"1px solid rgba(var(--tint),0.08)",color:"rgba(var(--tint),0.7)",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,fontSize:10}}>{c}</th>
@@ -1612,7 +1622,7 @@ function FilePreviewModal({ entry, onClose }) {
             </div>
           )}
           {loadErr && !loading && (
-            <div style={{padding:"20px",fontSize:12,color:"#F87171",textAlign:"center"}}>
+            <div style={{padding:"20px",fontSize:12,color:"var(--st-bad)",textAlign:"center"}}>
               Couldn't load rows: {loadErr}
             </div>
           )}

@@ -67,14 +67,14 @@ function actionButton(variant, { active = false } = {}) {
   };
   if (variant === "primary") {
     return { ...base, fontWeight: 700,
-      background: active ? "rgba(232,99,59,0.16)" : "var(--st-accent)",
+      background: active ? "color-mix(in srgb, var(--st-accent) 16%, transparent)" : "var(--st-accent)",
       color: active ? "var(--st-accent)" : "#fff",
-      border: active ? "1px solid rgba(232,99,59,0.5)" : "1px solid transparent" };
+      border: active ? "1px solid color-mix(in srgb, var(--st-accent) 50%, transparent)" : "1px solid transparent" };
   }
   // "info" ghost — Refresh
   return { ...base,
-    background: "rgba(59,130,246,0.10)", color: "var(--st-info)",
-    border: "1px solid rgba(59,130,246,0.35)" };
+    background: "color-mix(in srgb, var(--st-info) 10%, transparent)", color: "var(--st-info)",
+    border: "1px solid color-mix(in srgb, var(--st-info) 35%, transparent)" };
 }
 
 // Show only the most recently uploaded source file feeding the weekly view,
@@ -117,7 +117,11 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
   const bal80 = Math.max(min80 - total, 0);
   const bal100 = Math.max(target - total, 0);
   const aboveTarget = target > 0 && total >= target;
-  const color = aboveTarget ? "var(--st-ok)" : pct >= 0.8 ? "var(--st-watch)" : pct >= 0.65 ? "#EAB308" : "var(--st-bad)";
+  // Four tiers, so 65-79% must not read as 80-99%. Mixing Watch toward Behind
+  // keeps it inside the status vocabulary and theme-aware, rather than the raw
+  // #EAB308 that was here and never resolved on the light theme.
+  const TIER_65 = "color-mix(in srgb, var(--st-watch) 65%, var(--st-bad))";
+  const color = aboveTarget ? "var(--st-ok)" : pct >= 0.8 ? "var(--st-watch)" : pct >= 0.65 ? TIER_65 : "var(--st-bad)";
 
   // One plain-language line stating where this scope stands — the answer the
   // reader opened the card for, before any table.
@@ -142,10 +146,11 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
       {/* Header */}
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <div style={{ width: 4, height: 16, background: accentColor, borderRadius: 2 }} />
+          {/* No coloured edge stripe: the heading already carries the colour,
+              and a stripe is explicitly out of the system. */}
           <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, color: accentColor, fontWeight: 700 }}>{title}</div>
         </div>
-        <div style={{ fontSize: 12, color: "rgba(var(--tint),0.7)", marginLeft: 12 }}>{subtitle}</div>
+        <div style={{ fontSize: 12, color: "rgba(var(--tint),0.7)" }}>{subtitle}</div>
       </div>
 
       {/* Big number + progress */}
@@ -210,7 +215,7 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
           paddingTop: 14, borderTop: "1px solid rgba(var(--tint),0.08)",
         }}>
           {[
-            { label: "65% floor", target: min65, balance: bal65, color: "#EAB308" },
+            { label: "65% floor", target: min65, balance: bal65, color: "color-mix(in srgb, var(--st-watch) 65%, var(--st-bad))" },
             { label: "80% floor", target: min80, balance: bal80, color: "var(--st-watch)" },
             { label: "100% target", target: target, balance: bal100, color: "var(--st-ok)" },
           ].map((t, i) => (
@@ -554,7 +559,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
   );
 
   const shellStyle = {
-    background: "linear-gradient(135deg, rgba(232,99,59,0.06), rgba(59,130,246,0.04))",
+    background: "rgba(var(--tint),0.02)",
     border: "1px solid rgba(var(--tint),0.1)", borderRadius: 14, padding: 20, marginBottom: 24,
   };
 
@@ -620,8 +625,8 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
               fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8,
               padding: "3px 9px", borderRadius: 20, alignSelf: "center",
               color: isMonthView ? "var(--st-accent)" : "var(--st-info)",
-              background: isMonthView ? "rgba(232,99,59,0.12)" : "rgba(59,130,246,0.12)",
-              border: `1px solid ${isMonthView ? "rgba(232,99,59,0.4)" : "rgba(59,130,246,0.4)"}`,
+              background: isMonthView ? "color-mix(in srgb, var(--st-accent) 12%, transparent)" : "color-mix(in srgb, var(--st-info) 12%, transparent)",
+              border: `1px solid ${isMonthView ? "color-mix(in srgb, var(--st-accent) 40%, transparent)" : "color-mix(in srgb, var(--st-info) 40%, transparent)"}`,
             }}>
               {isMonthView ? `Month to date · ${monthAgg.weekCount} wk` : "Single week"}
             </span>
@@ -674,7 +679,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
                 // Explicit hex on the option elements — the OS-native dropdown
                 // list ignores CSS variables, so the earlier styling only
                 // affected the closed select box, not the open list.
-                <option key={k} value={k} style={{background:"#0A0A0F",color:"#fff"}}>
+                <option key={k} value={k} style={{background:"var(--bg)",color:"var(--text)"}}>
                   {monthLabel(k)} · {periodsByMonth.get(k).length} wk
                 </option>
               ))}
@@ -700,9 +705,9 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
               return (
                 <button key={opt.k} onClick={() => setView(opt.k)}
                   style={{
-                    background: on ? "rgba(232,99,59,0.16)" : "rgba(var(--tint),0.05)",
+                    background: on ? "color-mix(in srgb, var(--st-accent) 16%, transparent)" : "rgba(var(--tint),0.05)",
                     color: on ? "var(--st-accent)" : "rgba(var(--tint),0.75)",
-                    border: `1px solid ${on ? "rgba(232,99,59,0.55)" : "rgba(var(--tint),0.12)"}`,
+                    border: `1px solid ${on ? "color-mix(in srgb, var(--st-accent) 55%, transparent)" : "rgba(var(--tint),0.12)"}`,
                     borderRadius: 8, padding: "7px 15px", fontSize: 12.5, fontWeight: on ? 700 : 600,
                     cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
                   }}>{opt.label}</button>
@@ -725,9 +730,9 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
                   onClick={() => { setSelectedWeekIndex(i); setView("week"); }}
                   title={`${w.start} → ${w.end}`}
                   style={{
-                    background: active ? "rgba(232,99,59,0.16)" : "rgba(var(--tint),0.05)",
+                    background: active ? "color-mix(in srgb, var(--st-accent) 16%, transparent)" : "rgba(var(--tint),0.05)",
                     color: active ? "var(--st-accent)" : "rgba(var(--tint),0.8)",
-                    border: `1px solid ${active ? "rgba(232,99,59,0.55)" : "rgba(var(--tint),0.12)"}`,
+                    border: `1px solid ${active ? "color-mix(in srgb, var(--st-accent) 55%, transparent)" : "rgba(var(--tint),0.12)"}`,
                     borderRadius: 10, padding: "8px 13px", cursor: "pointer",
                     fontFamily: "'DM Sans',sans-serif", textAlign: "left",
                     display: "flex", flexDirection: "column", gap: 2, minWidth: 96,
@@ -747,14 +752,14 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
               title={[...custAdjByRep.entries()].map(([r, a]) => `${r}: ${signedRM(a)}`).join("   ·   ")}
               style={{
                 marginTop: 12, padding: "8px 12px", borderRadius: 10,
-                background: "rgba(232,99,59,0.08)", border: "1px solid rgba(232,99,59,0.28)",
+                background: "color-mix(in srgb, var(--st-accent) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--st-accent) 28%, transparent)",
                 fontSize: 11.5, color: "rgba(var(--tint),0.82)", display: "flex",
                 alignItems: "center", gap: 8, flexWrap: "wrap", fontFamily: "'DM Sans',sans-serif",
               }}>
               <span style={{
                 fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.6,
                 color: "var(--st-accent)", padding: "2px 7px", borderRadius: 6,
-                background: "rgba(232,99,59,0.14)", border: "1px solid rgba(232,99,59,0.35)",
+                background: "color-mix(in srgb, var(--st-accent) 14%, transparent)", border: "1px solid color-mix(in srgb, var(--st-accent) 35%, transparent)",
               }}>Cust Adj</span>
               <span>
                 <strong style={{ fontFamily: "'Space Mono',monospace" }}>{signedRM(custAdjTotal)}</strong>
@@ -804,7 +809,11 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
   monday.setDate(today.getDate() - today.getDay() + 1);
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
-  const toISO = (d) => d.toISOString().slice(0, 10);
+  // Build the ISO date from LOCAL Y/M/D. toISOString() converts to UTC first,
+  // so for a UTC+8 (Malaysia) user opening this before 08:00 the date rolled
+  // back a day and the prefilled "Monday" was the previous Sunday.
+  const toISO = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const [periodStart, setPeriodStart] = useState(defaultStart || toISO(monday));
   const [periodEnd, setPeriodEnd] = useState(defaultEnd || toISO(sunday));
   const [rows, setRows] = useState(REP_ORDER.map(sp => ({ sp, amount: 0 })));
@@ -1035,22 +1044,22 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
     }}>
       <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap:"wrap" }}>
         <button onClick={() => { setMode("xlsx"); setBuckets(null); }} style={{
-          background: mode === "xlsx" ? "rgba(232,99,59,0.2)" : "transparent",
+          background: mode === "xlsx" ? "color-mix(in srgb, var(--st-accent) 20%, transparent)" : "transparent",
           color: mode === "xlsx" ? "var(--st-accent)" : "rgba(var(--tint),0.65)",
-          border: mode === "xlsx" ? "1px solid rgba(232,99,59,0.5)" : "1px solid rgba(var(--tint),0.12)",
+          border: mode === "xlsx" ? "1px solid color-mix(in srgb, var(--st-accent) 50%, transparent)" : "1px solid rgba(var(--tint),0.12)",
           borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
         }}>📄 Upload xlsx</button>
         <button onClick={() => { setMode("manual"); setBuckets(null); }} style={{
-          background: mode === "manual" ? "rgba(232,99,59,0.2)" : "transparent",
+          background: mode === "manual" ? "color-mix(in srgb, var(--st-accent) 20%, transparent)" : "transparent",
           color: mode === "manual" ? "var(--st-accent)" : "rgba(var(--tint),0.65)",
-          border: mode === "manual" ? "1px solid rgba(232,99,59,0.5)" : "1px solid rgba(var(--tint),0.12)",
+          border: mode === "manual" ? "1px solid color-mix(in srgb, var(--st-accent) 50%, transparent)" : "1px solid rgba(var(--tint),0.12)",
           borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
         }}>✏️ Manual entry</button>
         {buckets && buckets.length > 1 && (
           <div style={{
             marginLeft:"auto",fontSize:11,color:"var(--st-accent)",fontWeight:600,
-            padding:"6px 12px",borderRadius:6,background:"rgba(232,99,59,0.08)",
-            border:"1px solid rgba(232,99,59,0.25)",fontFamily:"'Space Mono',monospace",
+            padding:"6px 12px",borderRadius:6,background:"color-mix(in srgb, var(--st-accent) 8%, transparent)",
+            border:"1px solid color-mix(in srgb, var(--st-accent) 25%, transparent)",fontFamily:"'Space Mono',monospace",
           }}>{buckets.length} weeks detected</div>
         )}
       </div>
@@ -1075,13 +1084,13 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
       )}
 
       {mode === "multi" && buckets && (
-        <div style={{border:"1px solid rgba(232,99,59,0.2)",borderRadius:10,overflow:"hidden"}}>
-          <div style={{padding:"10px 14px",background:"rgba(232,99,59,0.06)",fontSize:12,color:"rgba(var(--tint),0.8)",borderBottom:"1px solid rgba(232,99,59,0.15)"}}>
+        <div style={{border:"1px solid color-mix(in srgb, var(--st-accent) 20%, transparent)",borderRadius:10,overflow:"hidden"}}>
+          <div style={{padding:"10px 14px",background:"color-mix(in srgb, var(--st-accent) 6%, transparent)",fontSize:12,color:"rgba(var(--tint),0.8)",borderBottom:"1px solid color-mix(in srgb, var(--st-accent) 15%, transparent)"}}>
             File spans <strong>{buckets.length} weeks</strong>. Each week below uploads as its own <code style={{fontFamily:"'Space Mono',monospace",fontSize:11}}>weekly_sales</code> entry. Re-uploading is safe — same (start, end, rep) rows are overwritten.
           </div>
           <div style={{maxHeight:340,overflowY:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:"'Space Mono',monospace"}}>
-              <thead style={{position:"sticky",top:0,background:"rgba(15,15,20,0.95)",backdropFilter:"blur(8px)"}}>
+              <thead style={{position:"sticky",top:0,background:"var(--bg)"}}>
                 <tr>
                   <th style={{textAlign:"left",padding:"8px 12px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.7)",borderBottom:"1px solid rgba(var(--tint),0.1)"}}>Week</th>
                   {REP_ORDER.map(sp => (
@@ -1187,7 +1196,7 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
 
       <div style={{ display: "flex", gap: 10, marginTop: 16, alignItems: "center", flexWrap: "wrap" }}>
         <button onClick={submit} disabled={busy} style={{
-          background: busy ? "rgba(232,99,59,0.4)" : "#E8633B", color: "#fff", border: "none",
+          background: busy ? "color-mix(in srgb, var(--st-accent) 40%, transparent)" : "var(--st-accent)", color: "#fff", border: "none",
           borderRadius: 8, padding: "10px 22px", fontSize: 13, fontWeight: 600,
           cursor: busy ? "not-allowed" : "pointer", fontFamily: "'DM Sans',sans-serif",
         }}>{busy ? "Saving…" : "Save weekly update"}</button>

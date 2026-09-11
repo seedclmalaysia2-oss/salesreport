@@ -5,7 +5,7 @@
 // applies. The last-admin guard lives in a database trigger, so the warning
 // below is a courtesy — the real refusal comes from Postgres.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "./lib/supabase.js";
 
 const SP_OPTIONS = ["Alan", "Dino", "Khen", "Sakinah", "Simon", "Seed Malaysia"];
@@ -39,7 +39,9 @@ const selectStyle = {
 // Explicit hex on the individual <option> elements — the OS-native dropdown
 // list ignores CSS variables from the parent select, so styling the closed
 // box alone leaves the open list unreadable on dark theme.
-const optionStyle = { background:"#0A0A0F", color:"#fff" };
+// Follows the active theme. A hardcoded dark option list renders black-on-white
+// against the light page, which is exactly what the Daylight Rule forbids.
+const optionStyle = { background:"var(--bg)", color:"var(--text)" };
 
 export default function AdminUsers({ user }) {
   const [rows, setRows] = useState([]);
@@ -52,17 +54,22 @@ export default function AdminUsers({ user }) {
   const [editingEmailValue, setEditingEmailValue] = useState("");
   const [resetPwId, setResetPwId] = useState(null);
 
+  // The roster request can outlive this panel if the admin switches tabs.
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
   const refresh = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc("admin_list_users");
       if (error) throw error;
+      if (!mountedRef.current) return;
       setRows(data || []);
       setError(null);
     } catch (e) {
-      setError(`Could not load users: ${e.message || e}`);
+      if (mountedRef.current) setError(`Could not load users: ${e.message || e}`);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
@@ -180,10 +187,10 @@ export default function AdminUsers({ user }) {
 
   const onResetPassword = async (row) => {
     const pw = window.prompt(
-      `Set a new password for ${row.email}.\nAt least 6 characters. Share it via a private channel.`
+      `Set a new password for ${row.email}.\nAt least 8 characters. Share it via a private channel.`
     );
     if (pw == null) return;
-    if (pw.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (pw.length < 8) { setError("Password must be at least 8 characters."); return; }
     setBusyId(row.user_id);
     await callRpc(
       "admin_reset_user_password",
@@ -213,13 +220,13 @@ export default function AdminUsers({ user }) {
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
         <div style={{fontSize:14,fontWeight:600}}>
           👤 Users
-          <span style={{color:"rgba(var(--tint),0.65)",fontWeight:400,fontSize:12}}> · {rows.length} account{rows.length===1?"":"s"} · {adminCount} admin{adminCount===1?"":"s"}</span>
+          <span style={{color:"rgba(var(--tint),0.65)",fontWeight:400,fontSize:12,fontFamily:"'Space Mono',monospace"}}> · {rows.length} account{rows.length===1?"":"s"} · {adminCount} admin{adminCount===1?"":"s"}</span>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-          <button onClick={() => setAddOpen(o => !o)} style={{background: addOpen ? "rgba(232,99,59,0.15)" : "#E8633B",color: addOpen ? "#E8633B" : "#fff",border: addOpen ? "1px solid rgba(232,99,59,0.5)" : "none",borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
+          <button onClick={() => setAddOpen(o => !o)} style={{background: addOpen ? "color-mix(in srgb, var(--st-accent) 15%, transparent)" : "var(--st-accent)",color: addOpen ? "var(--st-accent)" : "#fff",border: addOpen ? "1px solid color-mix(in srgb, var(--st-accent) 50%, transparent)" : "none",borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>
             {addOpen ? "Cancel" : "+ Add user"}
           </button>
-          <button onClick={refresh} style={{background:"transparent",border:"1px solid #3B82F655",color:"#3B82F6",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer"}}>↻ Refresh</button>
+          <button onClick={refresh} style={{background:"transparent",border:"1px solid color-mix(in srgb, var(--st-info) 33%, transparent)",color:"var(--st-info)",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer"}}>↻ Refresh</button>
         </div>
       </div>
 
@@ -233,20 +240,22 @@ export default function AdminUsers({ user }) {
 
       <div style={{fontSize:12,color:"rgba(var(--tint),0.67)",marginBottom:14,lineHeight:1.6}}>
         Everyone signed in sees <strong>all</strong> sales data by default. Set <strong>Data access</strong> to
-        <span style={{color:"#F59E0B"}}> Own only</span> to restrict a user to just their own salesperson's rows.
+        <span style={{color:"var(--st-watch)"}}> Own only</span> to restrict a user to their own salesperson's rows in the
+        customer, brand and weekly views. It does <strong>not</strong> cover the Product&nbsp;Group views — that cross-tab is a
+        shared board every signed-in user can read, like the weekly board (migration 0016).
         <strong> Admin</strong> adds management of uploaded files (the Data tab) and this panel — uploaded files are never visible to regular users.
         New accounts come from <code style={{fontFamily:"'Space Mono',monospace",fontSize:11}}>scripts/seed_users.py</code>; they appear here once seeded.
       </div>
 
       {error && (
-        <div style={{marginBottom:14,padding:"10px 14px",background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:8,fontSize:12,color:"#F87171"}}>
+        <div style={{marginBottom:14,padding:"10px 14px",background:"color-mix(in srgb, var(--st-bad) 10%, transparent)",border:"1px solid color-mix(in srgb, var(--st-bad) 30%, transparent)",borderRadius:8,fontSize:12,color:"var(--st-bad)"}}>
           ⚠ {error}
         </div>
       )}
       {notice && (
-        <div style={{marginBottom:14,padding:"10px 14px",background:"rgba(52,211,153,0.08)",border:"1px solid rgba(52,211,153,0.25)",borderRadius:8,fontSize:12,color:"#34D399",display:"flex",justifyContent:"space-between",gap:10}}>
+        <div style={{marginBottom:14,padding:"10px 14px",background:"color-mix(in srgb, var(--st-ok) 8%, transparent)",border:"1px solid color-mix(in srgb, var(--st-ok) 25%, transparent)",borderRadius:8,fontSize:12,color:"var(--st-ok)",display:"flex",justifyContent:"space-between",gap:10}}>
           <span>✓ {notice}</span>
-          <button onClick={() => setNotice(null)} style={{background:"transparent",border:"none",color:"#34D399",cursor:"pointer",fontSize:13}}>✕</button>
+          <button onClick={() => setNotice(null)} style={{background:"transparent",border:"none",color:"var(--st-ok)",cursor:"pointer",fontSize:13}}>✕</button>
         </div>
       )}
 
@@ -278,7 +287,7 @@ export default function AdminUsers({ user }) {
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <div style={{
                           width:24,height:24,borderRadius:"50%",flexShrink:0,
-                          background: row.is_admin ? "linear-gradient(135deg,#E8633B,#F59E0B)" : "#3B82F6",
+                          background: row.is_admin ? "var(--st-accent)" : "var(--st-info)",
                           display:"flex",alignItems:"center",justifyContent:"center",
                           fontSize:10,fontWeight:700,fontFamily:"'Space Mono',monospace",color:"#fff",
                         }}>{(row.sp || "?")[0]?.toUpperCase()}</div>
@@ -298,7 +307,7 @@ export default function AdminUsers({ user }) {
                                 style={{background:"rgba(var(--tint),0.06)",border:"1px solid rgba(var(--tint),0.2)",color:"var(--text)",borderRadius:6,padding:"4px 8px",fontSize:12,minWidth:220,fontFamily:"'DM Sans',sans-serif"}}
                               />
                               <button onClick={() => saveEditEmail(row)} disabled={busyId === row.user_id}
-                                style={{background:"#34D399",color:"#0A0A0F",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Save</button>
+                                style={{background:"var(--st-ok)",color:"var(--bg)",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Save</button>
                               <button onClick={cancelEditEmail} disabled={busyId === row.user_id}
                                 style={{background:"transparent",border:"1px solid rgba(var(--tint),0.15)",color:"rgba(var(--tint),0.7)",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>Cancel</button>
                             </div>
@@ -337,9 +346,9 @@ export default function AdminUsers({ user }) {
                           disabled={busyId === row.user_id}
                           title={row.can_view_all ? "Restrict this user to their own data" : "Let this user see all teams"}
                           style={{
-                            background: row.can_view_all ? "rgba(52,211,153,0.12)" : "rgba(245,158,11,0.12)",
+                            background: row.can_view_all ? "color-mix(in srgb, var(--st-ok) 12%, transparent)" : "color-mix(in srgb, var(--st-watch) 12%, transparent)",
                             border: `1px solid ${row.can_view_all ? "#34D39955" : "#F59E0B55"}`,
-                            color: row.can_view_all ? "#34D399" : "#F59E0B",
+                            color: row.can_view_all ? "var(--st-ok)" : "var(--st-watch)",
                             borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:600,
                             cursor: busyId === row.user_id ? "wait" : "pointer",
                             fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
@@ -354,9 +363,9 @@ export default function AdminUsers({ user }) {
                         disabled={busyId === row.user_id}
                         title={row.is_admin ? "Demote to regular user" : "Promote to admin"}
                         style={{
-                          background: row.is_admin ? "rgba(232,99,59,0.12)" : "rgba(var(--tint),0.04)",
+                          background: row.is_admin ? "color-mix(in srgb, var(--st-accent) 12%, transparent)" : "rgba(var(--tint),0.04)",
                           border: `1px solid ${row.is_admin ? "#E8633B55" : "rgba(var(--tint),0.1)"}`,
-                          color: row.is_admin ? "#E8633B" : "rgba(var(--tint),0.6)",
+                          color: row.is_admin ? "var(--st-accent)" : "rgba(var(--tint),0.6)",
                           borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:600,
                           cursor: busyId === row.user_id ? "wait" : "pointer",
                           fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
@@ -375,14 +384,14 @@ export default function AdminUsers({ user }) {
                           onClick={() => onResetPassword(row)}
                           disabled={busyId === row.user_id}
                           title="Set a new password for this user"
-                          style={{background:"rgba(59,130,246,0.10)",border:"1px solid #3B82F655",color:"#3B82F6",borderRadius:6,padding:"4px 8px",fontSize:10.5,fontWeight:600,cursor:busyId===row.user_id?"wait":"pointer",whiteSpace:"nowrap"}}>
+                          style={{background:"color-mix(in srgb, var(--st-info) 10%, transparent)",border:"1px solid color-mix(in srgb, var(--st-info) 33%, transparent)",color:"var(--st-info)",borderRadius:6,padding:"4px 8px",fontSize:10.5,fontWeight:600,cursor:busyId===row.user_id?"wait":"pointer",whiteSpace:"nowrap"}}>
                           🔑 Password
                         </button>
                         <button
                           onClick={() => onDelete(row)}
                           disabled={busyId === row.user_id || isSelf}
                           title={isSelf ? "You cannot delete your own account" : "Permanently delete this user"}
-                          style={{background:"rgba(248,113,113,0.08)",border:"1px solid rgba(248,113,113,0.4)",color: isSelf ? "rgba(var(--tint),0.25)" : "#F87171",borderRadius:6,padding:"4px 8px",fontSize:10.5,fontWeight:600,cursor: isSelf ? "not-allowed" : (busyId===row.user_id?"wait":"pointer"),whiteSpace:"nowrap"}}>
+                          style={{background:"color-mix(in srgb, var(--st-bad) 8%, transparent)",border:"1px solid color-mix(in srgb, var(--st-bad) 40%, transparent)",color: isSelf ? "rgba(var(--tint),0.25)" : "var(--st-bad)",borderRadius:6,padding:"4px 8px",fontSize:10.5,fontWeight:600,cursor: isSelf ? "not-allowed" : (busyId===row.user_id?"wait":"pointer"),whiteSpace:"nowrap"}}>
                           🗑 Delete
                         </button>
                       </div>
@@ -426,7 +435,7 @@ function AddUserForm({ busy, onCancel, onSubmit }) {
   return (
     <form onSubmit={submit} style={{
       marginBottom: 16, padding: "14px 16px", borderRadius: 10,
-      background: "rgba(232,99,59,0.06)", border: "1px solid rgba(232,99,59,0.3)",
+      background: "color-mix(in srgb, var(--st-accent) 6%, transparent)", border: "1px solid color-mix(in srgb, var(--st-accent) 30%, transparent)",
       display: "flex", flexDirection: "column", gap: 12,
     }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>+ Add user</div>
@@ -438,8 +447,8 @@ function AddUserForm({ busy, onCancel, onSubmit }) {
         </div>
         <div style={fieldWrap}>
           <label style={labelStyle}>Initial password</label>
-          <input type="text" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
-            placeholder="at least 6 chars" style={inputStyle} disabled={busy}
+          <input type="text" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)}
+            placeholder="at least 8 chars" style={inputStyle} disabled={busy}
             autoComplete="new-password" />
         </div>
         <div style={{ ...fieldWrap, flex: "0 1 180px" }}>
@@ -464,7 +473,7 @@ function AddUserForm({ busy, onCancel, onSubmit }) {
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <button type="submit" disabled={busy || !canSubmit}
           style={{
-            background: busy || !canSubmit ? "rgba(232,99,59,0.4)" : "#E8633B",
+            background: busy || !canSubmit ? "color-mix(in srgb, var(--st-accent) 40%, transparent)" : "var(--st-accent)",
             color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px",
             fontSize: 13, fontWeight: 700, cursor: busy || !canSubmit ? "not-allowed" : "pointer",
             fontFamily: "'DM Sans',sans-serif",

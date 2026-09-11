@@ -184,6 +184,21 @@ Surface hierarchy inside a mode is built from the tint alone: page background at
 
 The pre-auth full screens (login, loading, error states) resolve the same mode from a shared `src/lib/theme.js`, so sign-in matches the app the reader lands in rather than being hardcoded dark.
 
+### Category (product origin)
+A third identity vocabulary, used only on the Product Sales tab to distinguish
+product origins in the stacked bar and its breakdown table. It borrowed Signal
+Orange, Ahead Mint and Info Blue verbatim until it was rebuilt, which broke the
+Signal Rule (an accent chart fill and table heading) and made a *category*
+readable as a *performance state*. Like status and series it is mode-aware, and
+every value clears 4.5:1 on its own background.
+- **Dark (Slate)** — Japan #5EC8C4 · Spain #E4B363 · Taiwan #8C9EFF · Ultravision #7DD87D · Wohlk #E07BA8 · Other #9AA7B8
+- **Light** — Japan #0F6F6B · Spain #7A5104 · Taiwan #3B48B8 · Ultravision #2C6E31 · Wohlk #A02A5E · Other #44525F
+
+No category value equals a status or series value in either mode. Identity in the
+stacked bar is still carried by the legend and stack position as well as colour,
+and the breakdown table's headings are muted tint with a colour swatch as the key
+— the colour is never the heading itself.
+
 ### Named Rules
 
 **The Signal Rule.** Signal Orange appears on no more than 10% of any screen, and only where the user can act or has acted. It is forbidden as decoration, as a heading colour, and as a chart fill for a salesperson's series.
@@ -281,7 +296,7 @@ The system's most repeated object and the one that carries the north star. An up
 - **Don't** drift toward **heavy corporate BI** (Power BI, Tableau): filter rails flanking the content, chrome competing with the numbers, or anything requiring training before a rep can read their own figures.
 - **Don't** put a shadow on a resting surface. Shadows mean "floating and dismissable" — tooltip, modal, login card. Nothing else.
 - **Don't** distinguish salespeople by colour alone in a chart. The palettes are now disjoint (no rep shares a status hue) and per-theme, but colour still needs a second channel — position, a direct label, or the year-line dash pattern.
-- **Don't** hardcode a bright status/series hex as foreground text or a chart fill. Route it through `STATUS.*` (charts) or `var(--st-*)` (CSS) so it picks up the light-mode variant; a raw dark-mode value fails contrast on Crisp.
+- **Don't** hardcode a bright status/series/category hex as foreground text or a chart fill. Route it through `STATUS.*` / `tk.categories` (charts) or `var(--st-*)` (CSS) so it picks up the light-mode variant; a raw dark-mode value fails contrast on the light theme. Translucent washes follow the same rule — `color-mix(in srgb, var(--st-accent) 15%, transparent)`, not a literal `rgba(232,99,59,0.15)`, which stays orange-on-light no matter what the theme says.
 - **Don't** reintroduce a font the interface doesn't use, or inject font `<link>` tags from inside React. Fonts load once from `index.html` (Inter / DM Sans / Space Mono only).
 - **Don't** nest a card inside a card, or reach for a card when a plain section with a heading would do.
 - **Don't** introduce a second sans-serif family. Contrast comes from weight, size, and the mono/proportional split.

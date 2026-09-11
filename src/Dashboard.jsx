@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, lazy, Suspense } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, ReferenceLine } from "recharts";
 import WeeklySalesCard from "./WeeklySalesCard.jsx";
-import { aggregateProductSales, CATEGORY_COLORS, CATEGORY_ORDER } from "./lib/productCategories.js";
+import { aggregateProductSales, CATEGORY_COLORS_DARK, CATEGORY_COLORS_LIGHT, CATEGORY_ORDER } from "./lib/productCategories.js";
 // The light/dark mode decision is shared with the pre-auth screens (App /
 // LoginScreen) so they agree on the active mode. THEMES below keeps the full
 // per-mode token map the charts need.
@@ -285,7 +285,7 @@ function SearchSelect({ options, value, onChange, placeholder }) {
               onMouseEnter={(e) => { if (o!==value) e.currentTarget.style.background="rgba(var(--tint),0.07)"; }}
               onMouseLeave={(e) => { if (o!==value) e.currentTarget.style.background="transparent"; }}
               style={{padding:"8px 12px",fontSize:13,borderRadius:7,cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
-                background:o===value?"rgba(232,99,59,0.14)":"transparent",
+                background:o===value?"color-mix(in srgb, var(--st-accent) 14%, transparent)":"transparent",
                 color:o===value?"var(--st-accent)":"var(--text)",fontWeight:o===value?700:450}}>
               {o}
             </div>
@@ -307,9 +307,9 @@ const TabButton = ({active, children, onClick, onKeyDown, accent, tabKey}) => (
     onClick={onClick}
     onKeyDown={onKeyDown}
     style={{
-      background: active ? (accent ? "rgba(52,211,153,0.15)" : "rgba(232,99,59,0.15)") : "transparent",
+      background: active ? (accent ? "color-mix(in srgb, var(--st-ok) 15%, transparent)" : "color-mix(in srgb, var(--st-accent) 15%, transparent)") : "transparent",
       color: active ? (accent ? "var(--st-ok)" : "var(--st-accent)") : "rgba(var(--tint),0.5)",
-      border: active ? `1px solid ${accent ? "rgba(52,211,153,0.3)" : "rgba(232,99,59,0.3)"}` : "1px solid transparent",
+      border: active ? `1px solid ${accent ? "color-mix(in srgb, var(--st-ok) 30%, transparent)" : "color-mix(in srgb, var(--st-accent) 30%, transparent)"}` : "1px solid transparent",
       borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: active ? 600 : 400,
       cursor: "pointer", transition: "all 0.2s", fontFamily: "'DM Sans',sans-serif",
       letterSpacing: 0.3
@@ -343,6 +343,10 @@ const THEMES = {
   slate: {
     series: SERIES_DARK,
     status: STATUS_DARK,
+    categories: CATEGORY_COLORS_DARK,
+    // Neutral reference line (target series, legend rule). Kept off the status
+    // vocabulary on purpose — a target is not a performance state.
+    axisRef: "#94A3B8",
     name: "Slate", subtitle: "Soft dark · default", mode: "dark",
     bg: "#0F172A",
     text: "#F1F5F9",
@@ -359,6 +363,8 @@ const THEMES = {
   crisp: {
     series: SERIES_LIGHT,
     status: STATUS_LIGHT,
+    categories: CATEGORY_COLORS_LIGHT,
+    axisRef: "#54657A",
     // Soft blue, not stark white: the near-white #F1F5F9 read as glary in
     // daylight. A calmer blue (L≈0.80) cuts the glare; the ink stays near-black
     // (14.6:1) and the tint is a darker navy so muted labels/borders read
@@ -440,7 +446,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   // and the arrow-key handler that drives the WAI-ARIA tabs roving focus.
   const visibleTabKeys = [
     "overview","monthly","team","customers","yoy","drilldown",
-    "brands","cohort","heatmap","targets",
+    "brands","products","cohort","heatmap","targets",
     ...(user?.isAdmin ? ["report","data","users"] : []),
   ];
   const onTablistKeyDown = (e) => {
@@ -574,6 +580,43 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   }, [data]);
 
   const currentYearTotal = yearTotals[selectedYear] || 0;
+
+  // Months in which ANY rep booked sales in the selected year. This used to be
+  // SUMMARY.find(s => s.year === selectedYear) — the *alphabetically first*
+  // rep's row — so one rep who joined mid-year (3 active months) divided the
+  // whole team's total by 3 and inflated "Avg Monthly" roughly fourfold.
+  const activeMonthCount = useMemo(() => {
+    const seen = new Array(12).fill(false);
+    for (const s of SUMMARY) {
+      if (s.year !== selectedYear) continue;
+      for (let i = 0; i < 12; i++) if ((s.months?.[i] || 0) > 0) seen[i] = true;
+    }
+    const n = seen.filter(Boolean).length;
+    return n > 0 ? n : 12;
+  }, [data, selectedYear]);
+
+  // Hoisted out of the JSX so they are not rebuilt on every render of the tab.
+  const monthlyTrendAcrossYears = useMemo(() => MONTH_NAMES.map((m, i) => {
+    const row = { month: m };
+    YEARS.forEach(y => {
+      const filtered = selectedSP === "All"
+        ? SUMMARY.filter(s => s.year === y)
+        : SUMMARY.filter(s => s.sp === selectedSP && s.year === y);
+      row[y] = filtered.reduce((acc, s) => acc + s.months[i], 0);
+    });
+    return row;
+  }), [data, selectedSP]);
+
+  const monthlyActualVsTarget = useMemo(() => MONTH_NAMES.map((m, i) => {
+    const targetSp = selectedSP === "All" ? "_TEAM" : selectedSP;
+    const t = TARGETS.find(x => x.year === selectedYear && x.month === i + 1 && x.sp === targetSp);
+    const target = t ? t.target : 0;
+    let actual = 0;
+    const summary = SUMMARY.filter(s => s.year === selectedYear);
+    if (selectedSP === "All") summary.forEach(s => actual += s.months[i]);
+    else { const s = summary.find(d => d.sp === selectedSP); if (s) actual = s.months[i]; }
+    return { month: m, actual, target, gap: actual - target };
+  }), [data, selectedSP, selectedYear]);
   const prevYearTotal = yearTotals[selectedYear - 1] || 0;
   const yoyChange = prevYearTotal > 0 ? ((currentYearTotal - prevYearTotal) / prevYearTotal) * 100 : 0;
 
@@ -987,7 +1030,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               fontSize:13, fontWeight:700, fontFamily:"'DM Sans',sans-serif", transition:"background .15s,color .15s",
               background: dim===d ? "var(--st-accent)" : "transparent",
               color: dim===d ? "#fff" : "rgba(var(--tint),0.68)",
-              boxShadow: dim===d ? "0 1px 4px rgba(0,0,0,0.15)" : "none",
+              // No shadow: this toggle rests on the page, it does not float.
             }}>
             {lbl}
           </button>
@@ -1019,6 +1062,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           --st-info: ${tk.status.info};
           --st-accent: ${tk.status.accent};
           --st-region: ${tk.status.region};
+          --st-alt: ${tk.status.alt};
+          --st-qty: ${tk.status.qty};
+          --st-axis-ref: ${tk.axisRef};
           --tooltip-bg: ${tk.tooltipBg};
           --tooltip-border: ${tk.tooltipBorder};
           --tooltip-text: ${tk.tooltipText};
@@ -1033,7 +1079,10 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
       <ChartPatterns colors={COLORS} order={SALESPEOPLE_ORDER} />
 
       <div style={{
-        background:"linear-gradient(135deg, rgba(232,99,59,0.08) 0%, rgba(59,130,246,0.05) 100%)",
+        // Flat 2% tint, not a gradient. This band sits on every screen; a
+        // resting surface in this system is separated by tint and a hairline,
+        // never by a wash of the accent colour.
+        background:"rgba(var(--tint),0.02)",
         borderBottom:"1px solid rgba(var(--tint),0.06)",
         padding: isMobile ? "18px 14px 14px" : "28px 32px 20px",
       }}>
@@ -1042,7 +1091,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:2,color:"rgba(var(--tint),0.62)",marginBottom:6,display:"flex",alignItems:"center",gap:10}}>
               <span>SEED Malaysia</span>
               {user?.isAdmin && (
-                <span style={{padding:"2px 8px",background:"rgba(232,99,59,0.15)",color:STATUS.accent,borderRadius:10,fontSize:10,letterSpacing:0.5}}>ADMIN</span>
+                <span style={{padding:"2px 8px",background:"color-mix(in srgb, var(--st-accent) 15%, transparent)",color:STATUS.accent,borderRadius:10,fontSize:10,letterSpacing:0.5}}>ADMIN</span>
               )}
             </div>
             <h1 style={{fontSize:26,fontWeight:700,margin:0,letterSpacing:-0.5,color:"var(--text)"}}>
@@ -1098,7 +1147,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 12px 6px 8px",background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.08)",borderRadius:20}}>
                 <div style={{
                   width:26,height:26,borderRadius:"50%",
-                  background: user.isAdmin ? "linear-gradient(135deg,#E8633B,#F59E0B)" : (COLORS[user.sp] || STATUS.info),
+                  background: user.isAdmin ? STATUS.accent : (COLORS[user.sp] || STATUS.info),
                   color:"var(--text)",display:"flex",alignItems:"center",justifyContent:"center",
                   fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace"
                 }}>{(user.sp || "?")[0]?.toUpperCase()}</div>
@@ -1163,11 +1212,11 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           <div style={{
             display:"flex",alignItems:"center",gap:10,marginBottom:16,
             padding:"9px 14px",borderRadius:10,fontSize:12,
-            background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.25)",color:STATUS.info,
+            background:"color-mix(in srgb, var(--st-info) 8%, transparent)",border:"1px solid color-mix(in srgb, var(--st-info) 25%, transparent)",color:STATUS.info,
           }}>
             <span style={{
               width:12,height:12,borderRadius:"50%",flexShrink:0,
-              border:"2px solid rgba(59,130,246,0.25)",borderTopColor:STATUS.info,
+              border:"2px solid color-mix(in srgb, var(--st-info) 25%, transparent)",borderTopColor:STATUS.info,
               animation:"seedspin 0.8s linear infinite",
             }} />
             Loading brand-level rows — this chart fills in shortly.
@@ -1201,7 +1250,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               )}
               <KPI label="Annual Target" value={annualTarget > 0 ? `RM ${fmt(annualTarget)}` : "—"} sub={annualTarget > 0 ? `${annualAchievement.toFixed(0)}% achieved` : "no target set"} color={STATUS.info} />
               <KPI label="Active Teams" value={spPerformance.filter(s=>s.total>0).length} sub={`of ${SALESPEOPLE.length} teams`} color={STATUS.qty} />
-              <KPI label="Avg Monthly" value={`RM ${fmt(currentYearTotal / Math.max(SUMMARY.find(s => s.year === selectedYear)?.months.filter(m => m > 0).length || 12, 1))}`} sub="active months" color={STATUS.alt} />
+              <KPI label="Avg Monthly" value={`RM ${fmt(currentYearTotal / activeMonthCount)}`} sub={`over ${activeMonthCount} active month${activeMonthCount === 1 ? "" : "s"}`} color={STATUS.alt} />
             </div>
 
             <div style={{display:"grid",gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",gap:20,marginBottom:24}}>
@@ -1210,7 +1259,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   <div style={{fontSize:14,fontWeight:600}}>Monthly Revenue vs Target — {selectedYear}</div>
                   {annualTarget > 0 && (
                     <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11,color:"rgba(var(--tint),0.67)"}}>
-                      <span style={{display:"inline-block",width:14,height:2,borderTop:"2px dashed #94A3B8"}}></span>
+                      <span style={{display:"inline-block",width:14,height:2,borderTop:`2px dashed ${tk.axisRef}`}}></span>
                       target
                     </div>
                   )}
@@ -1229,7 +1278,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     <Tooltip content={<CustomTooltip />} />
                     <Area isAnimationActive={!reduceMotion} type="monotone" dataKey="total" stroke={STATUS.accent} fill="url(#totalGrad)" strokeWidth={2} name="Actual" />
                     {annualTarget > 0 && (
-                      <Line isAnimationActive={!reduceMotion} type="monotone" dataKey="target" stroke="#94A3B8" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Target" />
+                      <Line isAnimationActive={!reduceMotion} type="monotone" dataKey="target" stroke={tk.axisRef} strokeWidth={2} strokeDasharray="5 5" dot={false} name="Target" />
                     )}
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -1305,7 +1354,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                           <span style={{
                             display:"inline-flex",alignItems:"center",justifyContent:"center",
                             width:24,height:24,borderRadius:"50%",fontSize:11,fontWeight:700,
-                            background:i===0?"rgba(232,99,59,0.2)":i===1?"rgba(59,130,246,0.15)":i===2?"rgba(16,185,129,0.15)":"rgba(var(--tint),0.05)",
+                            background:i===0?"color-mix(in srgb, var(--st-accent) 20%, transparent)":i===1?"color-mix(in srgb, var(--st-info) 15%, transparent)":i===2?"color-mix(in srgb, var(--st-qty) 15%, transparent)":"rgba(var(--tint),0.05)",
                             color:i===0?STATUS.accent:i===1?STATUS.info:i===2?STATUS.qty:"rgba(var(--tint),0.5)"
                           }}>{i+1}</span>
                         </td>
@@ -1322,7 +1371,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                           {s.prevTotal > 0 ? (
                             <span style={{
                               padding:"3px 10px",borderRadius:12,fontSize:11,fontWeight:600,
-                              background:s.change>=0?"rgba(52,211,153,0.15)":"rgba(248,113,113,0.15)",
+                              background:s.change>=0?"color-mix(in srgb, var(--st-ok) 15%, transparent)":"color-mix(in srgb, var(--st-bad) 15%, transparent)",
                               color:s.change>=0?STATUS.ok:STATUS.bad
                             }}>
                               {s.change>=0?"▲":"▼"} {Math.abs(s.change).toFixed(1)}%
@@ -1429,14 +1478,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                 Monthly Trend Across Years {selectedSP !== "All" ? `— ${selectedSP}` : "— All Teams"}
               </div>
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={MONTH_NAMES.map((m, i) => {
-                  const row = {month: m};
-                  YEARS.forEach(y => {
-                    const filtered = selectedSP === "All" ? SUMMARY.filter(s => s.year === y) : SUMMARY.filter(s => s.sp === selectedSP && s.year === y);
-                    row[y] = filtered.reduce((acc, s) => acc + s.months[i], 0);
-                  });
-                  return row;
-                })}>
+                <LineChart data={monthlyTrendAcrossYears}>
                   <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} />
                   <XAxis dataKey="month" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} />
                   <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
@@ -1549,7 +1591,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     const active = topCustomersBySpYear === opt.key;
                     return (
                       <button key={opt.key} onClick={() => setTopCustomersBySpYear(opt.key)} style={{
-                        background: active ? "rgba(232,99,59,0.2)" : "transparent",
+                        background: active ? "color-mix(in srgb, var(--st-accent) 20%, transparent)" : "transparent",
                         color:      active ? STATUS.accent : "rgba(var(--tint),0.55)",
                         border:"none",borderRadius:6,padding:"6px 12px",fontSize:12,
                         fontWeight: active ? 700 : 500, cursor:"pointer",
@@ -1560,12 +1602,12 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                 </div>
                 <div style={{display:"inline-flex",background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.06)",borderRadius:8,padding:2}}>
                   <button onClick={()=>setTopCustomersBySpView("grid")} style={{
-                    background: topCustomersBySpView === "grid" ? "rgba(232,99,59,0.2)" : "transparent",
+                    background: topCustomersBySpView === "grid" ? "color-mix(in srgb, var(--st-accent) 20%, transparent)" : "transparent",
                     color: topCustomersBySpView === "grid" ? STATUS.accent : "rgba(var(--tint),0.5)",
                     border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"
                   }}>▦ Grid</button>
                   <button onClick={()=>setTopCustomersBySpView("list")} style={{
-                    background: topCustomersBySpView === "list" ? "rgba(232,99,59,0.2)" : "transparent",
+                    background: topCustomersBySpView === "list" ? "color-mix(in srgb, var(--st-accent) 20%, transparent)" : "transparent",
                     color: topCustomersBySpView === "list" ? STATUS.accent : "rgba(var(--tint),0.5)",
                     border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"
                   }}>≡ List</button>
@@ -1773,7 +1815,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                           {prev > 0 && (
                             <span style={{
                               padding:"3px 8px",borderRadius:10,fontSize:10,fontWeight:600,
-                              background:yoy>=0?"rgba(52,211,153,0.15)":"rgba(248,113,113,0.15)",
+                              background:yoy>=0?"color-mix(in srgb, var(--st-ok) 15%, transparent)":"color-mix(in srgb, var(--st-bad) 15%, transparent)",
                               color:yoy>=0?STATUS.ok:STATUS.bad
                             }}>
                               {yoy>=0?"▲":"▼"} {Math.abs(yoy).toFixed(0)}%
@@ -1843,8 +1885,8 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     style={{
                       display:"flex",justifyContent:"space-between",alignItems:"center",
                       width:"100%",padding:"8px 10px",marginBottom:2,
-                      background: activeCustomer?.customer === c.customer ? "rgba(232,99,59,0.15)" : "transparent",
-                      border: activeCustomer?.customer === c.customer ? "1px solid rgba(232,99,59,0.3)" : "1px solid transparent",
+                      background: activeCustomer?.customer === c.customer ? "color-mix(in srgb, var(--st-accent) 15%, transparent)" : "transparent",
+                      border: activeCustomer?.customer === c.customer ? "1px solid color-mix(in srgb, var(--st-accent) 30%, transparent)" : "1px solid transparent",
                       color:"var(--text)",borderRadius:6,cursor:"pointer",fontSize:12,textAlign:"left"
                     }}>
                     <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:8}}>{c.customer}</span>
@@ -2229,7 +2271,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                               const v = heatmap.gridAmt[ci][bi];
                               const q = heatmap.gridQty[ci][bi];
                               const intensity = heatmap.maxAmt > 0 ? v / heatmap.maxAmt : 0;
-                              const bg = v === 0 ? "rgba(var(--tint),0.02)" : `rgba(232,99,59,${0.1 + intensity * 0.85})`;
+                              const bg = v === 0 ? "rgba(var(--tint),0.02)" : `color-mix(in srgb, var(--st-accent) ${(10 + intensity * 85).toFixed(1)}%, transparent)`;
                               return (
                                 <td key={b} title={`${c} × ${b}\nRevenue: ${fmtFull(v)}\nQuantity: ${q.toLocaleString()} units`} style={{
                                   padding:"6px 4px",background:bg,borderRadius:4,textAlign:"center",
@@ -2311,7 +2353,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                 <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
                   <KPI label="Annual Target" value={`RM ${fmt(annualTarget)}`} sub={`${selectedSP === "All" ? "team" : selectedSP} · ${selectedYear}`} color={STATUS.info} />
                   <KPI label="YTD Actual" value={`RM ${fmt(ytd.actual)}`} sub={ytd.lastMonth ? `Jan–${MONTH_NAMES[ytd.lastMonth-1]}` : "no data"} color={STATUS.accent} />
-                  <KPI label="YTD Target" value={`RM ${fmt(ytd.target)}`} sub={ytd.lastMonth ? `Jan–${MONTH_NAMES[ytd.lastMonth-1]}` : "—"} color="#94A3B8" />
+                  <KPI label="YTD Target" value={`RM ${fmt(ytd.target)}`} sub={ytd.lastMonth ? `Jan–${MONTH_NAMES[ytd.lastMonth-1]}` : "—"} color={tk.axisRef} />
                   <KPI
                     label="YTD Achievement"
                     value={`${ytdAchievement.toFixed(1)}%`}
@@ -2325,16 +2367,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     Monthly Actual vs Target — {selectedYear}
                   </div>
                   <ResponsiveContainer width="100%" height={360}>
-                    <ComposedChart data={MONTH_NAMES.map((m, i) => {
-                      const targetSp = selectedSP === "All" ? "_TEAM" : selectedSP;
-                      const t = TARGETS.find(x => x.year === selectedYear && x.month === i + 1 && x.sp === targetSp);
-                      const target = t ? t.target : 0;
-                      let actual = 0;
-                      const summary = SUMMARY.filter(s => s.year === selectedYear);
-                      if (selectedSP === "All") summary.forEach(s => actual += s.months[i]);
-                      else { const s = summary.find(d => d.sp === selectedSP); if (s) actual = s.months[i]; }
-                      return { month: m, actual, target, gap: actual - target };
-                    })}>
+                    <ComposedChart data={monthlyActualVsTarget}>
                       <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} />
                       <XAxis dataKey="month" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} />
                       <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
@@ -2343,7 +2376,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       <Bar isAnimationActive={!reduceMotion} dataKey="actual" fill={STATUS.accent} radius={[3,3,0,0]} name="Actual">
                         <LabelList dataKey="actual" position="top" formatter={(v) => v > 0 ? fmt(v) : ""} fill={tk.text} fontSize={10} fontFamily="'Space Mono',monospace" />
                       </Bar>
-                      <Line isAnimationActive={!reduceMotion} type="monotone" dataKey="target" stroke="#94A3B8" strokeWidth={2} strokeDasharray="5 5" dot={{r:4,fill:"#94A3B8"}} name="Target" />
+                      <Line isAnimationActive={!reduceMotion} type="monotone" dataKey="target" stroke={tk.axisRef} strokeWidth={2} strokeDasharray="5 5" dot={{r:4,fill:tk.axisRef}} name="Target" />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </Card>
@@ -2498,6 +2531,8 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 // to move a brand into a different bucket.
 // ============================================================
 function ProductSalesTab({ year, years, salespeople, brandSales, colors, tk, reduceMotion, isMobile }) {
+  // Category identity resolves per theme, like series and status do.
+  const CATEGORY_COLORS = tk.categories;
   const [selectedYear, setSelectedYear] = useState(year);
   const [metric, setMetric]             = useState("amt"); // 'amt' | 'qty'
 
@@ -2556,8 +2591,8 @@ function ProductSalesTab({ year, years, salespeople, brandSales, colors, tk, red
                 const active = metric === o.k;
                 return (
                   <button key={o.k} onClick={() => setMetric(o.k)} style={{
-                    background: active ? "rgba(232,99,59,0.2)" : "transparent",
-                    color:      active ? "#E8633B" : "rgba(var(--tint),0.55)",
+                    background: active ? "color-mix(in srgb, var(--st-accent) 20%, transparent)" : "transparent",
+                    color:      active ? "var(--st-accent)" : "rgba(var(--tint),0.55)",
                     border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,
                     fontWeight: active ? 700 : 500, cursor:"pointer",
                     fontFamily:"'DM Sans',sans-serif",
@@ -2571,8 +2606,8 @@ function ProductSalesTab({ year, years, salespeople, brandSales, colors, tk, red
                 const active = selectedYear === o.k;
                 return (
                   <button key={o.k} onClick={() => setSelectedYear(o.k)} style={{
-                    background: active ? "rgba(232,99,59,0.2)" : "transparent",
-                    color:      active ? "#E8633B" : "rgba(var(--tint),0.55)",
+                    background: active ? "color-mix(in srgb, var(--st-accent) 20%, transparent)" : "transparent",
+                    color:      active ? "var(--st-accent)" : "rgba(var(--tint),0.55)",
                     border:"none",borderRadius:6,padding:"6px 12px",fontSize:12,
                     fontWeight: active ? 700 : 500, cursor:"pointer",
                     fontFamily:"'DM Sans',sans-serif",
@@ -2661,14 +2696,14 @@ function ProductSalesTab({ year, years, salespeople, brandSales, colors, tk, red
               <tr style={{background:"rgba(var(--tint),0.04)"}}>
                 <th style={{textAlign:"left",padding:"10px 14px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.69)",fontWeight:600,borderBottom:"1px solid rgba(var(--tint),0.08)"}}>Salesperson</th>
                 {agg.categoriesUsed.map(cat => (
-                  <th key={cat} style={{textAlign:"right",padding:"10px 14px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:CATEGORY_COLORS[cat],fontWeight:600,borderBottom:"1px solid rgba(var(--tint),0.08)",whiteSpace:"nowrap"}}>
+                  <th key={cat} style={{textAlign:"right",padding:"10px 14px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.69)",fontWeight:600,borderBottom:"1px solid rgba(var(--tint),0.08)",whiteSpace:"nowrap"}}>
                     <span style={{display:"inline-flex",alignItems:"center",gap:6,justifyContent:"flex-end"}}>
                       <span style={{width:8,height:8,borderRadius:2,background:CATEGORY_COLORS[cat]}} />
                       {cat.replace(" Product","")}
                     </span>
                   </th>
                 ))}
-                <th style={{textAlign:"right",padding:"10px 14px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"#E8633B",fontWeight:700,borderBottom:"1px solid rgba(var(--tint),0.08)",whiteSpace:"nowrap"}}>Total</th>
+                <th style={{textAlign:"right",padding:"10px 14px",fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"var(--text)",fontWeight:700,borderBottom:"1px solid rgba(var(--tint),0.08)",whiteSpace:"nowrap"}}>Total</th>
               </tr>
             </thead>
             <tbody>
@@ -2688,7 +2723,7 @@ function ProductSalesTab({ year, years, salespeople, brandSales, colors, tk, red
                       </td>
                     );
                   })}
-                  <td style={{padding:"10px 14px",textAlign:"right",fontFamily:"'Space Mono',monospace",fontWeight:700,color:"#E8633B",whiteSpace:"nowrap"}}>
+                  <td style={{padding:"10px 14px",textAlign:"right",fontFamily:"'Space Mono',monospace",fontWeight:700,color:"var(--st-accent)",whiteSpace:"nowrap"}}>
                     {fmtShort(row._total)}
                   </td>
                 </tr>
@@ -2705,7 +2740,7 @@ function ProductSalesTab({ year, years, salespeople, brandSales, colors, tk, red
                     </td>
                   );
                 })}
-                <td style={{padding:"12px 14px",textAlign:"right",fontFamily:"'Space Mono',monospace",fontWeight:700,color:"#E8633B",whiteSpace:"nowrap"}}>
+                <td style={{padding:"12px 14px",textAlign:"right",fontFamily:"'Space Mono',monospace",fontWeight:700,color:"var(--st-accent)",whiteSpace:"nowrap"}}>
                   {fmtShort(grandTotal)}
                 </td>
               </tr>
