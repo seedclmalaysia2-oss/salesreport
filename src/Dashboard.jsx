@@ -114,6 +114,24 @@ function hexLum(hex) {
   return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
 }
 
+// Ink for text sitting on a heat-map cell. The cell is `heatHex` laid over the
+// card at `alpha`, so the contrast that decides legibility is against the
+// composite, not against either colour on its own. A fixed "#fff" is right on
+// Slate, where a faint wash over a dark ground stays dark, and wrong on Crisp,
+// where the same wash over a near-white ground comes out pale. Threshold 0.18
+// is where white and black text draw level on contrast ratio. Pure black and
+// white are deliberate: at the crossover the composite leaves barely 4.5:1 on
+// the table, so a softer ink drops the worst cell below AA.
+function heatInk(heatHex, alpha, bgHex) {
+  const h = parseInt(heatHex.slice(1), 16);
+  const g = parseInt(bgHex.slice(1), 16);
+  const composite = "#" + [16, 8, 0].map(shift => {
+    const fg = (h >> shift) & 255, bg = (g >> shift) & 255;
+    return Math.round(fg * alpha + bg * (1 - alpha)).toString(16).padStart(2, "0");
+  }).join("");
+  return hexLum(composite) > 0.18 ? "#000000" : "#FFFFFF";
+}
+
 // One <pattern> per rep, keyed to SALESPEOPLE_ORDER so the weave is stable per
 // person. Six textures: solid / fwd-diagonal / dots / back-diagonal / horizontal
 // / crosshatch. Rendered into a document-scoped hidden <svg>; paint-server refs
@@ -2276,7 +2294,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                                 <td key={b} title={`${c} × ${b}\nRevenue: ${fmtFull(v)}\nQuantity: ${q.toLocaleString()} units`} style={{
                                   padding:"6px 4px",background:bg,borderRadius:4,textAlign:"center",
                                   fontFamily:"'Space Mono',monospace",fontSize:10,
-                                  color: intensity > 0.4 ? "#fff" : "rgba(var(--tint),0.5)",cursor:"default"
+                                  color: intensity > 0.4 ? heatInk(STATUS.accent, (10 + intensity * 85) / 100, tk.bg) : "rgba(var(--tint),0.5)",cursor:"default"
                                 }}>
                                   {v > 0 ? fmt(v) : "·"}
                                 </td>
@@ -2317,7 +2335,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                                 <td key={b} title={`${c} × ${b}\nQuantity: ${q.toLocaleString()} units\nRevenue: ${fmtFull(v)}`} style={{
                                   padding:"6px 4px",background:bg,borderRadius:4,textAlign:"center",
                                   fontFamily:"'Space Mono',monospace",fontSize:10,
-                                  color: intensity > 0.4 ? "#fff" : "rgba(var(--tint),0.5)",cursor:"default"
+                                  color: intensity > 0.4 ? heatInk("#10B981", 0.1 + intensity * 0.85, tk.bg) : "rgba(var(--tint),0.5)",cursor:"default"
                                 }}>
                                   {q > 0 ? q.toLocaleString() : "·"}
                                 </td>
