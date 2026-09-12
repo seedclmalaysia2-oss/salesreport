@@ -1039,7 +1039,7 @@ function UploadPanel({ defaultStart, defaultEnd, onClose, onUploaded, seriesColo
 
   return (
     <div style={{
-      background: "rgba(0,0,0,0.28)", border: "1px solid rgba(var(--tint),0.1)",
+      background: "rgba(var(--tint),0.03)", border: "1px solid rgba(var(--tint),0.1)",
       borderRadius: 12, padding: 20, marginBottom: 16, marginTop: 4,
     }}>
       <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap:"wrap" }}>
