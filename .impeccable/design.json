@@ -1,117 +1,738 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-25T00:00:00Z",
+  "generatedAt": "2026-09-12T14:31:35Z",
+  "generatedBy": "scripts/build-impeccable-design.mjs",
   "title": "Design System: SEED Malaysia Sales Dashboard",
   "extensions": {
     "colorMeta": {
       "signal-orange": {
         "role": "primary",
         "displayName": "Signal Orange",
-        "canonical": "oklch(66% 0.16 42)",
-        "note": "The only loud colour in the system. Capped at 10% of any screen. series-alan is an alias of this value.",
-        "tonalRamp": ["oklch(15% 0.06 42)", "oklch(26% 0.10 42)", "oklch(38% 0.14 42)", "oklch(50% 0.16 42)", "oklch(66% 0.16 42)", "oklch(76% 0.12 42)", "oklch(87% 0.07 42)", "oklch(95% 0.03 42)"]
+        "canonical": "oklch(66% 0.17 37)",
+        "hex": "#E8633B",
+        "note": "The only loud colour in the system. Capped at 10% of any screen and only where the user can act. Forbidden as decoration, as a heading colour, and as a chart fill for a salesperson's series.",
+        "tonalRamp": [
+          "oklch(16% 0.07 37)",
+          "oklch(27% 0.10 37)",
+          "oklch(39% 0.13 37)",
+          "oklch(51% 0.15 37)",
+          "oklch(63% 0.17 37)",
+          "oklch(75% 0.14 37)",
+          "oklch(87% 0.11 37)",
+          "oklch(95% 0.09 37)"
+        ]
+      },
+      "signal-orange-light": {
+        "role": "primary",
+        "displayName": "Signal Orange (light mode)",
+        "canonical": "oklch(53% 0.17 36)",
+        "hex": "#BC3811",
+        "note": "The daylight variant. White text on this fill clears contrast, which the dark value does not.",
+        "tonalRamp": [
+          "oklch(16% 0.07 36)",
+          "oklch(27% 0.10 36)",
+          "oklch(39% 0.13 36)",
+          "oklch(51% 0.15 36)",
+          "oklch(63% 0.17 36)",
+          "oklch(75% 0.14 36)",
+          "oklch(87% 0.11 36)",
+          "oklch(95% 0.09 36)"
+        ]
       },
       "status-ahead": {
         "role": "secondary",
         "displayName": "Ahead Mint",
-        "canonical": "oklch(78% 0.15 163)",
+        "canonical": "oklch(77% 0.15 163)",
+        "hex": "#34D399",
         "note": "At or above target; positive year-on-year movement.",
-        "tonalRamp": ["oklch(20% 0.05 163)", "oklch(31% 0.08 163)", "oklch(43% 0.11 163)", "oklch(55% 0.13 163)", "oklch(66% 0.15 163)", "oklch(78% 0.15 163)", "oklch(88% 0.09 163)", "oklch(95% 0.04 163)"]
+        "tonalRamp": [
+          "oklch(16% 0.06 163)",
+          "oklch(27% 0.09 163)",
+          "oklch(39% 0.11 163)",
+          "oklch(51% 0.14 163)",
+          "oklch(63% 0.15 163)",
+          "oklch(75% 0.12 163)",
+          "oklch(87% 0.10 163)",
+          "oklch(95% 0.08 163)"
+        ]
+      },
+      "status-ahead-light": {
+        "role": "secondary",
+        "displayName": "Ahead Mint (light mode)",
+        "canonical": "oklch(50% 0.10 163)",
+        "hex": "#157452",
+        "note": "At or above target; positive year-on-year movement. Darkened to clear 4.5:1 on the daylight background.",
+        "tonalRamp": [
+          "oklch(16% 0.04 163)",
+          "oklch(27% 0.06 163)",
+          "oklch(39% 0.07 163)",
+          "oklch(51% 0.09 163)",
+          "oklch(63% 0.10 163)",
+          "oklch(75% 0.08 163)",
+          "oklch(87% 0.06 163)",
+          "oklch(95% 0.05 163)"
+        ]
       },
       "status-watch": {
         "role": "secondary",
         "displayName": "Watch Amber",
         "canonical": "oklch(77% 0.16 70)",
-        "note": "90-99% of target. Collides with series-simon; separate by label or position, never hue alone.",
-        "tonalRamp": ["oklch(20% 0.05 70)", "oklch(31% 0.08 70)", "oklch(43% 0.12 70)", "oklch(55% 0.15 70)", "oklch(66% 0.16 70)", "oklch(77% 0.16 70)", "oklch(88% 0.10 70)", "oklch(95% 0.04 70)"]
+        "hex": "#F59E0B",
+        "note": "90-99% of target: close enough to matter, not yet a failure.",
+        "tonalRamp": [
+          "oklch(16% 0.07 70)",
+          "oklch(27% 0.09 70)",
+          "oklch(39% 0.12 70)",
+          "oklch(51% 0.14 70)",
+          "oklch(63% 0.16 70)",
+          "oklch(75% 0.13 70)",
+          "oklch(87% 0.11 70)",
+          "oklch(95% 0.09 70)"
+        ]
+      },
+      "status-watch-light": {
+        "role": "secondary",
+        "displayName": "Watch Amber (light mode)",
+        "canonical": "oklch(52% 0.11 71)",
+        "hex": "#8F5B04",
+        "note": "90-99% of target: close enough to matter, not yet a failure. Darkened to clear 4.5:1 on the daylight background.",
+        "tonalRamp": [
+          "oklch(16% 0.05 71)",
+          "oklch(27% 0.06 71)",
+          "oklch(39% 0.08 71)",
+          "oklch(51% 0.10 71)",
+          "oklch(63% 0.11 71)",
+          "oklch(75% 0.09 71)",
+          "oklch(87% 0.07 71)",
+          "oklch(95% 0.06 71)"
+        ]
       },
       "status-behind": {
         "role": "secondary",
         "displayName": "Behind Coral",
-        "canonical": "oklch(71% 0.16 20)",
+        "canonical": "oklch(71% 0.17 22)",
+        "hex": "#F87171",
         "note": "Under 90% of target, declines, and destructive actions.",
-        "tonalRamp": ["oklch(18% 0.06 20)", "oklch(29% 0.10 20)", "oklch(41% 0.14 20)", "oklch(53% 0.16 20)", "oklch(63% 0.17 20)", "oklch(71% 0.16 20)", "oklch(85% 0.09 20)", "oklch(94% 0.04 20)"]
+        "tonalRamp": [
+          "oklch(16% 0.07 22)",
+          "oklch(27% 0.09 22)",
+          "oklch(39% 0.12 22)",
+          "oklch(51% 0.15 22)",
+          "oklch(63% 0.16 22)",
+          "oklch(75% 0.13 22)",
+          "oklch(87% 0.11 22)",
+          "oklch(95% 0.09 22)"
+        ]
+      },
+      "status-behind-light": {
+        "role": "secondary",
+        "displayName": "Behind Coral (light mode)",
+        "canonical": "oklch(54% 0.22 29)",
+        "hex": "#D00606",
+        "note": "Under 90% of target, declines, and destructive actions. Darkened to clear 4.5:1 on the daylight background.",
+        "tonalRamp": [
+          "oklch(16% 0.09 29)",
+          "oklch(27% 0.12 29)",
+          "oklch(39% 0.16 29)",
+          "oklch(51% 0.19 29)",
+          "oklch(63% 0.21 29)",
+          "oklch(75% 0.18 29)",
+          "oklch(87% 0.14 29)",
+          "oklch(95% 0.12 29)"
+        ]
       },
       "status-info": {
         "role": "secondary",
         "displayName": "Info Blue",
-        "canonical": "oklch(62% 0.19 259)",
-        "note": "Neutral emphasis and non-destructive controls. series-dino is an alias of this value.",
-        "tonalRamp": ["oklch(18% 0.07 259)", "oklch(28% 0.11 259)", "oklch(39% 0.15 259)", "oklch(50% 0.18 259)", "oklch(62% 0.19 259)", "oklch(74% 0.14 259)", "oklch(86% 0.08 259)", "oklch(95% 0.03 259)"]
+        "canonical": "oklch(62% 0.19 260)",
+        "hex": "#3B82F6",
+        "note": "Neutral emphasis and non-destructive controls (View, Refresh).",
+        "tonalRamp": [
+          "oklch(16% 0.08 260)",
+          "oklch(27% 0.11 260)",
+          "oklch(39% 0.14 260)",
+          "oklch(51% 0.17 260)",
+          "oklch(63% 0.18 260)",
+          "oklch(75% 0.15 260)",
+          "oklch(87% 0.12 260)",
+          "oklch(95% 0.10 260)"
+        ]
       },
-      "series-khen": {
-        "role": "tertiary",
-        "displayName": "Khen Green",
-        "canonical": "oklch(70% 0.15 164)",
-        "note": "Series identity only. Sits close to Ahead Mint; never use it to imply performance.",
-        "tonalRamp": ["oklch(19% 0.05 164)", "oklch(30% 0.08 164)", "oklch(41% 0.11 164)", "oklch(53% 0.13 164)", "oklch(70% 0.15 164)", "oklch(80% 0.12 164)", "oklch(89% 0.07 164)", "oklch(96% 0.03 164)"]
+      "status-info-light": {
+        "role": "secondary",
+        "displayName": "Info Blue (light mode)",
+        "canonical": "oklch(52% 0.22 261)",
+        "hex": "#065BE8",
+        "note": "Neutral emphasis and non-destructive controls (View, Refresh). Darkened to clear 4.5:1 on the daylight background.",
+        "tonalRamp": [
+          "oklch(16% 0.09 261)",
+          "oklch(27% 0.13 261)",
+          "oklch(39% 0.16 261)",
+          "oklch(51% 0.20 261)",
+          "oklch(63% 0.22 261)",
+          "oklch(75% 0.18 261)",
+          "oklch(87% 0.14 261)",
+          "oklch(95% 0.12 261)"
+        ]
       },
-      "series-sakinah": {
+      "series-alan-dark": {
         "role": "tertiary",
-        "displayName": "Sakinah Violet",
-        "canonical": "oklch(63% 0.23 303)",
-        "note": "Series identity only.",
-        "tonalRamp": ["oklch(18% 0.08 303)", "oklch(28% 0.13 303)", "oklch(39% 0.18 303)", "oklch(51% 0.22 303)", "oklch(63% 0.23 303)", "oklch(76% 0.16 303)", "oklch(87% 0.09 303)", "oklch(95% 0.04 303)"]
+        "displayName": "Alan (dark)",
+        "canonical": "oklch(72% 0.12 50)",
+        "hex": "#E28B59",
+        "note": "Series identity only — it says who, never how it is going. No series value equals a status value.",
+        "tonalRamp": [
+          "oklch(16% 0.05 50)",
+          "oklch(27% 0.07 50)",
+          "oklch(39% 0.09 50)",
+          "oklch(51% 0.11 50)",
+          "oklch(63% 0.12 50)",
+          "oklch(75% 0.10 50)",
+          "oklch(87% 0.08 50)",
+          "oklch(95% 0.07 50)"
+        ]
       },
-      "series-seed": {
+      "series-alan-light": {
         "role": "tertiary",
-        "displayName": "Seed Magenta",
-        "canonical": "oklch(65% 0.22 355)",
-        "note": "Series identity for the house account.",
-        "tonalRamp": ["oklch(18% 0.08 355)", "oklch(29% 0.13 355)", "oklch(40% 0.17 355)", "oklch(52% 0.21 355)", "oklch(65% 0.22 355)", "oklch(77% 0.15 355)", "oklch(88% 0.08 355)", "oklch(95% 0.04 355)"]
+        "displayName": "Alan (light)",
+        "canonical": "oklch(63% 0.17 48)",
+        "hex": "#D56210",
+        "note": "The light-mode counterpart. The sets are split per mode because no single set clears 3:1 on both backgrounds.",
+        "tonalRamp": [
+          "oklch(16% 0.07 48)",
+          "oklch(27% 0.09 48)",
+          "oklch(39% 0.12 48)",
+          "oklch(51% 0.15 48)",
+          "oklch(63% 0.16 48)",
+          "oklch(75% 0.13 48)",
+          "oklch(87% 0.11 48)",
+          "oklch(95% 0.09 48)"
+        ]
+      },
+      "series-dino-dark": {
+        "role": "tertiary",
+        "displayName": "Dino (dark)",
+        "canonical": "oklch(65% 0.10 259)",
+        "hex": "#6890CD",
+        "note": "Series identity only — it says who, never how it is going. No series value equals a status value.",
+        "tonalRamp": [
+          "oklch(16% 0.04 259)",
+          "oklch(27% 0.06 259)",
+          "oklch(39% 0.07 259)",
+          "oklch(51% 0.09 259)",
+          "oklch(63% 0.10 259)",
+          "oklch(75% 0.08 259)",
+          "oklch(87% 0.07 259)",
+          "oklch(95% 0.05 259)"
+        ]
+      },
+      "series-dino-light": {
+        "role": "tertiary",
+        "displayName": "Dino (light)",
+        "canonical": "oklch(42% 0.23 266)",
+        "hex": "#1832C6",
+        "note": "The light-mode counterpart. The sets are split per mode because no single set clears 3:1 on both backgrounds.",
+        "tonalRamp": [
+          "oklch(16% 0.09 266)",
+          "oklch(27% 0.13 266)",
+          "oklch(39% 0.16 266)",
+          "oklch(51% 0.20 266)",
+          "oklch(63% 0.22 266)",
+          "oklch(75% 0.18 266)",
+          "oklch(87% 0.14 266)",
+          "oklch(95% 0.12 266)"
+        ]
+      },
+      "series-khen-dark": {
+        "role": "tertiary",
+        "displayName": "Khen (dark)",
+        "canonical": "oklch(86% 0.13 187)",
+        "hex": "#4DEDE0",
+        "note": "Series identity only — it says who, never how it is going. No series value equals a status value.",
+        "tonalRamp": [
+          "oklch(16% 0.05 187)",
+          "oklch(27% 0.07 187)",
+          "oklch(39% 0.09 187)",
+          "oklch(51% 0.12 187)",
+          "oklch(63% 0.13 187)",
+          "oklch(75% 0.11 187)",
+          "oklch(87% 0.08 187)",
+          "oklch(95% 0.07 187)"
+        ]
+      },
+      "series-khen-light": {
+        "role": "tertiary",
+        "displayName": "Khen (light)",
+        "canonical": "oklch(60% 0.12 163)",
+        "hex": "#28946A",
+        "note": "The light-mode counterpart. The sets are split per mode because no single set clears 3:1 on both backgrounds.",
+        "tonalRamp": [
+          "oklch(16% 0.05 163)",
+          "oklch(27% 0.06 163)",
+          "oklch(39% 0.08 163)",
+          "oklch(51% 0.10 163)",
+          "oklch(63% 0.11 163)",
+          "oklch(75% 0.09 163)",
+          "oklch(87% 0.07 163)",
+          "oklch(95% 0.06 163)"
+        ]
+      },
+      "series-sakinah-dark": {
+        "role": "tertiary",
+        "displayName": "Sakinah (dark)",
+        "canonical": "oklch(58% 0.25 303)",
+        "hex": "#9A3DF0",
+        "note": "Series identity only — it says who, never how it is going. No series value equals a status value.",
+        "tonalRamp": [
+          "oklch(16% 0.10 303)",
+          "oklch(27% 0.14 303)",
+          "oklch(39% 0.18 303)",
+          "oklch(51% 0.22 303)",
+          "oklch(63% 0.24 303)",
+          "oklch(75% 0.20 303)",
+          "oklch(87% 0.16 303)",
+          "oklch(95% 0.13 303)"
+        ]
+      },
+      "series-sakinah-light": {
+        "role": "tertiary",
+        "displayName": "Sakinah (light)",
+        "canonical": "oklch(63% 0.21 318)",
+        "hex": "#BC56DB",
+        "note": "The light-mode counterpart. The sets are split per mode because no single set clears 3:1 on both backgrounds.",
+        "tonalRamp": [
+          "oklch(16% 0.09 318)",
+          "oklch(27% 0.12 318)",
+          "oklch(39% 0.15 318)",
+          "oklch(51% 0.18 318)",
+          "oklch(63% 0.20 318)",
+          "oklch(75% 0.17 318)",
+          "oklch(87% 0.13 318)",
+          "oklch(95% 0.11 318)"
+        ]
+      },
+      "series-simon-dark": {
+        "role": "tertiary",
+        "displayName": "Simon (dark)",
+        "canonical": "oklch(85% 0.15 103)",
+        "hex": "#E0D046",
+        "note": "Series identity only — it says who, never how it is going. No series value equals a status value.",
+        "tonalRamp": [
+          "oklch(16% 0.06 103)",
+          "oklch(27% 0.09 103)",
+          "oklch(39% 0.11 103)",
+          "oklch(51% 0.14 103)",
+          "oklch(63% 0.15 103)",
+          "oklch(75% 0.12 103)",
+          "oklch(87% 0.10 103)",
+          "oklch(95% 0.08 103)"
+        ]
+      },
+      "series-simon-light": {
+        "role": "tertiary",
+        "displayName": "Simon (light)",
+        "canonical": "oklch(44% 0.08 102)",
+        "hex": "#5C5410",
+        "note": "The light-mode counterpart. The sets are split per mode because no single set clears 3:1 on both backgrounds.",
+        "tonalRamp": [
+          "oklch(16% 0.04 102)",
+          "oklch(27% 0.05 102)",
+          "oklch(39% 0.06 102)",
+          "oklch(51% 0.07 102)",
+          "oklch(63% 0.08 102)",
+          "oklch(75% 0.07 102)",
+          "oklch(87% 0.05 102)",
+          "oklch(95% 0.05 102)"
+        ]
+      },
+      "series-seed-malaysia-dark": {
+        "role": "tertiary",
+        "displayName": "Seed Malaysia (dark)",
+        "canonical": "oklch(58% 0.20 2)",
+        "hex": "#D42F71",
+        "note": "Series identity only — it says who, never how it is going. No series value equals a status value.",
+        "tonalRamp": [
+          "oklch(16% 0.08 2)",
+          "oklch(27% 0.11 2)",
+          "oklch(39% 0.15 2)",
+          "oklch(51% 0.18 2)",
+          "oklch(63% 0.20 2)",
+          "oklch(75% 0.16 2)",
+          "oklch(87% 0.13 2)",
+          "oklch(95% 0.11 2)"
+        ]
+      },
+      "series-seed-malaysia-light": {
+        "role": "tertiary",
+        "displayName": "Seed Malaysia (light)",
+        "canonical": "oklch(41% 0.16 338)",
+        "hex": "#7C1968",
+        "note": "The light-mode counterpart. The sets are split per mode because no single set clears 3:1 on both backgrounds.",
+        "tonalRamp": [
+          "oklch(16% 0.07 338)",
+          "oklch(27% 0.09 338)",
+          "oklch(39% 0.11 338)",
+          "oklch(51% 0.14 338)",
+          "oklch(63% 0.15 338)",
+          "oklch(75% 0.13 338)",
+          "oklch(87% 0.10 338)",
+          "oklch(95% 0.08 338)"
+        ]
+      },
+      "category-japan-dark": {
+        "role": "tertiary",
+        "displayName": "Japan Product (dark)",
+        "canonical": "oklch(77% 0.10 192)",
+        "hex": "#5EC8C4",
+        "note": "Product-origin identity, used only on the Product Sales tab. A third vocabulary, disjoint from both status and series.",
+        "tonalRamp": [
+          "oklch(16% 0.04 192)",
+          "oklch(27% 0.05 192)",
+          "oklch(39% 0.07 192)",
+          "oklch(51% 0.09 192)",
+          "oklch(63% 0.09 192)",
+          "oklch(75% 0.08 192)",
+          "oklch(87% 0.06 192)",
+          "oklch(95% 0.05 192)"
+        ]
+      },
+      "category-japan-light": {
+        "role": "tertiary",
+        "displayName": "Japan Product (light)",
+        "canonical": "oklch(49% 0.08 190)",
+        "hex": "#0F6F6B",
+        "note": "The light-mode counterpart.",
+        "tonalRamp": [
+          "oklch(16% 0.03 190)",
+          "oklch(27% 0.05 190)",
+          "oklch(39% 0.06 190)",
+          "oklch(51% 0.07 190)",
+          "oklch(63% 0.08 190)",
+          "oklch(75% 0.06 190)",
+          "oklch(87% 0.05 190)",
+          "oklch(95% 0.04 190)"
+        ]
+      },
+      "category-spain-dark": {
+        "role": "tertiary",
+        "displayName": "Spain Product (dark)",
+        "canonical": "oklch(80% 0.11 78)",
+        "hex": "#E4B363",
+        "note": "Product-origin identity, used only on the Product Sales tab. A third vocabulary, disjoint from both status and series.",
+        "tonalRamp": [
+          "oklch(16% 0.05 78)",
+          "oklch(27% 0.06 78)",
+          "oklch(39% 0.08 78)",
+          "oklch(51% 0.10 78)",
+          "oklch(63% 0.11 78)",
+          "oklch(75% 0.09 78)",
+          "oklch(87% 0.07 78)",
+          "oklch(95% 0.06 78)"
+        ]
+      },
+      "category-spain-light": {
+        "role": "tertiary",
+        "displayName": "Spain Product (light)",
+        "canonical": "oklch(47% 0.10 75)",
+        "hex": "#7A5104",
+        "note": "The light-mode counterpart.",
+        "tonalRamp": [
+          "oklch(16% 0.04 75)",
+          "oklch(27% 0.05 75)",
+          "oklch(39% 0.07 75)",
+          "oklch(51% 0.09 75)",
+          "oklch(63% 0.09 75)",
+          "oklch(75% 0.08 75)",
+          "oklch(87% 0.06 75)",
+          "oklch(95% 0.05 75)"
+        ]
+      },
+      "category-taiwan-dark": {
+        "role": "tertiary",
+        "displayName": "Taiwan Product (dark)",
+        "canonical": "oklch(73% 0.14 274)",
+        "hex": "#8C9EFF",
+        "note": "Product-origin identity, used only on the Product Sales tab. A third vocabulary, disjoint from both status and series.",
+        "tonalRamp": [
+          "oklch(16% 0.06 274)",
+          "oklch(27% 0.08 274)",
+          "oklch(39% 0.10 274)",
+          "oklch(51% 0.13 274)",
+          "oklch(63% 0.14 274)",
+          "oklch(75% 0.11 274)",
+          "oklch(87% 0.09 274)",
+          "oklch(95% 0.08 274)"
+        ]
+      },
+      "category-taiwan-light": {
+        "role": "tertiary",
+        "displayName": "Taiwan Product (light)",
+        "canonical": "oklch(46% 0.18 272)",
+        "hex": "#3B48B8",
+        "note": "The light-mode counterpart.",
+        "tonalRamp": [
+          "oklch(16% 0.07 272)",
+          "oklch(27% 0.10 272)",
+          "oklch(39% 0.13 272)",
+          "oklch(51% 0.15 272)",
+          "oklch(63% 0.17 272)",
+          "oklch(75% 0.14 272)",
+          "oklch(87% 0.11 272)",
+          "oklch(95% 0.09 272)"
+        ]
+      },
+      "category-ultravision-dark": {
+        "role": "tertiary",
+        "displayName": "Ultravision Product (dark)",
+        "canonical": "oklch(80% 0.15 144)",
+        "hex": "#7DD87D",
+        "note": "Product-origin identity, used only on the Product Sales tab. A third vocabulary, disjoint from both status and series.",
+        "tonalRamp": [
+          "oklch(16% 0.06 144)",
+          "oklch(27% 0.09 144)",
+          "oklch(39% 0.11 144)",
+          "oklch(51% 0.13 144)",
+          "oklch(63% 0.15 144)",
+          "oklch(75% 0.12 144)",
+          "oklch(87% 0.10 144)",
+          "oklch(95% 0.08 144)"
+        ]
+      },
+      "category-ultravision-light": {
+        "role": "tertiary",
+        "displayName": "Ultravision Product (light)",
+        "canonical": "oklch(48% 0.12 145)",
+        "hex": "#2C6E31",
+        "note": "The light-mode counterpart.",
+        "tonalRamp": [
+          "oklch(16% 0.05 145)",
+          "oklch(27% 0.06 145)",
+          "oklch(39% 0.08 145)",
+          "oklch(51% 0.10 145)",
+          "oklch(63% 0.11 145)",
+          "oklch(75% 0.09 145)",
+          "oklch(87% 0.07 145)",
+          "oklch(95% 0.06 145)"
+        ]
+      },
+      "category-wohlk-dark": {
+        "role": "tertiary",
+        "displayName": "Wohlk Product (dark)",
+        "canonical": "oklch(71% 0.13 353)",
+        "hex": "#E07BA8",
+        "note": "Product-origin identity, used only on the Product Sales tab. A third vocabulary, disjoint from both status and series.",
+        "tonalRamp": [
+          "oklch(16% 0.06 353)",
+          "oklch(27% 0.08 353)",
+          "oklch(39% 0.10 353)",
+          "oklch(51% 0.12 353)",
+          "oklch(63% 0.13 353)",
+          "oklch(75% 0.11 353)",
+          "oklch(87% 0.09 353)",
+          "oklch(95% 0.07 353)"
+        ]
+      },
+      "category-wohlk-light": {
+        "role": "tertiary",
+        "displayName": "Wohlk Product (light)",
+        "canonical": "oklch(48% 0.16 358)",
+        "hex": "#A02A5E",
+        "note": "The light-mode counterpart.",
+        "tonalRamp": [
+          "oklch(16% 0.07 358)",
+          "oklch(27% 0.09 358)",
+          "oklch(39% 0.11 358)",
+          "oklch(51% 0.14 358)",
+          "oklch(63% 0.15 358)",
+          "oklch(75% 0.13 358)",
+          "oklch(87% 0.10 358)",
+          "oklch(95% 0.09 358)"
+        ]
+      },
+      "category-other-dark": {
+        "role": "tertiary",
+        "displayName": "Other Product (dark)",
+        "canonical": "oklch(72% 0.03 255)",
+        "hex": "#9AA7B8",
+        "note": "Product-origin identity, used only on the Product Sales tab. A third vocabulary, disjoint from both status and series.",
+        "tonalRamp": [
+          "oklch(16% 0.01 255)",
+          "oklch(27% 0.02 255)",
+          "oklch(39% 0.02 255)",
+          "oklch(51% 0.03 255)",
+          "oklch(63% 0.03 255)",
+          "oklch(75% 0.02 255)",
+          "oklch(87% 0.02 255)",
+          "oklch(95% 0.02 255)"
+        ]
+      },
+      "category-other-light": {
+        "role": "tertiary",
+        "displayName": "Other Product (light)",
+        "canonical": "oklch(43% 0.03 247)",
+        "hex": "#44525F",
+        "note": "The light-mode counterpart.",
+        "tonalRamp": [
+          "oklch(16% 0.01 247)",
+          "oklch(27% 0.02 247)",
+          "oklch(39% 0.02 247)",
+          "oklch(51% 0.02 247)",
+          "oklch(63% 0.03 247)",
+          "oklch(75% 0.02 247)",
+          "oklch(87% 0.02 247)",
+          "oklch(95% 0.01 247)"
+        ]
       },
       "slate-bg": {
         "role": "neutral",
         "displayName": "Slate Ground",
-        "canonical": "oklch(22% 0.04 265)",
-        "note": "Default theme background. Surface hierarchy is built from tint alpha, not new hex values.",
-        "tonalRamp": ["oklch(13% 0.03 265)", "oklch(22% 0.04 265)", "oklch(31% 0.04 265)", "oklch(43% 0.04 265)", "oklch(56% 0.03 265)", "oklch(70% 0.02 265)", "oklch(85% 0.01 265)", "oklch(97% 0.005 265)"]
+        "canonical": "oklch(21% 0.04 266)",
+        "hex": "#0F172A",
+        "note": "The dark mode's background. Surface hierarchy is built from tint alpha, not new hex values: 2% card, 3% KPI, 4-5% hover, 6% border.",
+        "tonalRamp": [
+          "oklch(16% 0.02 266)",
+          "oklch(27% 0.02 266)",
+          "oklch(39% 0.03 266)",
+          "oklch(51% 0.04 266)",
+          "oklch(63% 0.04 266)",
+          "oklch(75% 0.03 266)",
+          "oklch(87% 0.03 266)",
+          "oklch(95% 0.02 266)"
+        ]
       },
       "slate-ink": {
         "role": "neutral",
         "displayName": "Slate Ink",
-        "canonical": "oklch(97% 0.005 247)",
-        "note": "Default theme foreground. Its RGB triplet (226,232,240) is the --tint every border and muted text derives from.",
-        "tonalRamp": ["oklch(20% 0.02 247)", "oklch(32% 0.02 247)", "oklch(45% 0.02 247)", "oklch(58% 0.015 247)", "oklch(70% 0.01 247)", "oklch(82% 0.01 247)", "oklch(90% 0.008 247)", "oklch(97% 0.005 247)"]
+        "canonical": "oklch(97% 0.01 248)",
+        "hex": "#F1F5F9",
+        "note": "The dark mode's foreground. Its RGB triplet (226,232,240) is the --tint every border and muted text derives from.",
+        "tonalRamp": [
+          "oklch(16% 0.00 248)",
+          "oklch(27% 0.00 248)",
+          "oklch(39% 0.00 248)",
+          "oklch(51% 0.01 248)",
+          "oklch(63% 0.01 248)",
+          "oklch(75% 0.01 248)",
+          "oklch(87% 0.00 248)",
+          "oklch(95% 0.00 248)"
+        ]
       },
       "crisp-bg": {
         "role": "neutral",
-        "displayName": "Crisp Ground",
-        "canonical": "oklch(97% 0.005 247)",
-        "note": "The strongest daylight theme. Every colour decision must be verified here as well as in Slate.",
-        "tonalRamp": ["oklch(22% 0.02 247)", "oklch(34% 0.02 247)", "oklch(47% 0.02 247)", "oklch(60% 0.015 247)", "oklch(72% 0.01 247)", "oklch(84% 0.008 247)", "oklch(92% 0.006 247)", "oklch(97% 0.005 247)"]
+        "displayName": "Light Ground",
+        "canonical": "oklch(93% 0.02 250)",
+        "hex": "#DCE9F7",
+        "note": "The daylight mode's background, keyed 'crisp' in storage but shown as 'Light'. A soft blue rather than near-white: #F1F5F9 read as glary in sun, so it was darkened and every status and series value re-verified against it.",
+        "tonalRamp": [
+          "oklch(16% 0.01 250)",
+          "oklch(27% 0.01 250)",
+          "oklch(39% 0.02 250)",
+          "oklch(51% 0.02 250)",
+          "oklch(63% 0.02 250)",
+          "oklch(75% 0.02 250)",
+          "oklch(87% 0.02 250)",
+          "oklch(95% 0.01 250)"
+        ]
       },
-      "carbon-bg": {
+      "crisp-ink": {
         "role": "neutral",
-        "displayName": "Carbon Ground",
-        "canonical": "oklch(0% 0 0)",
-        "note": "Maximum-contrast theme for the worst lighting.",
-        "tonalRamp": ["oklch(0% 0 0)", "oklch(12% 0 0)", "oklch(25% 0 0)", "oklch(38% 0 0)", "oklch(52% 0 0)", "oklch(68% 0 0)", "oklch(84% 0 0)", "oklch(100% 0 0)"]
+        "displayName": "Light Ink",
+        "canonical": "oklch(21% 0.04 266)",
+        "hex": "#0F172A",
+        "note": "The daylight mode's foreground. Its triplet (15,26,50) is the --tint on light.",
+        "tonalRamp": [
+          "oklch(16% 0.02 266)",
+          "oklch(27% 0.02 266)",
+          "oklch(39% 0.03 266)",
+          "oklch(51% 0.04 266)",
+          "oklch(63% 0.04 266)",
+          "oklch(75% 0.03 266)",
+          "oklch(87% 0.03 266)",
+          "oklch(95% 0.02 266)"
+        ]
       }
     },
     "typographyMeta": {
-      "display": { "displayName": "Display", "purpose": "The dashboard title. One per page, never larger." },
-      "headline": { "displayName": "Headline", "purpose": "Login heading and full-screen states." },
-      "title": { "displayName": "Title", "purpose": "Card and section headings. The workhorse of the interface." },
-      "body": { "displayName": "Body", "purpose": "Supporting prose and descriptions. Cap at 65-75ch." },
-      "label": { "displayName": "Label", "purpose": "Uppercase micro-labels: KPI captions and table headers." },
-      "metric": { "displayName": "Metric", "purpose": "Every comparable figure. Monospace so columns align and outliers are visible without reading." }
+      "display": {
+        "displayName": "Display",
+        "purpose": "The dashboard title. One per page, never larger."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Login heading and full-screen states."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card and section headings. The workhorse of the interface."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Supporting prose and descriptions. Cap at 65-75ch."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase micro-labels: KPI captions and table headers."
+      },
+      "metric": {
+        "displayName": "Metric",
+        "purpose": "Every comparable figure. Monospace so columns align and outliers are visible without reading."
+      }
     },
     "shadows": [
-      { "name": "overlay", "value": "0 8px 32px rgba(0,0,0,0.5)", "purpose": "Chart tooltips and transient popovers." },
-      { "name": "dialog", "value": "0 12px 40px rgba(0,0,0,0.5)", "purpose": "File preview modal and dismissable panels." },
-      { "name": "gateway", "value": "0 20px 60px rgba(0,0,0,0.5)", "purpose": "The login card only. Never on a resting surface." }
+      {
+        "name": "overlay",
+        "value": "0 8px 32px rgba(0,0,0,0.5)",
+        "purpose": "Chart tooltips and transient popovers."
+      },
+      {
+        "name": "dialog",
+        "value": "0 12px 40px rgba(0,0,0,0.5)",
+        "purpose": "File preview modal and dismissable panels."
+      },
+      {
+        "name": "gateway",
+        "value": "0 20px 60px rgba(0,0,0,0.5)",
+        "purpose": "The login card only. Never on a resting surface."
+      }
     ],
     "motion": [
-      { "name": "state", "value": "all 0.2s", "purpose": "Default for hover, focus and activation on controls." },
-      { "name": "meter", "value": "width 0.3s", "purpose": "Progress and achievement bars filling to a value." },
-      { "name": "reduced", "value": "none", "purpose": "Under prefers-reduced-motion, transitions resolve instantly. Never gate content visibility on a transition." }
+      {
+        "name": "state",
+        "value": "all 0.2s",
+        "purpose": "Default for hover, focus and activation on controls."
+      },
+      {
+        "name": "meter",
+        "value": "width 0.3s",
+        "purpose": "Progress and achievement bars filling to a value."
+      },
+      {
+        "name": "reduced",
+        "value": "none",
+        "purpose": "Under prefers-reduced-motion, transitions resolve instantly. Never gate content visibility on a transition."
+      }
     ],
     "breakpoints": [
-      { "name": "phone", "value": "375px", "purpose": "The primary judging width. Every view is verified here first." },
-      { "name": "mobile-max", "value": "768px", "purpose": "Below this: tabs become one scrolling row, grids collapse to a single column, tables scroll inside their own box." },
-      { "name": "narrow-max", "value": "1100px", "purpose": "Below this: the drill-down sidebar stacks above its content." },
-      { "name": "content-max", "value": "1280px", "purpose": "Maximum content width on desktop." }
+      {
+        "name": "phone",
+        "value": "375px",
+        "purpose": "The primary judging width. Every view is verified here first."
+      },
+      {
+        "name": "mobile-max",
+        "value": "768px",
+        "purpose": "Below this: tabs become one scrolling row, grids collapse to a single column, tables scroll inside their own box."
+      },
+      {
+        "name": "narrow-max",
+        "value": "1100px",
+        "purpose": "Below this: the drill-down sidebar stacks above its content."
+      },
+      {
+        "name": "content-max",
+        "value": "1280px",
+        "purpose": "Maximum content width on desktop."
+      }
     ]
   },
   "components": [
@@ -187,22 +808,47 @@
       "Flat, even surfaces built from hairline borders and 2-3% tint fills",
       "Monospaced figures throughout; the numbers are the interface",
       "One accent colour, used only where action is required",
-      "Five complete themes, dark and light, all first-class",
+      "Two modes — Slate (dark) and Light (soft blue, daylight) — both first-class, flipped by one toggle that follows the phone until the reader chooses",
+      "Three strictly separated colour vocabularies: status says how it is going, series says which rep, category says which product origin",
       "Phone-first: judged at 375px before any desktop view"
     ],
     "rules": [
-      { "name": "The Signal Rule", "body": "Signal Orange appears on no more than 10% of any screen, and only where the user can act or has acted. It is forbidden as decoration, as a heading colour, and as a chart fill for anything other than Alan's series.", "section": "colors" },
-      { "name": "The Two-Palette Rule", "body": "Series colours identify who; status colours report how it is going. They must never be legible as each other, and the two vocabularies are now fully disjoint — the series palette was rebuilt so no rep shares a status hue. Both are theme-aware (a dark set and a darkened light set). Any chart showing both identity and performance should still separate them by position, label, or shape as well as colour.", "section": "colors" },
-      { "name": "The Daylight Rule", "body": "The light themes are not a courtesy. Sunlight readability is a stated product requirement, so no colour decision ships until it has been checked in Crisp as well as Slate. A value that only resolves on a dark background is unfinished.", "section": "colors" },
-      { "name": "The Monospace Figures Rule", "body": "Every number a user might compare — currency, percentage, row count, date, size — is set in Space Mono. Digits then share a width, columns align without effort, and a shorter bar reads as a smaller number at a glance. Proportional digits in a data column are prohibited.", "section": "typography" },
-      { "name": "The One Family Rule", "body": "Inter carries headings, labels, buttons and body. Do not introduce a second sans; the contrast in this system comes from weight, size, and the mono/proportional split, not from a font pairing.", "section": "typography" },
-      { "name": "The Floating Rule", "body": "A shadow means 'this element is above the page and will go away.' Cards, KPI panels, tables and chart containers are page furniture; they are flat, forever. If a resting surface has a shadow, it is wrong.", "section": "elevation" }
+      {
+        "name": "The Signal Rule",
+        "section": "colors",
+        "body": "Signal Orange appears on no more than 10% of any screen, and only where the user can act or has acted. It is forbidden as decoration, as a heading colour, and as a chart fill for a salesperson's series."
+      },
+      {
+        "name": "The Two-Palette Rule",
+        "section": "colors",
+        "body": "Status colours report how a number is performing; series colours identify a rep; category colours identify a product origin. The three vocabularies are disjoint — no value in one equals a value in another, in either mode — and none may be legible as another. Any chart showing identity and performance together should still separate them by position, label, or shape as well as colour."
+      },
+      {
+        "name": "The Daylight Rule",
+        "section": "colors",
+        "body": "The light mode is not a courtesy. Sunlight readability is a stated product requirement, so no colour decision ships until it has been checked on the daylight background as well as Slate. Every status, series and category value has a verified light variant; a value that only resolves on a dark background is unfinished. This extends to translucent washes: use color-mix over a token, never a literal rgba() of a dark-mode hex."
+      },
+      {
+        "name": "The Monospace Figures Rule",
+        "section": "typography",
+        "body": "Every number a user might compare — currency, percentage, row count, date, size — is set in Space Mono. Digits then share a width, columns align without effort, and a shorter bar reads as a smaller number at a glance. Proportional digits in a data column are prohibited."
+      },
+      {
+        "name": "The One Family Rule",
+        "section": "typography",
+        "body": "Inter carries headings, labels, buttons and body. Do not introduce a second sans; the contrast in this system comes from weight, size, and the mono/proportional split, not from a font pairing."
+      },
+      {
+        "name": "The Floating Rule",
+        "section": "elevation",
+        "body": "A shadow means 'this element is above the page and will go away.' Cards, KPI panels, tables and chart containers are page furniture; they are flat, forever. If a resting surface has a shadow, it is wrong — and if a dismissable one lacks its shadow, that is wrong too."
+      }
     ],
     "dos": [
       "Do set every comparable figure in Space Mono (700 for values) so columns align and outliers are visible without reading.",
-      "Do keep Signal Orange (#E8633B) under 10% of any screen, and only where the user can act.",
+      "Do keep Signal Orange under 10% of any screen, and only where the user can act.",
       "Do pair every colour-coded state with a non-colour cue — a ▲/▼ glyph, a label, a position — so meaning survives greyscale, sunlight, and colour-vision deficiency. WCAG 2.1 AA (SC 1.4.1) is the stated bar.",
-      "Do verify every change in Crisp as well as Slate. Sunlight readability is a product requirement, not a preference.",
+      "Do verify every change on the light background as well as Slate. Sunlight readability is a product requirement, not a preference.",
       "Do build surface hierarchy from the tint ramp (2% card, 3% KPI, 4-5% hover, 6% border) rather than from new hex values.",
       "Do let tables scroll inside their own container on a phone. The page itself must never scroll sideways.",
       "Do keep transitions at 150-250ms. Users are mid-task and should not wait for choreography."
@@ -211,13 +857,14 @@
       "Don't produce a spreadsheet dump — walls of figures at uniform weight where the reader does the analysis. Rank, group, and de-emphasise on every screen.",
       "Don't drift toward heavy corporate BI (Power BI, Tableau): filter rails flanking the content, chrome competing with the numbers, or anything requiring training before a rep can read their own figures.",
       "Don't put a shadow on a resting surface. Shadows mean 'floating and dismissable' — tooltip, modal, login card. Nothing else.",
-      "Don't distinguish salespeople by colour alone in a chart. The palettes are disjoint and per-theme, but colour still needs a second channel — position, a direct label, or the year-line dash pattern.",
-      "Don't hardcode a bright status/series hex as foreground text or a chart fill. Route it through STATUS.* (charts) or var(--st-*) (CSS) so it picks up the light-theme variant; a raw dark-theme value fails contrast on Paper and Crisp.",
+      "Don't distinguish salespeople by colour alone in a chart. Colour needs a second channel — position, a direct label, or the year-line dash pattern.",
+      "Don't hardcode a bright status/series/category hex as foreground text or a chart fill. Route it through STATUS.* / tk.categories (charts) or var(--st-*) (CSS) so it picks up the light variant. Translucent washes follow the same rule: color-mix(in srgb, var(--st-accent) 15%, transparent), never a literal rgba(232,99,59,0.15), which stays orange on light no matter what the theme says.",
       "Don't reintroduce a font the interface doesn't use, or inject font <link> tags from inside React. Fonts load once from index.html (Inter / DM Sans / Space Mono only).",
       "Don't nest a card inside a card, or reach for a card when a plain section with a heading would do.",
       "Don't introduce a second sans-serif family. Contrast comes from weight, size, and the mono/proportional split.",
       "Don't add gradients, glass blurs, coloured left-edge stripes, or gradient text anywhere. This is an instrument face.",
-      "Don't celebrate. No badges, streaks, trophies or congratulation on a shortfall."
+      "Don't celebrate. No badges, streaks, trophies or congratulation on a shortfall.",
+      "Don't hand-edit this file. It is generated by scripts/build-impeccable-design.mjs from the palettes in src/; edit those and re-run."
     ]
   }
 }

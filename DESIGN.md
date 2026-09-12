@@ -7,26 +7,38 @@ colors:
   status-watch: "#F59E0B"
   status-behind: "#F87171"
   status-info: "#3B82F6"
-  status-ahead-light: "#177D58"
-  status-watch-light: "#9A6204"
-  status-behind-light: "#DD0606"
-  status-info-light: "#0662F9"
-  signal-orange-light: "#CA3C12"
+  status-ahead-light: "#157452"
+  status-watch-light: "#8F5B04"
+  status-behind-light: "#D00606"
+  status-info-light: "#065BE8"
+  signal-orange-light: "#BC3811"
   series-alan-dark: "#E28B59"
   series-dino-dark: "#6890CD"
   series-khen-dark: "#4DEDE0"
   series-sakinah-dark: "#9A3DF0"
   series-simon-dark: "#E0D046"
   series-seed-dark: "#D42F71"
-  series-alan-light: "#E06711"
+  series-alan-light: "#D56210"
   series-dino-light: "#1832C6"
-  series-khen-light: "#2A9C70"
-  series-sakinah-light: "#C259E2"
+  series-khen-light: "#28946A"
+  series-sakinah-light: "#BC56DB"
   series-simon-light: "#5C5410"
   series-seed-light: "#7C1968"
+  category-japan-dark: "#5EC8C4"
+  category-spain-dark: "#E4B363"
+  category-taiwan-dark: "#8C9EFF"
+  category-ultravision-dark: "#7DD87D"
+  category-wohlk-dark: "#E07BA8"
+  category-other-dark: "#9AA7B8"
+  category-japan-light: "#0F6F6B"
+  category-spain-light: "#7A5104"
+  category-taiwan-light: "#3B48B8"
+  category-ultravision-light: "#2C6E31"
+  category-wohlk-light: "#A02A5E"
+  category-other-light: "#44525F"
   slate-bg: "#0F172A"
   slate-ink: "#F1F5F9"
-  crisp-bg: "#F1F5F9"
+  crisp-bg: "#DCE9F7"
   crisp-ink: "#0F172A"
 typography:
   display:
@@ -156,7 +168,9 @@ The system explicitly rejects two things named in PRODUCT.md. It is not a **spre
 
 ## 2. Colors
 
-A near-monochrome surface carrying two small, strictly separated colour vocabularies: one that says *who*, one that says *how it is going*.
+A near-monochrome surface carrying three small, strictly separated colour vocabularies: one that says *how it is going*, one that says *which rep*, one that says *which product origin*.
+
+The `*-light` tokens in the frontmatter are generated from the source, not maintained by hand — run `node scripts/build-impeccable-design.mjs` after any palette change and it rewrites `.impeccable/design.json`, re-checks every contrast floor, and reports any cross-vocabulary collision.
 
 ### Primary
 - **Signal Orange** (#E8633B): The only loud colour in the system. Reserved for the active tab, the primary action button, the admin badge, and the selected filter pill. It means "this is live, or act here." Its scarcity is what makes it work — the moment it appears twice on a screen for unrelated reasons, it stops meaning anything.
@@ -171,14 +185,14 @@ The status vocabulary. These four say how a number is performing and nothing els
 ### Tertiary
 The series vocabulary. Six colours identify a salesperson in a chart and carry no judgement — and there are **two** verified sets, one per mode, because no single set can clear 3:1 on both the dark and light background at once. Forcing six colours into that shared luminance band leaves them indistinguishable under colour-blind vision; splitting frees each set to separate by lightness as well as hue. Both were solver-optimised: every colour clears 3:1 on its own background, and worst-case separation is dE ≥ 20 (normal / protanopia / deuteranopia) and ≥ 15 (tritanopia). Hues stay near each rep's original so people recognise their own.
 - **Dark mode (Slate)** — Alan #E28B59 · Dino #6890CD · Khen #4DEDE0 · Sakinah #9A3DF0 · Simon #E0D046 · Seed Malaysia #D42F71
-- **Light mode (Crisp)** — Alan #E06711 · Dino #1832C6 · Khen #2A9C70 · Sakinah #C259E2 · Simon #5C5410 · Seed Malaysia #7C1968
+- **Light mode** — Alan #D56210 · Dino #1832C6 · Khen #28946A · Sakinah #BC56DB · Simon #5C5410 · Seed Malaysia #7C1968
 
 ### Neutral
 Two modes ship — one dark, one light — each defining a background, an ink, and a tint triplet that every border, fill and muted text derives from via `rgba(var(--tint), α)`. They are chosen by a single light/dark toggle; a new reader follows the phone's `prefers-color-scheme` until they pick, and the choice is then remembered.
 - **Slate** (#0F172A bg / #F1F5F9 ink): the dark mode. Soft dark, low emission for sustained reading.
-- **Crisp** (#F1F5F9 bg / #0F172A ink): the light mode. Cool, the strongest daylight option — and a deliberate mirror of Slate, whose background is Crisp's ink and vice versa, so the pair reads as one instrument face flipped rather than two unrelated palettes.
+- **Light** (#DCE9F7 bg / #0F172A ink): the daylight mode, still keyed `crisp` in storage. It began as a near-white mirror of Slate (#F1F5F9, Slate's own ink), but that read as glary in direct sun — the exact condition the mode exists for — so the ground was darkened to a calmer blue (L≈0.80) and the tint deepened to a navy (15,26,50) so muted labels and borders hold up against it. Every status, series and category value was re-verified on this background, not the old one.
 
-Both the status and series vocabularies are mode-aware: the bright values above are the dark set, and each has a darkened light variant (see the `*-light` tokens in the frontmatter) that clears 4.5:1 on the #F1F5F9 light background while still giving white text ≥5:1 for button fills. Delivery is split by rendering context: module-level CSS reads `--st-*` custom properties on the theme wrapper; chart fills read a JS `STATUS`/`COLORS` object, because CSS `var()` does not resolve inside an SVG `fill`/`stroke` attribute.
+All three vocabularies are mode-aware: the bright values above are the dark set, and each has a darkened light variant (see the `*-light` tokens in the frontmatter). They are held to different floors because they do different jobs. **Status** and **category** values carry text, so they clear 4.5:1 on the #DCE9F7 ground — measured 4.59–4.67:1 for status, 4.86–6.51:1 for category — and white on a status fill stays ≥5.6:1 for buttons. **Series** values only ever fill a chart mark, so they are held to WCAG 1.4.11's 3:1 for non-text contrast; the tightest are Alan at 3.05:1 and Khen at 3.08:1. Do not set a series colour as small text — it will not pass. Delivery is split by rendering context: module-level CSS reads `--st-*` custom properties on the theme wrapper; chart fills read a JS `STATUS`/`COLORS` object, because CSS `var()` does not resolve inside an SVG `fill`/`stroke` attribute.
 
 Surface hierarchy inside a mode is built from the tint alone: page background at 0%, cards at 2%, KPI panels at 3%, hover states at 4–5%, borders at 6%.
 
@@ -190,7 +204,7 @@ product origins in the stacked bar and its breakdown table. It borrowed Signal
 Orange, Ahead Mint and Info Blue verbatim until it was rebuilt, which broke the
 Signal Rule (an accent chart fill and table heading) and made a *category*
 readable as a *performance state*. Like status and series it is mode-aware, and
-every value clears 4.5:1 on its own background.
+every value clears 4.5:1 on its own background (dark 6.43–10.19:1, light 4.86–6.51:1).
 - **Dark (Slate)** — Japan #5EC8C4 · Spain #E4B363 · Taiwan #8C9EFF · Ultravision #7DD87D · Wohlk #E07BA8 · Other #9AA7B8
 - **Light** — Japan #0F6F6B · Spain #7A5104 · Taiwan #3B48B8 · Ultravision #2C6E31 · Wohlk #A02A5E · Other #44525F
 
@@ -203,9 +217,9 @@ and the breakdown table's headings are muted tint with a colour swatch as the ke
 
 **The Signal Rule.** Signal Orange appears on no more than 10% of any screen, and only where the user can act or has acted. It is forbidden as decoration, as a heading colour, and as a chart fill for a salesperson's series.
 
-**The Two-Palette Rule.** Series colours identify *who*; status colours report *how it is going*. They must never be legible as each other, and the two vocabularies are now fully disjoint — the series palette was rebuilt so no rep shares a status hue. Even so, any chart showing both identity and performance should still separate them by position, label, or shape as well as colour.
+**The Two-Palette Rule.** Status colours report *how it is going*; series colours identify *which rep*; category colours identify *which product origin*. (The name predates the third vocabulary and is kept because the principle is unchanged.) None may be legible as another, and all three are fully disjoint — no value in one equals a value in another, in either mode, and `scripts/build-impeccable-design.mjs` fails loudly if that stops being true. Even so, any chart showing identity and performance together should separate them by position, label, or shape as well as colour.
 
-**The Daylight Rule.** The light mode is not a courtesy. Sunlight readability is a stated product requirement, so no colour decision ships until it has been checked in Crisp as well as Slate. Every status and series colour now has a verified light-mode variant clearing 4.5:1; a value that only resolves on a dark background is unfinished.
+**The Daylight Rule.** The light mode is not a courtesy. Sunlight readability is a stated product requirement, so no colour decision ships until it has been checked on the light ground as well as Slate. Every status, series and category colour has a verified light-mode variant at the floor its job demands (4.5:1 where it carries text, 3:1 where it only fills a mark); a value that only resolves on a dark background is unfinished. The same applies to translucent washes — `color-mix` over a token, never a literal `rgba()` of a dark-mode hex.
 
 ## 3. Typography
 
