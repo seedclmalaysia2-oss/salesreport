@@ -10,6 +10,15 @@ import { resolveScreenTheme } from "./lib/theme.js";
 // it only on the path that actually needs it.
 const loadBakedData = () => import("./data.json").then(m => m.default);
 
+// "All" is the reserved sentinel for the aggregate ("All Teams") view, so it must
+// never appear as a real salesperson scope. A stale customers_data / brand row
+// with sp="All" (left by an older sync that dumped everything into one bucket)
+// otherwise renders a bogus "All" filter pill AND double-counts every "All Teams"
+// total — it duplicates the per-rep rows, so summing all scopes counts each sale
+// twice. Drop it at the source so no view (dashboard, weekly Cust-Adj, charts)
+// ever sees it.
+const isAggScope = (sp) => String(sp || "").trim().toLowerCase() === "all";
+
 const supabaseConfigured = !!(
   import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
 );
@@ -234,7 +243,13 @@ export default function App() {
         }
 
         const withTotals = (brandSales) => {
-          const aggregated = aggregateFromRaw(customers, brandSales);
+          // Strip the "All" sentinel scope from both fact sources before
+          // aggregating, so data.summary / data.salespeople / data.brandSales
+          // carry only real reps (no bogus "All" pill, no doubled totals).
+          const aggregated = aggregateFromRaw(
+            customers.filter(r => !isAggScope(r.sp)),
+            (brandSales || []).filter(r => !isAggScope(r.sp)),
+          );
           aggregated.targets = targets.map(t => ({
             year: t.year, month: t.month, sp: t.sp, target: Number(t.target_amt),
           }));

@@ -556,8 +556,12 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
   // Make sure selectedYear is valid for the current data
   const YEARS = data.years && data.years.length ? data.years : YEARS_FALLBACK;
+  // "All" is the aggregate sentinel ("All Teams"), never a real rep — exclude any
+  // stray sp="All" scope so it can't render a redundant "All" filter pill. The
+  // live data path already strips it in App.jsx; this also covers the baked
+  // fallback and legacy data.json.
   const SALESPEOPLE = SALESPEOPLE_ORDER.filter(sp => (data.salespeople || []).includes(sp))
-    .concat((data.salespeople || []).filter(sp => !SALESPEOPLE_ORDER.includes(sp)));
+    .concat((data.salespeople || []).filter(sp => !SALESPEOPLE_ORDER.includes(sp) && sp !== "All"));
 
   useEffect(() => {
     if (!YEARS.includes(selectedYear)) {
@@ -565,7 +569,11 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
     }
   }, [data]);
 
-  const SUMMARY = data.summary || [];
+  // Guard against a stale sp="All" summary row: it doubles every "All Teams"
+  // total (aggregations sum all SUMMARY rows when selectedSP==="All", and "All"
+  // duplicates the per-rep rows). App.jsx strips it upstream; this covers the
+  // baked fallback too.
+  const SUMMARY = (data.summary || []).filter(s => s.sp !== "All");
   const TOP_CUSTOMERS = data.topCustomers || [];
   const CUSTOMERS = data.customers || [];
   const BRAND_SALES = data.brandSales || [];
@@ -1118,7 +1126,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             <div style={{fontSize:13,color:"rgba(var(--tint),0.65)",marginTop:4}}>
               {YEARS[0]} – {YEARS[YEARS.length-1]} ·{" "}
               {user?.canViewAll
-                ? `All teams · ${(data.salespeople || []).length} salespeople`
+                ? `All teams · ${SALESPEOPLE.length} salespeople`
                 : `Restricted to ${user?.sp ?? "your data"}`}
             </div>
           </div>
@@ -1246,7 +1254,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             <WeeklySalesCard
               weeklySales={data.weeklySales || []}
               invoiceFiles={data.invoiceFiles || []}
-              custSummary={data.summary || []}
+              custSummary={SUMMARY}
               targets={TARGETS}
               isAdmin={!!user?.isAdmin}
               canViewAll={!!user?.canViewAll}
