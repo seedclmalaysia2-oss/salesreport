@@ -81,19 +81,27 @@ function actionButton(variant, { active = false } = {}) {
 // so an admin can eyeball at a glance whether the freshest export has landed.
 // No expandable list — the user asked to keep this to a single line, since
 // the whole file library is one click away on the Data tab.
-function SourceFiles({ files }) {
-  const latest = [...files].sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0))[0];
-  if (!latest) return null;
-  const when = latest.uploadedAt
-    ? new Date(latest.uploadedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+// Every file feeding the board for the year on screen, newest first. Split-period
+// uploads ("… Detail 31082026.xlsx" + "… Detail 27092026.xlsx") each own some
+// months, so naming only the newest one would hide where Jan–Aug came from.
+function SourceFiles({ files, year }) {
+  const inYear = year ? files.filter(f => f.year == null || f.year === year) : files;
+  const list = [...(inYear.length ? inYear : files)].sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+  if (!list.length) return null;
+  const fmt = (ms) => ms
+    ? new Date(ms).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
     : "—";
   return (
-    <div style={{ marginTop: 6, fontSize: 11.5, color: "rgba(var(--tint),0.69)", lineHeight: 1.5, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-      <span style={{ fontWeight: 600, color: "rgba(var(--tint),0.7)" }}>Source:</span>
-      <span style={{ fontFamily: "'Space Mono',monospace", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis" }} title={latest.name}>
-        {latest.name}
+    <div style={{ marginTop: 6, fontSize: 11.5, color: "rgba(var(--tint),0.69)", lineHeight: 1.5, display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+      <span style={{ fontWeight: 600, color: "rgba(var(--tint),0.7)" }}>Source{list.length > 1 ? "s" : ""}:</span>
+      <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+        {list.map(f => (
+          <span key={f.id || f.name} style={{ minWidth: 0 }}>
+            <span style={{ fontFamily: "'Space Mono',monospace", color: "var(--text)", overflowWrap: "anywhere" }}>{f.name}</span>
+            <span style={{ color: "rgba(var(--tint),0.66)" }}> · uploaded {fmt(f.uploadedAt)}</span>
+          </span>
+        ))}
       </span>
-      <span style={{ color: "rgba(var(--tint),0.66)" }}>· uploaded {when}</span>
     </div>
   );
 }
@@ -643,7 +651,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
           {/* Source-file traceability — which archived Customer Invoice
               Listings feed the current view. Non-admins get an empty list
               from RLS, so the whole block collapses to nothing for them. */}
-          {invoiceFiles.length > 0 && <SourceFiles files={invoiceFiles} />}
+          {invoiceFiles.length > 0 && <SourceFiles files={invoiceFiles} year={activeMonth ? Number(activeMonth.slice(0, 4)) : null} />}
         </div>
         {HeaderActions}
       </div>

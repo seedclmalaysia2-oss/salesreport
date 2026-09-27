@@ -404,21 +404,28 @@ const THEMES = {
 };
 
 
-// Source-file footer (admin-only) — lists the actual filename feeding each data
-// view, newest upload per (kind, year), so a missing or wrong number on any page
-// traces straight to the file to re-upload on the Data tab.
+// Source-file footer (admin-only) — lists the actual files feeding each data
+// view, so a missing or wrong number on any page traces straight to the file to
+// re-upload on the Data tab.
+//
+// Customer and invoice (Stock Detail) files are merged month by month — each
+// calendar month comes from the newest file that has data in it (lib/periods.js)
+// — so EVERY live file for a year can be contributing and all are listed. Brand
+// files are one per salesperson and newest-wins, so just the newest per year
+// is shown to keep the footer short.
 function SourceFilesFooter({ files, isAdmin }) {
   if (!isAdmin) return null;
-  const latest = new Map(); // "kind|year" -> newest file
+  const latest = new Map(); // key -> file
   for (const f of files || []) {
     if (!f || !f.kind || !f.name) continue;
-    const key = `${f.kind}|${f.year ?? "—"}`;
+    const merged = f.kind === "customer" || f.kind === "invoice";
+    const key = merged ? `${f.kind}|${f.name}` : `${f.kind}|${f.year ?? "—"}`;
     const cur = latest.get(key);
     if (!cur || (f.uploadedAt || 0) > (cur.uploadedAt || 0)) latest.set(key, f);
   }
   const byKind = { customer: [], brand: [], invoice: [] };
   for (const f of latest.values()) if (byKind[f.kind]) byKind[f.kind].push(f);
-  for (const arr of Object.values(byKind)) arr.sort((a, b) => (b.year || 0) - (a.year || 0));
+  for (const arr of Object.values(byKind)) arr.sort((a, b) => (b.year || 0) - (a.year || 0) || (b.uploadedAt || 0) - (a.uploadedAt || 0));
 
   const LABELS = { customer: "Customer sales", brand: "Brand sales", invoice: "Weekly (invoices)" };
   const kinds = ["customer", "brand", "invoice"].filter(k => byKind[k].length);
@@ -428,7 +435,7 @@ function SourceFilesFooter({ files, isAdmin }) {
   return (
     <div style={{ marginTop: 28, padding: "18px 20px", background: "rgba(var(--tint),0.02)", border: "1px solid rgba(var(--tint),0.08)", borderRadius: 14 }}>
       <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, color: "rgba(var(--tint),0.7)", marginBottom: 14 }}>
-        Data sources · latest file per year
+        Data sources · files in use
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {kinds.map(kind => (
@@ -446,7 +453,7 @@ function SourceFilesFooter({ files, isAdmin }) {
         ))}
       </div>
       <div style={{ fontSize: 11.5, color: "rgba(var(--tint),0.7)", marginTop: 14, lineHeight: 1.55 }}>
-        Numbers off or missing on a page? Update the matching file on the <strong style={{ color: "var(--text)" }}>Data ⤴</strong> tab — the newest upload per year wins.
+        Numbers off or missing on a page? Update the matching file on the <strong style={{ color: "var(--text)" }}>Data ⤴</strong> tab. Customer and weekly figures take each month from the newest file covering it; brand figures use the newest file per salesperson and year.
       </div>
     </div>
   );

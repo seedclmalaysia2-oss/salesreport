@@ -260,6 +260,7 @@ export default function App() {
           aggregated.invoiceFiles = allFiles.filter(f => f.kind === "invoice").map(f => ({
             id: f.id,
             name: f.name,
+            year: f.year,
             uploadedAt: f.uploaded_at ? new Date(f.uploaded_at).getTime() : null,
           }));
           // Every live source file (customer / brand / invoice) with its year, so
