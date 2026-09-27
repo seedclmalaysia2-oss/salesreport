@@ -12,7 +12,7 @@ import { parseFile, parseFilename } from "./lib/parseXlsx.js";
 import {
   listFiles, uploadFile, replaceFile,
   softDeleteFile, restoreFile, purgeFile, downloadUrl,
-  reprocessAllFiles, hydrateFileRows, getFileRows,
+  hydrateFileRows, getFileRows,
 } from "./lib/files.js";
 import {
   syncWeeklyFromFiles, invoiceFilesFrom,
@@ -250,68 +250,6 @@ export default function DataTab({ data, onRefresh }) {
   const [recalculating, setRecalculating] = useState(false);
   const [lastRecalcAt, setLastRecalcAt] = useState(null);
   const [recalcSteps, setRecalcSteps] = useState({}); // { id: { status, detail } }
-
-  // Reprocess uploaded files: for every archived workbook, download the xlsx
-  // bytes from storage, re-run the parser, and write the fresh rows back into
-  // data_files.rows_json. Old uploads (from before we captured rows_json) get
-  // their rows filled in for the first time, and any file with stale/corrupt
-  // rows gets rewritten from the source of truth. Then the fact-table syncs
-  // run so the charts pick up the reprocessed data — no need to re-upload
-  // anything from disk.
-  const [reprocessing, setReprocessing] = useState(false);
-  const [reprocessProgress, setReprocessProgress] = useState(null); // { index, total, name, kind }
-  const reprocessUploaded = async () => {
-    if (!confirm(
-      "Reprocess every uploaded workbook?\n\n" +
-      "For each archived file this will re-download from storage, re-parse the " +
-      "xlsx, update the row data, then push customer/brand/invoice rows into " +
-      "the chart tables. Use this when charts are missing scopes (like the " +
-      "2026 wipe) — nothing on disk needs re-uploading."
-    )) return;
-    setReprocessing(true);
-    setError(null);
-    setNotice(null);
-    setReprocessProgress({ index: 0, total: 1, name: "loading file list…", kind: "" });
-    try {
-      // Always work from a fresh listFiles so we know the storage paths and
-      // ids match what's actually in the database right now.
-      const current = await listFiles();
-      setFiles(current);
-      const res = await reprocessAllFiles(current, (p) => setReprocessProgress(p));
-      setFiles(res.files);
-
-      // Now push everything to the fact tables so the charts update.
-      setReprocessProgress({ index: res.total, total: res.total, name: "pushing to customers_data…", kind: "sync" });
-      const cust = await syncCustomersFromFiles(res.files);
-      setReprocessProgress({ index: res.total, total: res.total, name: "pushing to brand_sales_data…", kind: "sync" });
-      const brand = await syncBrandsFromFiles(res.files);
-      let weekly = { rows: 0 };
-      if (invoiceFilesFrom(res.files).length > 0) {
-        setReprocessProgress({ index: res.total, total: res.total, name: "syncing weekly board…", kind: "sync" });
-        weekly = await syncWeeklyFromFiles(res.files);
-      }
-
-      const parts = [
-        `${res.reprocessed}/${res.total} file${res.total === 1 ? "" : "s"} reprocessed`,
-        `${cust.rows.toLocaleString()} customer rows across ${cust.scopes} scope${cust.scopes === 1 ? "" : "s"}`,
-        `${brand.rows.toLocaleString()} brand rows across ${brand.scopes} scope${brand.scopes === 1 ? "" : "s"}`,
-      ];
-      if (weekly.rows > 0) parts.push(`${weekly.weeks} weekly buckets`);
-      setNotice(`Reprocess complete · ${parts.join(" · ")}. Dashboard refreshing…`);
-      if (res.errors.length) {
-        setError(
-          `${res.errors.length} file(s) could not be reprocessed:\n${res.errors.slice(0, 5).join("\n")}` +
-          (res.errors.length > 5 ? `\n…and ${res.errors.length - 5} more` : "")
-        );
-      }
-      onRefresh?.();
-    } catch (e) {
-      setError(`Reprocess failed: ${fmtErr(e)}`);
-    } finally {
-      setReprocessing(false);
-      setReprocessProgress(null);
-    }
-  };
 
   const setStep = (id, patch) =>
     setRecalcSteps(prev => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
@@ -932,7 +870,7 @@ export default function DataTab({ data, onRefresh }) {
               Recalculate dashboard
             </div>
             <div style={{fontSize:12,color:"rgba(var(--tint),0.72)",lineHeight:1.5}}>
-              Rebuilds every chart on every tab from your uploaded files — pushes each file's saved customer, brand, and invoice rows into the customer, brand, and Weekly Sales tables, then re-fetches everything. Uses the uploaded files' saved data, <strong style={{color:"var(--text)"}}>not a re-download</strong> (that's Reprocess). A data type whose file was removed is left untouched — never wiped. Each step below turns green as it completes.
+              Rebuilds every chart on every tab from your uploaded files — pushes each file's saved customer, brand, and invoice rows into the customer, brand, and Weekly Sales tables, then re-fetches everything. Uses the uploaded files' saved data, <strong style={{color:"var(--text)"}}>not a re-download</strong>. A data type whose file was removed is left untouched — never wiped. Each step below turns green as it completes.
             </div>
           </div>
           {lastRecalcAt && !recalculating && (
@@ -1018,59 +956,6 @@ export default function DataTab({ data, onRefresh }) {
             })}
           </ol>
         )}
-      </div>
-
-      {/* Reprocess uploaded files. The workbooks are already archived in the
-          data-files bucket; this replays every one of them (download → parse →
-          update rows_json → push to fact tables) so the dashboard picks up
-          rows the DB never got the first time. This is how the missing-2026
-          scopes come back when the files ARE uploaded but the fact tables are
-          empty. Kept visually distinct from Recalculate so admins reach for it
-          only when a chart is actually missing data. */}
-      <div style={{
-        display:"flex",alignItems:"center",gap:14,flexWrap:"wrap",marginBottom:20,
-        padding:"12px 16px",borderRadius:12,
-        background:"color-mix(in srgb, var(--st-watch) 6%, transparent)",
-        border:"1px dashed color-mix(in srgb, var(--st-watch) 40%, transparent)",
-      }}>
-        <div style={{fontSize:22,lineHeight:1,flexShrink:0}} aria-hidden="true">🔁</div>
-        <div style={{flex:"1 1 260px",minWidth:0}}>
-          <div style={{fontSize:13,fontWeight:700,color:"var(--text)",marginBottom:2}}>
-            Reprocess uploaded files (recovery)
-          </div>
-          <div style={{fontSize:12,color:"rgba(var(--tint),0.72)",lineHeight:1.5}}>
-            When a chart is missing scopes despite the files being uploaded (e.g. the earlier 2026 wipe). Re-downloads every archived workbook from storage, re-parses it, and pushes fresh rows into customers_data / brand_sales_data / weekly_sales. Slower than Recalculate but self-healing — no need to re-upload from disk.
-          </div>
-          {reprocessProgress && (
-            <div style={{fontSize:11,color:"color-mix(in srgb, var(--st-watch) 90%, transparent)",marginTop:6,fontFamily:"'Space Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-              [{Math.min(reprocessProgress.index + 1, reprocessProgress.total)}/{reprocessProgress.total}] {reprocessProgress.kind ? `${reprocessProgress.kind} · ` : ""}{reprocessProgress.name}
-            </div>
-          )}
-        </div>
-        <button
-          onClick={reprocessUploaded}
-          disabled={reprocessing || recalculating}
-          style={{
-            display:"inline-flex",alignItems:"center",gap:8,
-            background: "color-mix(in srgb, var(--st-watch) 15%, transparent)",
-            color: "var(--st-watch)",
-            border: "1px solid color-mix(in srgb, var(--st-watch) 55%, transparent)",
-            borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,
-            cursor: (reprocessing || recalculating) ? "not-allowed" : "pointer",
-            fontFamily:"'DM Sans',sans-serif",whiteSpace:"nowrap",
-            opacity: (reprocessing || recalculating) ? 0.75 : 1,
-          }}>
-          {reprocessing ? (
-            <>
-              <span style={{
-                width:13,height:13,borderRadius:"50%",display:"inline-block",
-                border:"2px solid color-mix(in srgb, var(--st-watch) 35%, transparent)",borderTopColor:"var(--st-watch)",
-                animation:"seedspin 0.8s linear infinite",
-              }} />
-              Reprocessing…
-            </>
-          ) : "🔁 Reprocess uploaded files"}
-        </button>
       </div>
 
       {/* Weekly Sales sync used to have its own dedicated panel here. It was
