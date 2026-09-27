@@ -1,0 +1,552 @@
+From 39dda0fb184c7cdd0bbe89ea9bf314f036606da3 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 27 Sep 2026 11:45:56 +0800
+Subject: [PATCH] Accept date-stamped split-period uploads and merge them month
+ by month
+
+- Filenames: '<YYYY> Sales Analysis by customer <ddmmyyyy>.xlsx' (and the other
+  year-bearing exports) now accept an optional trailing date stamp.
+- Uploading a new date-stamped invoice file no longer soft-deletes every other
+  file for the year; only a same-name re-upload is superseded.
+- Customer sync, the weekly board and the HQ report take each calendar month
+  from the newest file with data in that month (lib/periods.js), so period-only
+  files add up and YTD re-exports still replace older copies.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_014WJQ332AJjo3yzuaWHzaXD
+---
+ src/DataTab.jsx         |  6 +--
+ src/ReportTab.jsx       | 24 ++++++------
+ src/lib/files.js        | 39 +++++++++---------
+ src/lib/files.test.js   | 46 ++++++----------------
+ src/lib/parseXlsx.js    | 22 +++++++----
+ src/lib/periods.js      | 87 +++++++++++++++++++++++++++++++++++++++++
+ src/lib/periods.test.js | 64 ++++++++++++++++++++++++++++++
+ src/lib/weekly.js       | 32 ++++++++++++---
+ 8 files changed, 238 insertions(+), 82 deletions(-)
+ create mode 100644 src/lib/periods.js
+ create mode 100644 src/lib/periods.test.js
+
+diff --git a/src/DataTab.jsx b/src/DataTab.jsx
+index ab19642..edb47bd 100644
+--- a/src/DataTab.jsx
++++ b/src/DataTab.jsx
+@@ -1348,8 +1348,8 @@ export default function DataTab({ data, onRefresh }) {
+           Drag <strong>.xlsx</strong> files matching one of these naming patterns:
+           <ul style={{margin:"8px 0 0",paddingLeft:18,display:"flex",flexDirection:"column",gap:4}}>
+             <li>
+-              <code style={{fontFamily:"'Space Mono',monospace",color:"var(--st-ok)",fontSize:11}}>{"<SP> <YYYY> Sales Analysis by customer.xlsx"}</code>
+-              <span style={{color:"rgba(var(--tint),0.65)"}}> — yearly customer summary</span>
++              <code style={{fontFamily:"'Space Mono',monospace",color:"var(--st-ok)",fontSize:11}}>{"<YYYY> Sales Analysis by customer [ddmmyyyy].xlsx"}</code>
++              <span style={{color:"rgba(var(--tint),0.65)"}}> — customer summary (optional SP prefix; date-stamped period files combine month by month)</span>
+             </li>
+             <li>
+               <code style={{fontFamily:"'Space Mono',monospace",color:"var(--st-alt)",fontSize:11}}>{"<SP> <YYYY> Stock Sales Analysis - Summary by Brand.xlsx"}</code>
+@@ -1357,7 +1357,7 @@ export default function DataTab({ data, onRefresh }) {
+             </li>
+             <li>
+               <code style={{fontFamily:"'Space Mono',monospace",color:"var(--st-info)",fontSize:11}}>{"Stock Sales Analysis - Detail <period>.xlsx"}</code>
+-              <span style={{color:"rgba(var(--tint),0.65)"}}> — line-level sales incl. CN/DN (feeds the weekly view; supersedes the old Customer Invoice Listing)</span>
++              <span style={{color:"rgba(var(--tint),0.65)"}}> — line-level sales incl. CN/DN (feeds the weekly view; each month comes from the newest file that covers it)</span>
+             </li>
+           </ul>
+         </div>
+diff --git a/src/ReportTab.jsx b/src/ReportTab.jsx
+index abe3f4d..ab9e22e 100644
+--- a/src/ReportTab.jsx
++++ b/src/ReportTab.jsx
+@@ -1,3 +1,4 @@
++import { mergeDatedRowsByMonth } from "./lib/periods.js";
+ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+ import { supabase } from "./lib/supabase.js";
+ import { parseFile } from "./lib/parseXlsx.js";
+@@ -73,16 +74,14 @@ async function loadStockDetailRows(year) {
+     .is("deleted_at", null)
+     .order("uploaded_at", { ascending: false });
+   if (error) throw error;
+-  // Invoice (Stock-Detail) exports are cumulative year-to-date and re-uploaded
+-  // (often daily) under date-stamped names. Summing every live copy would count
+-  // the same invoices several times, so use ONLY the newest upload for the year
+-  // — it already contains the whole year. Uploads now also supersede older
+-  // same-year invoice files, so normally there is just one; taking the newest
+-  // keeps the report correct even if an older copy is still lingering.
+-  const newest = (files || []).slice(0, 1);
+-  const all = [];
++  // Stock-Detail exports are uploaded under date-stamped names, either as full
++  // year-to-date re-exports or as split periods (e.g. Jan–Aug, then September).
++  // Parse every live file for the year, then take each calendar month from the
++  // newest file that has rows in it (lib/periods.js): a YTD re-export wins every
++  // month, a period-only file adds just its months, nothing is counted twice.
++  const parsedFiles = [];
+   const sources = [];
+-  for (const f of newest) {
++  for (const f of files || []) {
+     const { data: signed, error: se } = await supabase.storage
+       .from("data-files").createSignedUrl(f.storage_path, 300);
+     if (se) throw new Error(`${f.name}: ${se.message}`);
+@@ -90,14 +89,17 @@ async function loadStockDetailRows(year) {
+     if (!resp.ok) throw new Error(`${f.name}: download HTTP ${resp.status}`);
+     const parsed = await parseFile(new File([await resp.blob()], f.name));
+     if (parsed.ok) {
+-      all.push(...parsed.rows);
++      parsedFiles.push({
++        rows: parsed.rows,
++        uploadedAt: f.uploaded_at ? new Date(f.uploaded_at).getTime() : 0,
++      });
+       sources.push({
+         name: f.name,
+         uploadedAt: f.uploaded_at ? new Date(f.uploaded_at).getTime() : null,
+       });
+     }
+   }
+-  return { rows: all, sources };
++  return { rows: mergeDatedRowsByMonth(parsedFiles), sources };
+ }
+ 
+ export default function ReportTab({ user, data }) {
+diff --git a/src/lib/files.js b/src/lib/files.js
+index 708fd38..9313d75 100644
+--- a/src/lib/files.js
++++ b/src/lib/files.js
+@@ -9,6 +9,7 @@
+ 
+ import { supabase, fetchAll } from "./supabase.js";
+ import { aggregate, parseFile } from "./parseXlsx.js";
++import { mergeMonthlyRowsByMonth } from "./periods.js";
+ 
+ const BUCKET = "data-files";
+ 
+@@ -180,30 +181,21 @@ export async function uploadFile(file, parsed, { visibility = VISIBILITY.PRIVATE
+     throw new Error(`Saving ${file.name} failed: ${error.message}`);
+   }
+ 
+-  // Supersede the copies this upload replaces (soft-delete). Two rules:
+-  //   • Invoice files (Stock Sales Analysis - Detail / Customer Invoice Listing)
+-  //     are a fresh CUMULATIVE year-to-date export, re-uploaded — often daily —
+-  //     under a DATE-STAMPED name ("… Detail 10092026.xlsx", then
+-  //     "… 11092026.xlsx", …). The name changes every day, so a name match never
+-  //     catches yesterday's copy: they pile up, and because the HQ report sums
+-  //     every live invoice file for the year, the same invoices get counted
+-  //     several times. Supersede by (kind='invoice', year) instead — the newest
+-  //     invoice upload for a year replaces every older invoice file for that same
+-  //     year, whatever it was named. Newest timestamp wins. (This also clears a
+-  //     lingering old copy that still held an invoice a later export voided.)
+-  //   • Everything else (customer / brand / group) keeps a stable, year-bearing
+-  //     name, so the classic same-name replacement is exactly right.
++  // Supersede only an earlier upload with the SAME name (a re-upload of the
++  // same export). Date-stamped period files ("… Detail 31082026.xlsx", then
++  // "… 27092026.xlsx") all stay live: a later file may cover only the new
++  // period, so soft-deleting older same-year files used to wipe out months.
++  // Double counting is prevented downstream instead — every consumer takes each
++  // calendar month from the newest file that has data in it (lib/periods.js),
++  // so a full year-to-date re-export still overrides every older copy.
+   // Non-fatal: the new row is already saved, so a supersede hiccup just leaves a
+   // duplicate to tidy on the Data tab.
+-  let supersede = supabase
++  const supersede = supabase
+     .from("data_files")
+     .update({ deleted_at: new Date().toISOString() })
+     .is("deleted_at", null)
+-    .neq("id", data.id);
+-  supersede =
+-    row.kind === "invoice" && Number.isFinite(row.year)
+-      ? supersede.eq("kind", "invoice").eq("year", row.year)
+-      : supersede.eq("name", row.name);
++    .neq("id", data.id)
++    .eq("name", row.name);
+   const { error: supErr } = await supersede;
+   if (supErr) console.warn(`Could not supersede prior copies of ${row.name}:`, supErr.message);
+ 
+@@ -385,10 +377,15 @@ export function recomputeFromFiles(files) {
+   if (!active.length) return null;
+   const customerRows = [];
+   const brandRows = [];
++  const custGroups = new Map(); // "sp|year" -> [file], merged month by month
+   for (const f of active) {
+-    if (f.kind === "customer") customerRows.push(...f.rows);
+-    else if (f.kind === "brand") brandRows.push(...f.rows);
++    if (f.kind === "customer") {
++      const key = `${f.sp}|${f.year}`;
++      if (!custGroups.has(key)) custGroups.set(key, []);
++      custGroups.get(key).push(f);
++    } else if (f.kind === "brand") brandRows.push(...f.rows);
+   }
++  for (const grp of custGroups.values()) customerRows.push(...mergeMonthlyRowsByMonth(grp));
+   if (!customerRows.length && !brandRows.length) return null;
+   return aggregate(customerRows, brandRows);
+ }
+diff --git a/src/lib/files.test.js b/src/lib/files.test.js
+index 4a4abf3..b12e5f8 100644
+--- a/src/lib/files.test.js
++++ b/src/lib/files.test.js
+@@ -123,58 +123,36 @@ const supersede = () => {
+ const hasFilter = (rec, op, col, val) =>
+   rec.filters.some(([o, c, v]) => o === op && c === col && v === val);
+ 
+-describe("uploadFile overwrite rule → one file per year", () => {
+-  it("invoice (Stock-Detail): supersedes by (kind, year), never by name", async () => {
++describe("uploadFile overwrite rule → same-name re-uploads only", () => {
++  it("invoice (Stock-Detail): supersedes only a same-name re-upload", async () => {
+     const parsed = {
+-      file: "Stock Sales Analysis - Detail 10092026.xlsx",
++      file: "Stock Sales Analysis - Detail 31082026.xlsx",
+       kind: "invoice",
+       sp: null,
+       year: 2026,
+       rowCount: 2,
+-      rows: [{ date: "2026-09-01", invoice: "INV-1", amount: 10, sp: "Alan" }],
++      rows: [{ date: "2026-08-01", invoice: "INV-1", amount: 10, sp: "Alan" }],
+     };
+     await uploadFile(fakeFile(parsed.file), parsed);
+-
+     const s = supersede();
+-    // Scope the soft-delete to every OTHER live invoice row for the SAME year.
+-    expect(hasFilter(s, "eq", "kind", "invoice")).toBe(true);
+-    expect(hasFilter(s, "eq", "year", 2026)).toBe(true);
++    expect(hasFilter(s, "eq", "name", "Stock Sales Analysis - Detail 31082026.xlsx")).toBe(true);
+     expect(hasFilter(s, "is", "deleted_at", null)).toBe(true);
+     expect(hasFilter(s, "neq", "id", "new-id")).toBe(true);
+-    // Crucially NOT keyed on the (daily-changing) filename.
+-    expect(s.filters.some(([o, c]) => o === "eq" && c === "name")).toBe(false);
+     expect(s.patch.deleted_at).toBeTruthy();
+   });
+ 
+-  it("a differently-named next-day invoice upload still supersedes the same year", async () => {
+-    // Yesterday's copy would carry a different name; the (kind, year) match is
+-    // what catches it. Assert the filter set is name-independent and year-scoped.
++  it("a split-period invoice file does NOT wipe the earlier period's file", async () => {
++    // "… 27092026.xlsx" may hold only September; the 31082026 file (Jan–Aug)
++    // must stay live. Consumers merge month by month (periods.js) instead.
+     const parsed = {
+-      file: "Stock Sales Analysis - Detail 11092026.xlsx", // new name, same year
+-      kind: "invoice",
+-      sp: null,
+-      year: 2026,
+-      rowCount: 1,
++      file: "Stock Sales Analysis - Detail 27092026.xlsx",
++      kind: "invoice", sp: null, year: 2026, rowCount: 1,
+       rows: [{ date: "2026-09-11", invoice: "INV-9", amount: 5, sp: "Dino" }],
+     };
+     await uploadFile(fakeFile(parsed.file), parsed);
+     const s = supersede();
+-    expect(hasFilter(s, "eq", "year", 2026)).toBe(true);
+-    expect(hasFilter(s, "eq", "kind", "invoice")).toBe(true);
+-    expect(s.filters.some(([o, c]) => o === "eq" && c === "name")).toBe(false);
+-  });
+-
+-  it("invoice files of DIFFERENT years don't supersede each other", async () => {
+-    const p2025 = {
+-      file: "Stock Sales Analysis - Detail 31122025.xlsx",
+-      kind: "invoice", sp: null, year: 2025, rowCount: 1,
+-      rows: [{ date: "2025-12-31", invoice: "INV-Y", amount: 7, sp: "Khen" }],
+-    };
+-    await uploadFile(fakeFile(p2025.file), p2025);
+-    const s = supersede();
+-    // 2025 upload scopes to year 2025 only — a live 2026 file is untouched.
+-    expect(hasFilter(s, "eq", "year", 2025)).toBe(true);
+-    expect(hasFilter(s, "eq", "year", 2026)).toBe(false);
++    expect(s.filters.some(([o, c]) => o === "eq" && (c === "kind" || c === "year"))).toBe(false);
++    expect(hasFilter(s, "eq", "name", "Stock Sales Analysis - Detail 31082026.xlsx")).toBe(false);
+   });
+ 
+   it("customer file: keeps the classic same-name replacement", async () => {
+diff --git a/src/lib/parseXlsx.js b/src/lib/parseXlsx.js
+index fc53fe1..28c20a6 100644
+--- a/src/lib/parseXlsx.js
++++ b/src/lib/parseXlsx.js
+@@ -15,16 +15,22 @@ function loadXlsx() {
+ 
+ const MONTH_COLS_0 = [6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28]; // 0-indexed
+ 
+-const FNAME_RE = /^(.+?) (\d{4}) (Sales Analysis by customer|Stock Sales Analysis - Summary by [Bb]rand)\.xlsx$/i;
++// Every year-bearing export may also carry a trailing date stamp for split-period
++// uploads: "2026 Sales Analysis by customer 31082026.xlsx" (ddmmyyyy, or ddmmyy).
++// The stamp is optional and only labels the period; the year still comes from
++// the leading/trailing 4-digit year.
++const STAMP = "(?:\\s+(\\d{6}|\\d{8}))?";
++
++const FNAME_RE = new RegExp(`^(.+?) (\\d{4}) (Sales Analysis by customer|Stock Sales Analysis - Summary by [Bb]rand)${STAMP}\\.xlsx$`, "i");
+ 
+ // Year-only customer file: '2026 Sales Analysis by customer.xlsx' — no SP
+ // prefix. Introduced when ops switched to a single team-wide export per year.
+-const YEAR_ONLY_CUSTOMER_FNAME_RE = /^(\d{4}) Sales Analysis by customer\.xlsx$/i;
++const YEAR_ONLY_CUSTOMER_FNAME_RE = new RegExp(`^(\\d{4}) Sales Analysis by customer${STAMP}\\.xlsx$`, "i");
+ 
+ // Same year-only customer export with the year moved to the END:
+ // 'Sales Analysis 2026.xlsx' (optionally 'Sales Analysis by customer 2026.xlsx').
+ // The naming the ops team now uses — treated identically to the year-first form.
+-const SALES_ANALYSIS_YEAR_FNAME_RE = /^Sales Analysis(?: by customer)?\s+(\d{4})\.xlsx$/i;
++const SALES_ANALYSIS_YEAR_FNAME_RE = new RegExp(`^Sales Analysis(?: by customer)?\\s+(\\d{4})${STAMP}\\.xlsx$`, "i");
+ 
+ // The Customer Invoice Listing exports don't carry an SP or a fixed year in
+ // their filename. The convention is 'Customer Invoice Listing <suffix>.xlsx'
+@@ -42,7 +48,7 @@ const STOCK_DETAIL_FNAME_RE = /^Stock Sales Analysis - Detail\s+(.+?)\.xlsx$/i;
+ // Customer × Product-Group cross-tab: "Stock Sales Analysis - Summary <year>.xlsx"
+ // (no salesman prefix, no "by Brand"). One workbook per year; columns are Autocount
+ // Stock-Group codes, each with an Amt and a Qty sub-column.
+-const GROUP_SUMMARY_FNAME_RE = /^Stock Sales Analysis - Summary\s+(\d{4})\.xlsx$/i;
++const GROUP_SUMMARY_FNAME_RE = new RegExp(`^Stock Sales Analysis - Summary\\s+(\\d{4})${STAMP}\\.xlsx$`, "i");
+ 
+ // Brand IDs ending in FC (Free of Charge / boxes), T or TR (Trial Lens / pieces)
+ // have no revenue and must not be counted as paid sales. Filter at parse time.
+@@ -69,16 +75,16 @@ function yearFromSuffix(suffix) {
+ 
+ export function parseFilename(name) {
+   const m = name.match(FNAME_RE);
+-  if (m) return { sp: m[1].trim(), year: parseInt(m[2], 10), kind: m[3] };
++  if (m) return { sp: m[1].trim(), year: parseInt(m[2], 10), kind: m[3], periodLabel: m[4] || null };
+   const ym = name.match(YEAR_ONLY_CUSTOMER_FNAME_RE);
+   if (ym) {
+     // No SP in the filename — mark as 'All' so the ingest path stays uniform
+     // with the year-only exports the ops team now ships.
+-    return { sp: "All", year: parseInt(ym[1], 10), kind: "Sales Analysis by customer" };
++    return { sp: "All", year: parseInt(ym[1], 10), kind: "Sales Analysis by customer", periodLabel: ym[2] || null };
+   }
+   const say = name.match(SALES_ANALYSIS_YEAR_FNAME_RE);
+   if (say) {
+-    return { sp: "All", year: parseInt(say[1], 10), kind: "Sales Analysis by customer" };
++    return { sp: "All", year: parseInt(say[1], 10), kind: "Sales Analysis by customer", periodLabel: say[2] || null };
+   }
+   const im = name.match(INVOICE_FNAME_RE);
+   if (im) {
+@@ -102,7 +108,7 @@ export function parseFilename(name) {
+   }
+   const gm = name.match(GROUP_SUMMARY_FNAME_RE);
+   if (gm) {
+-    return { sp: "All", year: parseInt(gm[1], 10), kind: "Stock Sales Analysis - Summary" };
++    return { sp: "All", year: parseInt(gm[1], 10), kind: "Stock Sales Analysis - Summary", periodLabel: gm[2] || null };
+   }
+   return null;
+ }
+diff --git a/src/lib/periods.js b/src/lib/periods.js
+new file mode 100644
+index 0000000..398f950
+--- /dev/null
++++ b/src/lib/periods.js
+@@ -0,0 +1,87 @@
++// Split-period uploads: combine several files for the same year, month by month.
++//
++// Ops export the same report more than once a year under date-stamped names
++// ("… 31082026.xlsx", then "… 27092026.xlsx"). A later file may be a full
++// year-to-date re-export, or it may only cover the new period (e.g. September).
++// Keeping just the newest file loses Jan–Aug in the second case, and summing
++// every file double-counts in the first.
++//
++// The rule used everywhere instead: for each calendar month, the NEWEST file
++// that has any data in that month owns the month. A cumulative re-export owns
++// every month (so older copies drop out, including invoices it has since
++// voided), while a September-only file owns just September and Jan–Aug still
++// come from the earlier file.
++
++const byNewest = (a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0);
++
++// Month index 0–11 of an ISO "YYYY-MM-DD" date, or -1.
++export function monthOfDate(date) {
++  if (typeof date !== "string" || date.length < 7) return -1;
++  const m = parseInt(date.slice(5, 7), 10);
++  return m >= 1 && m <= 12 ? m - 1 : -1;
++}
++
++// Invoice-style rows (one row per line, each with a `date`). Returns the rows
++// to use, taking each "YYYY-MM" from the newest file that has rows in it.
++// Rows with no parseable date are kept only from the newest file.
++export function mergeDatedRowsByMonth(files) {
++  const sorted = [...(files || [])].filter((f) => Array.isArray(f?.rows)).sort(byNewest);
++  const owner = new Map(); // "YYYY-MM" -> file index
++  sorted.forEach((f, i) => {
++    for (const r of f.rows) {
++      const ym = typeof r?.date === "string" ? r.date.slice(0, 7) : "";
++      if (monthOfDate(r?.date) >= 0 && !owner.has(ym)) owner.set(ym, i);
++    }
++  });
++  const out = [];
++  sorted.forEach((f, i) => {
++    for (const r of f.rows) {
++      if (!r) continue;
++      if (monthOfDate(r.date) < 0) {
++        if (i === 0) out.push(r);
++        continue;
++      }
++      if (owner.get(r.date.slice(0, 7)) === i) out.push(r);
++    }
++  });
++  return out;
++}
++
++// Customer-style rows ({ sp, customer, months[12], total }) from files of one
++// year. Each month comes from the newest file with any non-zero value in it.
++// Returns merged rows keyed by (sp, customer), with total = sum of months.
++export function mergeMonthlyRowsByMonth(files, fallbackSp = "All") {
++  const sorted = [...(files || [])].filter((f) => Array.isArray(f?.rows)).sort(byNewest);
++  const owner = new Array(12).fill(-1);
++  sorted.forEach((f, i) => {
++    for (const r of f.rows) {
++      if (!Array.isArray(r?.months)) continue;
++      for (let m = 0; m < 12; m++) {
++        if (owner[m] < 0 && Number(r.months[m]) !== 0 && Number.isFinite(Number(r.months[m]))) {
++          owner[m] = i;
++        }
++      }
++    }
++  });
++  const merged = new Map(); // "sp|customer" -> row
++  sorted.forEach((f, i) => {
++    for (const r of f.rows) {
++      if (!r || !r.customer) continue;
++      const sp = r.sp || f.sp || fallbackSp;
++      const key = `${sp}|${r.customer}`;
++      let row = merged.get(key);
++      for (let m = 0; m < 12; m++) {
++        if (owner[m] !== i) continue;
++        const v = Number(r.months?.[m]) || 0;
++        if (!row) {
++          row = { ...r, sp, months: new Array(12).fill(0) };
++          merged.set(key, row);
++        }
++        row.months[m] += v;
++      }
++    }
++  });
++  const rows = [...merged.values()];
++  for (const r of rows) r.total = r.months.reduce((s, v) => s + v, 0);
++  return rows;
++}
+diff --git a/src/lib/periods.test.js b/src/lib/periods.test.js
+new file mode 100644
+index 0000000..cd945c7
+--- /dev/null
++++ b/src/lib/periods.test.js
+@@ -0,0 +1,64 @@
++// Split-period uploads: each calendar month comes from the newest file that has
++// data in it, so period-only files add up and YTD re-exports replace old copies.
++import { describe, it, expect } from "vitest";
++import { mergeDatedRowsByMonth, mergeMonthlyRowsByMonth } from "./periods.js";
++import { parseFilename } from "./parseXlsx.js";
++
++const m12 = (vals) => Array.from({ length: 12 }, (_, i) => vals[i] ?? 0);
++
++describe("the user's date-stamped file names are accepted", () => {
++  it.each([
++    ["2026 Sales Analysis by customer 31082026.xlsx", "Sales Analysis by customer"],
++    ["2026 Sales Analysis by customer 27092026.xlsx", "Sales Analysis by customer"],
++    ["Stock Sales Analysis - Detail 31082026.xlsx", "Stock Sales Analysis - Detail"],
++    ["Stock Sales Analysis - Detail 27092026.xlsx", "Stock Sales Analysis - Detail"],
++  ])("%s", (name, kind) => {
++    expect(parseFilename(name)).toMatchObject({ kind, year: 2026 });
++  });
++  it("undated names still work", () => {
++    expect(parseFilename("2026 Sales Analysis by customer.xlsx")).toMatchObject({ year: 2026, sp: "All" });
++    expect(parseFilename("Sales Analysis 2026 31082026.xlsx")).toMatchObject({ year: 2026 });
++  });
++});
++
++describe("mergeDatedRowsByMonth (invoice files)", () => {
++  const aug = { uploadedAt: 1, rows: [
++    { date: "2026-07-03", invoice: "A", amount: 10 },
++    { date: "2026-08-20", invoice: "B", amount: 20 },
++  ] };
++  it("split periods add up", () => {
++    const sep = { uploadedAt: 2, rows: [{ date: "2026-09-02", invoice: "C", amount: 30 }] };
++    expect(mergeDatedRowsByMonth([aug, sep]).map((r) => r.invoice).sort()).toEqual(["A", "B", "C"]);
++  });
++  it("a YTD re-export replaces every older month (no double count, voids drop)", () => {
++    const ytd = { uploadedAt: 2, rows: [
++      { date: "2026-07-03", invoice: "A", amount: 10 },
++      { date: "2026-08-21", invoice: "B2", amount: 25 }, // B voided, B2 issued
++      { date: "2026-09-02", invoice: "C", amount: 30 },
++    ] };
++    expect(mergeDatedRowsByMonth([aug, ytd]).map((r) => r.invoice).sort()).toEqual(["A", "B2", "C"]);
++  });
++});
++
++describe("mergeMonthlyRowsByMonth (customer files)", () => {
++  const aug = { sp: "All", uploadedAt: 1, rows: [
++    { sp: "Alan", customer: "X", months: m12([100, 0, 0, 0, 0, 0, 0, 50]) },
++  ] };
++  it("split periods add up", () => {
++    const sep = { sp: "All", uploadedAt: 2, rows: [
++      { sp: "Alan", customer: "X", months: m12({ 8: 70 }) },
++    ] };
++    const [row] = mergeMonthlyRowsByMonth([aug, sep]);
++    expect(row.months[0]).toBe(100);
++    expect(row.months[7]).toBe(50);
++    expect(row.months[8]).toBe(70);
++    expect(row.total).toBe(220);
++  });
++  it("a YTD re-export wins every month it covers", () => {
++    const ytd = { sp: "All", uploadedAt: 2, rows: [
++      { sp: "Alan", customer: "X", months: m12([90, 0, 0, 0, 0, 0, 0, 50, 70]) },
++    ] };
++    const [row] = mergeMonthlyRowsByMonth([aug, ytd]);
++    expect(row.total).toBe(210);
++  });
++});
+diff --git a/src/lib/weekly.js b/src/lib/weekly.js
+index 6164a8d..e04dc7a 100644
+--- a/src/lib/weekly.js
++++ b/src/lib/weekly.js
+@@ -8,6 +8,7 @@
+ // into Mon–Sun weeks per rep and upserts the totals, so one upload feeds both
+ // the file library and the weekly board.
+ 
++import { mergeDatedRowsByMonth, mergeMonthlyRowsByMonth } from "./periods.js";
+ import { supabase } from "./supabase.js";
+ 
+ // The rep rows the weekly board understands. "Seed Malaysia" is the house /
+@@ -82,12 +83,16 @@ export function invoiceFilesFrom(files) {
+ // any invoice that appears in more than one — so an invoice counts exactly once
+ // at its latest figure, on its own date. Lines with no invoice number (rare on
+ // this report) fall back to a content key so identical duplicates still merge.
++//
++// Split-period uploads: before de-duplicating, each calendar month is taken
++// from the newest file that has invoices in it (see periods.js), so a
++// September-only file adds September without dropping Jan–Aug, and a full
++// year-to-date re-export still replaces every older copy.
+ export function dedupeInvoiceUnits(files) {
+-  const invoiceFiles = [...invoiceFilesFrom(files)].sort(
+-    (a, b) => (a.uploadedAt || 0) - (b.uploadedAt || 0) // oldest first; newest overwrites
+-  );
++  const invoiceFiles = invoiceFilesFrom(files);
++  const monthRows = mergeDatedRowsByMonth(invoiceFiles);
+   const units = new Map(); // key -> { date, sp, amount }
+-  for (const f of invoiceFiles) {
++  for (const f of [{ rows: monthRows }]) {
+     // Fold this one file first, so an invoice's multiple lines sum together
+     // before it competes with the same invoice in another file.
+     const perFile = new Map();
+@@ -204,6 +209,23 @@ function latestFilePerScope(files, kind) {
+   return [...winners.values()];
+ }
+ 
++// Customer files for the same (sp, year) are combined month by month rather
++// than newest-file-wins, so split-period exports ("2026 Sales Analysis by
++// customer 31082026.xlsx" then "… 27092026.xlsx") add up instead of the later
++// one wiping out the earlier months. Returns one synthetic file per scope.
++function mergedCustomerFilesPerScope(files) {
++  const groups = new Map(); // "sp|year" -> [file]
++  for (const f of eligibleFactFiles(files, "customer")) {
++    const key = `${f.sp}|${f.year}`;
++    if (!groups.has(key)) groups.set(key, []);
++    groups.get(key).push(f);
++  }
++  return [...groups.values()].map((grp) => {
++    const newest = grp.reduce((a, b) => ((b.uploadedAt || 0) > (a.uploadedAt || 0) ? b : a));
++    return { ...newest, rows: mergeMonthlyRowsByMonth(grp, newest.sp || "All") };
++  });
++}
++
+ // Replay every "latest per (sp, year)" customer file into customers_data via
+ // the replace_customers_data RPC. The RPC does DELETE-then-INSERT atomically
+ // as SECURITY DEFINER, matches sp case- and whitespace-insensitively (so
+@@ -215,7 +237,7 @@ function latestFilePerScope(files, kind) {
+ // so we never even call the RPC for them, and the checklist reports how many
+ // files were skipped so the admin sees the coverage gap.
+ export async function syncCustomersFromFiles(files) {
+-  const winners = latestFilePerScope(files, "customer");
++  const winners = mergedCustomerFilesPerScope(files);
+   if (!winners.length) {
+     return { files: 0, scopes: 0, rows: 0, scopeLabels: [], skipped: [] };
+   }
+-- 
+2.43.0
+
