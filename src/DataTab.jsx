@@ -1348,8 +1348,8 @@ export default function DataTab({ data, onRefresh }) {
           Drag <strong>.xlsx</strong> files matching one of these naming patterns:
           <ul style={{margin:"8px 0 0",paddingLeft:18,display:"flex",flexDirection:"column",gap:4}}>
             <li>
-              <code style={{fontFamily:"'Space Mono',monospace",color:"var(--st-ok)",fontSize:11}}>{"<SP> <YYYY> Sales Analysis by customer.xlsx"}</code>
-              <span style={{color:"rgba(var(--tint),0.65)"}}> — yearly customer summary</span>
+              <code style={{fontFamily:"'Space Mono',monospace",color:"var(--st-ok)",fontSize:11}}>{"<YYYY> Sales Analysis by customer [ddmmyyyy].xlsx"}</code>
+              <span style={{color:"rgba(var(--tint),0.65)"}}> — customer summary (optional SP prefix; date-stamped period files combine month by month)</span>
             </li>
             <li>
               <code style={{fontFamily:"'Space Mono',monospace",color:"var(--st-alt)",fontSize:11}}>{"<SP> <YYYY> Stock Sales Analysis - Summary by Brand.xlsx"}</code>
@@ -1357,7 +1357,7 @@ export default function DataTab({ data, onRefresh }) {
             </li>
             <li>
               <code style={{fontFamily:"'Space Mono',monospace",color:"var(--st-info)",fontSize:11}}>{"Stock Sales Analysis - Detail <period>.xlsx"}</code>
-              <span style={{color:"rgba(var(--tint),0.65)"}}> — line-level sales incl. CN/DN (feeds the weekly view; supersedes the old Customer Invoice Listing)</span>
+              <span style={{color:"rgba(var(--tint),0.65)"}}> — line-level sales incl. CN/DN (feeds the weekly view; each month comes from the newest file that covers it)</span>
             </li>
           </ul>
         </div>

@@ -1,3 +1,4 @@
+import { mergeDatedRowsByMonth } from "./lib/periods.js";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./lib/supabase.js";
 import { parseFile } from "./lib/parseXlsx.js";
@@ -73,16 +74,14 @@ async function loadStockDetailRows(year) {
     .is("deleted_at", null)
     .order("uploaded_at", { ascending: false });
   if (error) throw error;
-  // Invoice (Stock-Detail) exports are cumulative year-to-date and re-uploaded
-  // (often daily) under date-stamped names. Summing every live copy would count
-  // the same invoices several times, so use ONLY the newest upload for the year
-  // — it already contains the whole year. Uploads now also supersede older
-  // same-year invoice files, so normally there is just one; taking the newest
-  // keeps the report correct even if an older copy is still lingering.
-  const newest = (files || []).slice(0, 1);
-  const all = [];
+  // Stock-Detail exports are uploaded under date-stamped names, either as full
+  // year-to-date re-exports or as split periods (e.g. Jan–Aug, then September).
+  // Parse every live file for the year, then take each calendar month from the
+  // newest file that has rows in it (lib/periods.js): a YTD re-export wins every
+  // month, a period-only file adds just its months, nothing is counted twice.
+  const parsedFiles = [];
   const sources = [];
-  for (const f of newest) {
+  for (const f of files || []) {
     const { data: signed, error: se } = await supabase.storage
       .from("data-files").createSignedUrl(f.storage_path, 300);
     if (se) throw new Error(`${f.name}: ${se.message}`);
@@ -90,14 +89,17 @@ async function loadStockDetailRows(year) {
     if (!resp.ok) throw new Error(`${f.name}: download HTTP ${resp.status}`);
     const parsed = await parseFile(new File([await resp.blob()], f.name));
     if (parsed.ok) {
-      all.push(...parsed.rows);
+      parsedFiles.push({
+        rows: parsed.rows,
+        uploadedAt: f.uploaded_at ? new Date(f.uploaded_at).getTime() : 0,
+      });
       sources.push({
         name: f.name,
         uploadedAt: f.uploaded_at ? new Date(f.uploaded_at).getTime() : null,
       });
     }
   }
-  return { rows: all, sources };
+  return { rows: mergeDatedRowsByMonth(parsedFiles), sources };
 }
 
 export default function ReportTab({ user, data }) {

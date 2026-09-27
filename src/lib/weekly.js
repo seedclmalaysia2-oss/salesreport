@@ -8,6 +8,7 @@
 // into Mon–Sun weeks per rep and upserts the totals, so one upload feeds both
 // the file library and the weekly board.
 
+import { mergeDatedRowsByMonth, mergeMonthlyRowsByMonth } from "./periods.js";
 import { supabase } from "./supabase.js";
 
 // The rep rows the weekly board understands. "Seed Malaysia" is the house /
@@ -82,12 +83,16 @@ export function invoiceFilesFrom(files) {
 // any invoice that appears in more than one — so an invoice counts exactly once
 // at its latest figure, on its own date. Lines with no invoice number (rare on
 // this report) fall back to a content key so identical duplicates still merge.
+//
+// Split-period uploads: before de-duplicating, each calendar month is taken
+// from the newest file that has invoices in it (see periods.js), so a
+// September-only file adds September without dropping Jan–Aug, and a full
+// year-to-date re-export still replaces every older copy.
 export function dedupeInvoiceUnits(files) {
-  const invoiceFiles = [...invoiceFilesFrom(files)].sort(
-    (a, b) => (a.uploadedAt || 0) - (b.uploadedAt || 0) // oldest first; newest overwrites
-  );
+  const invoiceFiles = invoiceFilesFrom(files);
+  const monthRows = mergeDatedRowsByMonth(invoiceFiles);
   const units = new Map(); // key -> { date, sp, amount }
-  for (const f of invoiceFiles) {
+  for (const f of [{ rows: monthRows }]) {
     // Fold this one file first, so an invoice's multiple lines sum together
     // before it competes with the same invoice in another file.
     const perFile = new Map();
@@ -204,6 +209,23 @@ function latestFilePerScope(files, kind) {
   return [...winners.values()];
 }
 
+// Customer files for the same (sp, year) are combined month by month rather
+// than newest-file-wins, so split-period exports ("2026 Sales Analysis by
+// customer 31082026.xlsx" then "… 27092026.xlsx") add up instead of the later
+// one wiping out the earlier months. Returns one synthetic file per scope.
+function mergedCustomerFilesPerScope(files) {
+  const groups = new Map(); // "sp|year" -> [file]
+  for (const f of eligibleFactFiles(files, "customer")) {
+    const key = `${f.sp}|${f.year}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(f);
+  }
+  return [...groups.values()].map((grp) => {
+    const newest = grp.reduce((a, b) => ((b.uploadedAt || 0) > (a.uploadedAt || 0) ? b : a));
+    return { ...newest, rows: mergeMonthlyRowsByMonth(grp, newest.sp || "All") };
+  });
+}
+
 // Replay every "latest per (sp, year)" customer file into customers_data via
 // the replace_customers_data RPC. The RPC does DELETE-then-INSERT atomically
 // as SECURITY DEFINER, matches sp case- and whitespace-insensitively (so
@@ -215,7 +237,7 @@ function latestFilePerScope(files, kind) {
 // so we never even call the RPC for them, and the checklist reports how many
 // files were skipped so the admin sees the coverage gap.
 export async function syncCustomersFromFiles(files) {
-  const winners = latestFilePerScope(files, "customer");
+  const winners = mergedCustomerFilesPerScope(files);
   if (!winners.length) {
     return { files: 0, scopes: 0, rows: 0, scopeLabels: [], skipped: [] };
   }

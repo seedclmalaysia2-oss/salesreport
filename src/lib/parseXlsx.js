@@ -15,16 +15,22 @@ function loadXlsx() {
 
 const MONTH_COLS_0 = [6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28]; // 0-indexed
 
-const FNAME_RE = /^(.+?) (\d{4}) (Sales Analysis by customer|Stock Sales Analysis - Summary by [Bb]rand)\.xlsx$/i;
+// Every year-bearing export may also carry a trailing date stamp for split-period
+// uploads: "2026 Sales Analysis by customer 31082026.xlsx" (ddmmyyyy, or ddmmyy).
+// The stamp is optional and only labels the period; the year still comes from
+// the leading/trailing 4-digit year.
+const STAMP = "(?:\\s+(\\d{6}|\\d{8}))?";
+
+const FNAME_RE = new RegExp(`^(.+?) (\\d{4}) (Sales Analysis by customer|Stock Sales Analysis - Summary by [Bb]rand)${STAMP}\\.xlsx$`, "i");
 
 // Year-only customer file: '2026 Sales Analysis by customer.xlsx' — no SP
 // prefix. Introduced when ops switched to a single team-wide export per year.
-const YEAR_ONLY_CUSTOMER_FNAME_RE = /^(\d{4}) Sales Analysis by customer\.xlsx$/i;
+const YEAR_ONLY_CUSTOMER_FNAME_RE = new RegExp(`^(\\d{4}) Sales Analysis by customer${STAMP}\\.xlsx$`, "i");
 
 // Same year-only customer export with the year moved to the END:
 // 'Sales Analysis 2026.xlsx' (optionally 'Sales Analysis by customer 2026.xlsx').
 // The naming the ops team now uses — treated identically to the year-first form.
-const SALES_ANALYSIS_YEAR_FNAME_RE = /^Sales Analysis(?: by customer)?\s+(\d{4})\.xlsx$/i;
+const SALES_ANALYSIS_YEAR_FNAME_RE = new RegExp(`^Sales Analysis(?: by customer)?\\s+(\\d{4})${STAMP}\\.xlsx$`, "i");
 
 // The Customer Invoice Listing exports don't carry an SP or a fixed year in
 // their filename. The convention is 'Customer Invoice Listing <suffix>.xlsx'
@@ -42,7 +48,7 @@ const STOCK_DETAIL_FNAME_RE = /^Stock Sales Analysis - Detail\s+(.+?)\.xlsx$/i;
 // Customer × Product-Group cross-tab: "Stock Sales Analysis - Summary <year>.xlsx"
 // (no salesman prefix, no "by Brand"). One workbook per year; columns are Autocount
 // Stock-Group codes, each with an Amt and a Qty sub-column.
-const GROUP_SUMMARY_FNAME_RE = /^Stock Sales Analysis - Summary\s+(\d{4})\.xlsx$/i;
+const GROUP_SUMMARY_FNAME_RE = new RegExp(`^Stock Sales Analysis - Summary\\s+(\\d{4})${STAMP}\\.xlsx$`, "i");
 
 // Brand IDs ending in FC (Free of Charge / boxes), T or TR (Trial Lens / pieces)
 // have no revenue and must not be counted as paid sales. Filter at parse time.
@@ -69,16 +75,16 @@ function yearFromSuffix(suffix) {
 
 export function parseFilename(name) {
   const m = name.match(FNAME_RE);
-  if (m) return { sp: m[1].trim(), year: parseInt(m[2], 10), kind: m[3] };
+  if (m) return { sp: m[1].trim(), year: parseInt(m[2], 10), kind: m[3], periodLabel: m[4] || null };
   const ym = name.match(YEAR_ONLY_CUSTOMER_FNAME_RE);
   if (ym) {
     // No SP in the filename — mark as 'All' so the ingest path stays uniform
     // with the year-only exports the ops team now ships.
-    return { sp: "All", year: parseInt(ym[1], 10), kind: "Sales Analysis by customer" };
+    return { sp: "All", year: parseInt(ym[1], 10), kind: "Sales Analysis by customer", periodLabel: ym[2] || null };
   }
   const say = name.match(SALES_ANALYSIS_YEAR_FNAME_RE);
   if (say) {
-    return { sp: "All", year: parseInt(say[1], 10), kind: "Sales Analysis by customer" };
+    return { sp: "All", year: parseInt(say[1], 10), kind: "Sales Analysis by customer", periodLabel: say[2] || null };
   }
   const im = name.match(INVOICE_FNAME_RE);
   if (im) {
@@ -102,7 +108,7 @@ export function parseFilename(name) {
   }
   const gm = name.match(GROUP_SUMMARY_FNAME_RE);
   if (gm) {
-    return { sp: "All", year: parseInt(gm[1], 10), kind: "Stock Sales Analysis - Summary" };
+    return { sp: "All", year: parseInt(gm[1], 10), kind: "Stock Sales Analysis - Summary", periodLabel: gm[2] || null };
   }
   return null;
 }
