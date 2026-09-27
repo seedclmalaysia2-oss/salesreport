@@ -3,7 +3,10 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  server: { host: 'localhost', port: 5173, strictPort: false },
+  // Fixed to 5200 (NOT 5173 — that port belongs to the seedclportal dev
+  // server). strictPort: true so this fails loudly if 5200 is taken instead
+  // of silently wandering onto another project's port, e.g. reclaiming 5173.
+  server: { host: 'localhost', port: 5200, strictPort: true },
   // Vitest. Runs in the Node environment because the units under test are pure
   // data logic (weekly bucketing, dedupe, fact-table sync) with Supabase mocked
   // — no DOM needed. `npm test` runs once; `npm run test:watch` re-runs on save.
