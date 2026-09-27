@@ -393,35 +393,16 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
     }
   }, [latestMonthKey, selectedMonth, periodsByMonth]);
 
-  // Monthly targets for the selected month — one per scope, because the two
-  // columns do not share a denominator.
-  //
-  // Both columns used to be handed the company-wide `_TEAM` target. That made
-  // the Retail column meaningless: Alan + Dino + Khen's actual was measured
-  // against a number that also covers Simon, Sakinah, Seed Malaysia and Wani,
-  // so the trio could hit their own target in full and still show well under
-  // 100%. The percentage, the progress bar, the "left to hit target" line and
-  // all three floor figures were understated by whatever the rest of the
-  // company is expected to bring in.
-  //
-  // The retail denominator is the sum of the per-rep target rows for the trio.
-  // Those rows already exist and are what the Dashboard's own per-rep views use
-  // (TARGETS filtered by sp). If none are set for this month we fall back to the
-  // team target, which is the old behaviour — wrong, but no worse than before,
-  // and better than showing "No monthly target set" on a card that had one.
-  const { monthlyTarget, retailTarget } = useMemo(() => {
-    if (!activeMonth || !targets) return { monthlyTarget: 0, retailTarget: 0 };
+  // The company-wide `_TEAM` target for the selected month. Both columns are
+  // measured against it — including Retail (Alan + Dino + Khen) — because that
+  // is how HQ's weekly report reads: retail's share of the company target, not
+  // retail against its own per-rep sum. (A per-rep retail denominator was tried
+  // in e031e00 and reverted at HQ's request.)
+  const monthlyTarget = useMemo(() => {
+    if (!activeMonth || !targets) return 0;
     const [year, month] = activeMonth.split("-").map(Number);
-    const inMonth = targets.filter(t => t.year === year && t.month === month);
-    const team = inMonth.find(t => t.sp === "_TEAM");
-    const teamTargetAmt = team ? Number(team.target) || 0 : 0;
-    const retailSum = inMonth
-      .filter(t => RETAIL_TEAM.includes(t.sp))
-      .reduce((a, t) => a + (Number(t.target) || 0), 0);
-    return {
-      monthlyTarget: teamTargetAmt,
-      retailTarget: retailSum > 0 ? retailSum : teamTargetAmt,
-    };
+    const team = targets.find(t => t.year === year && t.month === month && t.sp === "_TEAM");
+    return team ? Number(team.target) || 0 : 0;
   }, [activeMonth, targets]);
 
   // ---- Cust Adj: reconcile the weekly board to the Sales Analysis grand total ----
@@ -801,7 +782,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
           subtitle="Alan + Dino + Khen"
           accentColor="var(--st-info)"
           total={teamTotal}
-          target={retailTarget}
+          target={monthlyTarget}
           rows={teamRows}
           period={periodLabel}
         />
