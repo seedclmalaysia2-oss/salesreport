@@ -411,20 +411,40 @@ const THEMES = {
 // Customer and invoice (Stock Detail) files are merged month by month — each
 // calendar month comes from the newest file that has data in it (lib/periods.js)
 // — so EVERY live file for a year can be contributing and all are listed. Brand
-// files are one per salesperson and newest-wins, so just the newest per year
-// is shown to keep the footer short.
+// files are one per salesperson (newest-wins per rep and year), so they are
+// summarised as one line per year naming every rep, to keep the footer short.
 function SourceFilesFooter({ files, isAdmin }) {
   if (!isAdmin) return null;
-  const latest = new Map(); // key -> file
+  // Customer / invoice: one entry per live file. Brand: one entry per year that
+  // summarises the newest file per salesperson (they are one-per-rep files, and
+  // listing a single rep's file made it look like only that rep was used).
+  const byName = new Map();
+  const brandByYear = new Map(); // year -> Map(sp -> newest file)
   for (const f of files || []) {
     if (!f || !f.kind || !f.name) continue;
-    const merged = f.kind === "customer" || f.kind === "invoice";
-    const key = merged ? `${f.kind}|${f.name}` : `${f.kind}|${f.year ?? "—"}`;
-    const cur = latest.get(key);
-    if (!cur || (f.uploadedAt || 0) > (cur.uploadedAt || 0)) latest.set(key, f);
+    if (f.kind === "brand") {
+      const y = f.year ?? "—";
+      if (!brandByYear.has(y)) brandByYear.set(y, new Map());
+      const reps = brandByYear.get(y);
+      const sp = f.sp || f.name;
+      const cur = reps.get(sp);
+      if (!cur || (f.uploadedAt || 0) > (cur.uploadedAt || 0)) reps.set(sp, f);
+    } else {
+      byName.set(`${f.kind}|${f.name}`, f);
+    }
   }
   const byKind = { customer: [], brand: [], invoice: [] };
-  for (const f of latest.values()) if (byKind[f.kind]) byKind[f.kind].push(f);
+  for (const f of byName.values()) if (byKind[f.kind]) byKind[f.kind].push(f);
+  for (const [year, reps] of brandByYear) {
+    const list = [...reps.values()];
+    const sps = [...reps.keys()].sort((a, b) => a.localeCompare(b));
+    byKind.brand.push({
+      year: year === "—" ? null : year,
+      name: `${year} · ${list.length} salesperson file${list.length === 1 ? "" : "s"} (${sps.join(", ")})`,
+      uploadedAt: Math.max(...list.map(f => f.uploadedAt || 0)) || null,
+      summary: true,
+    });
+  }
   for (const arr of Object.values(byKind)) arr.sort((a, b) => (b.year || 0) - (a.year || 0) || (b.uploadedAt || 0) - (a.uploadedAt || 0));
 
   const LABELS = { customer: "Customer sales", brand: "Brand sales", invoice: "Weekly (invoices)" };
@@ -444,8 +464,8 @@ function SourceFilesFooter({ files, isAdmin }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               {byKind[kind].map(f => (
                 <div key={f.name} style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", fontSize: 12, lineHeight: 1.4 }}>
-                  <span style={{ fontFamily: "'Space Mono',monospace", color: "var(--text)", wordBreak: "break-word" }}>{f.name}</span>
-                  <span style={{ fontSize: 11, color: "rgba(var(--tint),0.7)", whiteSpace: "nowrap" }}>· uploaded {fmtDate(f.uploadedAt)}</span>
+                  <span style={{ fontFamily: f.summary ? "inherit" : "'Space Mono',monospace", color: "var(--text)", wordBreak: "break-word" }}>{f.name}</span>
+                  <span style={{ fontSize: 11, color: "rgba(var(--tint),0.7)", whiteSpace: "nowrap" }}>· {f.summary ? "newest uploaded" : "uploaded"} {fmtDate(f.uploadedAt)}</span>
                 </div>
               ))}
             </div>
