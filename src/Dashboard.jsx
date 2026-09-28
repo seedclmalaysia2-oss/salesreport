@@ -1158,6 +1158,34 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             </div>
           </div>
           <div style={{display:"flex",alignItems:"flex-start",gap:14,flexWrap:"wrap"}}>
+            {/* Back to the SEED CL HUB portal home — same tab, it's the parent site. */}
+            <a
+              href="https://seedclmalaysiastore.com"
+              title="Back to SEED CL HUB home"
+              style={{
+                background:"rgba(var(--tint),0.05)",
+                border:"1px solid rgba(var(--tint),0.12)",
+                color:"var(--text)",
+                borderRadius:20,
+                padding:"6px 14px",
+                fontSize:13,
+                fontWeight:600,
+                textDecoration:"none",
+                fontFamily:"'Inter',sans-serif",
+                display:"flex",
+                alignItems:"center",
+                gap:8,
+                whiteSpace:"nowrap",
+                transition:"background 200ms",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(var(--tint),0.09)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(var(--tint),0.05)"; }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 10.5 12 3l9 7.5" />
+                <path d="M5 9.5V21h14V9.5" />
+              </svg>
+              SEED CL HUB
+            </a>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
               {YEARS.map(y => <Pill key={y} label={y} active={y===selectedYear} onClick={()=>setSelectedYear(y)} />)}
             </div>
