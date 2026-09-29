@@ -865,7 +865,17 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
   const teamTotal = teamRows.reduce((a, b) => a + b.amount, 0);
   const allTotal = allRows.reduce((a, b) => a + b.amount, 0);
   const rangeStart = isMonthView ? monthAgg.firstStart : latestPeriod.start;
-  const rangeEnd = isMonthView ? monthAgg.lastEnd : latestPeriod.end;
+  // The last calendar week runs to the month end (e.g. 30 Sep), but a
+  // month-to-date (or an in-progress week) must never display a date past today
+  // — showing "1 Sep – 30 Sep" on the 29th claims data that doesn't exist yet.
+  // Pull the end back to today ONLY when the period boundary is in the future;
+  // a complete past month keeps its real end (min never drops below the start).
+  const rawEnd = isMonthView ? monthAgg.lastEnd : latestPeriod.end;
+  const todayIso = (() => {
+    const d = new Date(), p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  })();
+  const rangeEnd = rawEnd && rawEnd > todayIso && todayIso >= rangeStart ? todayIso : rawEnd;
   const periodLabel = `${fmtDay(rangeStart)} – ${fmtDay(rangeEnd)}`;
   const headerUploadedAt = isMonthView ? monthAgg.uploadedAt : latestPeriod.uploadedAt;
   const monthName = new Date((rangeEnd || latestPeriod.end) + "T00:00:00").toLocaleString("en-US", { month: "long", year: "numeric" });
