@@ -93,7 +93,37 @@ In the Vercel dashboard, link this repo to the existing `salesdashboard` project
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
-These are the only two needed by the production build. The service_role key stays on your local machine for seeding; do **not** put it in Vercel.
+These two are all the **browser build** needs. The service_role key stays off the browser build — but see the push-notifications section below, which adds a server-side function that *does* need it (safely, server-only).
+
+## 7. Weekly push notifications (optional)
+
+An MT4-style push alert to each rep's phone. The dashboard is an installable app (PWA); a serverless function (`api/send-push.js`) sends the pushes with VAPID. To switch it on:
+
+**a. Apply the table.** In Supabase Studio → SQL Editor, run [supabase/migrations/0020_push_subscriptions.sql](supabase/migrations/0020_push_subscriptions.sql).
+
+**b. Generate VAPID keys** (the Web Push signing keys) — run once:
+
+```
+node scripts/gen-vapid.mjs
+```
+
+**c. Add env vars in Vercel** (Settings → Environment Variables, Production + Preview):
+
+- `VITE_VAPID_PUBLIC_KEY` — the public key it printed (safe to expose; ships in the browser)
+- `VAPID_PRIVATE_KEY` — the private key (**secret** — function only)
+- `VAPID_SUBJECT` — `mailto:ac@seed-malaysia.com`
+- `SUPABASE_SERVICE_ROLE_KEY` — the service_role key. The function reads subscriptions and checks admin with it. This is **safe**: env vars without a `VITE_` prefix are never sent to the browser — only the serverless function sees it. (This is the one place the service_role key belongs in Vercel.)
+- `SUPABASE_URL` — the project URL (or the function falls back to `VITE_SUPABASE_URL` if that's set).
+
+Put the same three VAPID values in your local `.env` too, to test locally. Then **redeploy**.
+
+**d. Each rep enables it on their phone** (one time): open the site, then —
+- **iPhone:** Share → *Add to Home Screen*, open the app from the Home Screen, then tap **🔔 Enable alerts** on the weekly board. (iOS only allows push for installed sites — there's no way around this.)
+- **Android / desktop Chrome:** just tap **🔔 Enable alerts** → *Allow*.
+
+**e. Send it.** Admin → Overview → the weekly board → **📋 Share** → **🔔 Send as push alert to the team**. It goes only to reps who enabled alerts. (An automatic weekly schedule via Vercel Cron is a planned phase 2 — the function already accepts a `CRON_SECRET` header for it.)
+
+If nobody gets a push: check the three VAPID env vars and the service_role key are set in Vercel and you've redeployed since; confirm the rep tapped Allow (and, on iPhone, installed to Home Screen first); the ⚠ on the weekly board means the *data* is stale, unrelated to push.
 
 ## How access control works
 

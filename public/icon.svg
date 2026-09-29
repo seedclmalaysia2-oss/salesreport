@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Maskable-safe: key content stays within the central 80% safe zone. -->
+  <rect width="512" height="512" rx="112" fill="#0F172A"/>
+  <g transform="translate(136 150)">
+    <!-- three ascending bars in Signal Orange — the "weekly sales" mark -->
+    <rect x="0"   y="132" width="56" height="80"  rx="10" fill="#E8633B"/>
+    <rect x="92"  y="72"  width="56" height="140" rx="10" fill="#E8633B"/>
+    <rect x="184" y="0"   width="56" height="212" rx="10" fill="#F59E0B"/>
+  </g>
+</svg>

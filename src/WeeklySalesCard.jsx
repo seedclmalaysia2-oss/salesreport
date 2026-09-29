@@ -8,6 +8,8 @@ import { supabase } from "./lib/supabase.js";
 // files before reloading — a focused, weekly-only sync (the full customer/brand
 // recalc lives on the Data tab's "Recalculate now").
 import { weekBounds, REP_ORDER, syncWeeklyFromFiles } from "./lib/weekly.js";
+import WeeklyAlertsButton from "./WeeklyAlerts.jsx";
+import { sendWeeklyPush, pushConfigured } from "./lib/push.js";
 
 // Retail Sales Team = the three reps who count toward the "Sales Team" column.
 // Everyone else only contributes to the "Seed Malaysia" total.
@@ -273,13 +275,34 @@ function buildWeeklyShareText(summary) {
   return lines.join("\n");
 }
 
-function WeeklyShareModal({ summary, seriesColors, onClose }) {
+function WeeklyShareModal({ summary, seriesColors, isAdmin, onClose }) {
   const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
   const text = buildWeeklyShareText(summary);
   const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState(null); // { ok, msg }
   const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
   const cardRef = useRef(null);
   const textRef = useRef(null);
+
+  // Admin: push the summary to every subscribed device (the "Send now" path).
+  const sendPush = async () => {
+    setSending(true);
+    setSendResult(null);
+    try {
+      const r = await sendWeeklyPush({ title: `SEED Weekly Sales — ${summary.monthName}`, body: text, url: "/" });
+      setSendResult({
+        ok: true,
+        msg: r.sent > 0
+          ? `Sent to ${r.sent} device${r.sent === 1 ? "" : "s"}${r.pruned ? `, ${r.pruned} expired removed` : ""}${r.failed ? `, ${r.failed} failed` : ""}.`
+          : (r.note || "No one has enabled alerts yet."),
+      });
+    } catch (e) {
+      setSendResult({ ok: false, msg: e.message || String(e) });
+    } finally {
+      setSending(false);
+    }
+  };
 
   // Close on Escape; focus the panel on open so keyboard users land inside it.
   useEffect(() => {
@@ -418,6 +441,31 @@ function WeeklyShareModal({ summary, seriesColors, onClose }) {
         <div style={{ fontSize: 11, color: "rgba(var(--tint),0.5)", marginTop: 10, lineHeight: 1.5 }}>
           Copy and paste into WhatsApp or your team chat. The numbers match the board above.
         </div>
+
+        {/* Admin: also push it to everyone who's enabled alerts on their phone.
+            Hidden until push is configured (VAPID key set) so it never shows a
+            button that only errors. */}
+        {isAdmin && pushConfigured() && (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(var(--tint),0.1)" }}>
+            <button onClick={sendPush} disabled={sending}
+              style={{ ...actionButton("info"), width: "100%", justifyContent: "center",
+                background: "color-mix(in srgb, var(--st-region) 12%, transparent)",
+                color: "var(--st-region)",
+                border: "1px solid color-mix(in srgb, var(--st-region) 40%, transparent)",
+                cursor: sending ? "wait" : "pointer" }}>
+              {sending ? "Sending…" : "🔔 Send as push alert to the team"}
+            </button>
+            {sendResult && (
+              <div style={{ fontSize: 12, lineHeight: 1.5, marginTop: 8,
+                color: sendResult.ok ? "var(--st-ok)" : "var(--st-bad)" }}>
+                {sendResult.ok ? "✓ " : "⚠ "}{sendResult.msg}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: "rgba(var(--tint),0.5)", marginTop: 6, lineHeight: 1.5 }}>
+              Goes only to reps who turned on 🔔 alerts on their own phone.
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -684,7 +732,9 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
     : "Reload the latest weekly numbers from the database";
   const refreshBusyLabel = isAdmin ? "Recalculating…" : "Refreshing…";
   const HeaderActions = (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+      {/* Per-user push opt-in (renders nothing where unsupported / not set up). */}
+      <WeeklyAlertsButton />
       {/* Share opens a compact, copy-ready summary. Any signed-in user can share
           the view they're looking at — the admin to push it out, a rep to pass
           on their own numbers. Hidden until there's data to summarise. */}
@@ -1005,6 +1055,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
       {shareOpen && (
         <WeeklyShareModal
           seriesColors={SP_COLORS}
+          isAdmin={isAdmin}
           onClose={() => setShareOpen(false)}
           summary={{
             monthName,
