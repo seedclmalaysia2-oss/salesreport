@@ -243,8 +243,189 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
   );
 }
 
+// ============================================================
+// Compact weekly summary — a share-ready condensation of the board.
+// Built from the SAME derived numbers the two ScopeColumns use, so the summary
+// can never drift from what's on screen. Rendered in a modal (the "compact
+// view") with a plain-text export sized for a WhatsApp / group-chat paste.
+// ============================================================
+
+// Plain text, deliberately no monospace alignment: WhatsApp only renders the
+// ``` block in a fixed font on some clients, so padded columns break more often
+// than they help. Bold headers (*…*) and bullets read well everywhere.
+function buildWeeklyShareText(summary) {
+  const { monthName, periodLabel, isMonthView, target, scopes } = summary;
+  const pctLine = (total) =>
+    target > 0 ? ` (${Math.round((total / target) * 100)}% of ${fmtRM(target)})` : "";
+  const lines = [];
+  lines.push(`📊 SEED Weekly Sales — ${monthName}`);
+  lines.push(`${periodLabel}${isMonthView ? " · month to date" : ""}`);
+  for (const s of scopes) {
+    lines.push("");
+    lines.push(`*${s.title}*${s.subtitle ? ` (${s.subtitle})` : ""}`);
+    for (const r of s.rows) lines.push(`• ${r.sp} — ${fmtRM(r.amount)}`);
+    lines.push(`Total: ${fmtRM(s.total)}${pctLine(s.total)}`);
+  }
+  if (target > 0) {
+    lines.push("");
+    lines.push(`_Both teams measured against the company target of ${fmtRM(target)}._`);
+  }
+  return lines.join("\n");
+}
+
+function WeeklyShareModal({ summary, seriesColors, onClose }) {
+  const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
+  const text = buildWeeklyShareText(summary);
+  const [copied, setCopied] = useState(false);
+  const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+  const cardRef = useRef(null);
+  const textRef = useRef(null);
+
+  // Close on Escape; focus the panel on open so keyboard users land inside it.
+  useEffect(() => {
+    cardRef.current?.focus();
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const copy = async () => {
+    // The async Clipboard API is preferred, but it REJECTS in some contexts
+    // (document not focused, permission denied), so fall back to execCommand on
+    // failure — not only when the API is absent. If both fail, select the
+    // visible textarea so the user can just press Ctrl/Cmd+C.
+    let ok = false;
+    try {
+      if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); ok = true; }
+    } catch { /* fall through */ }
+    if (!ok) {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text; ta.style.position = "fixed"; ta.style.top = "-9999px";
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        ok = document.execCommand("copy");
+        ta.remove();
+      } catch { /* fall through */ }
+    }
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      textRef.current?.focus();
+      textRef.current?.select();
+    }
+  };
+
+  const share = async () => {
+    try { await navigator.share({ title: "SEED Weekly Sales", text }); }
+    catch { /* user dismissed the share sheet */ }
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000, display: "flex",
+        alignItems: "center", justifyContent: "center", padding: 16,
+        background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)",
+      }}
+      role="dialog" aria-modal="true" aria-label="Weekly sales summary to share"
+    >
+      <div
+        ref={cardRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "min(440px, 100%)", maxHeight: "90vh", overflowY: "auto", outline: "none",
+          background: "var(--bg)", border: "1px solid rgba(var(--tint),0.14)", borderRadius: 16,
+          padding: 20, boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--st-accent)", textTransform: "uppercase", letterSpacing: 1.5 }}>
+              📊 Weekly Summary
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginTop: 4 }}>{summary.monthName}</div>
+            <div style={{ fontSize: 12.5, color: "rgba(var(--tint),0.7)", marginTop: 2, fontFamily: "'Space Mono',monospace" }}>
+              {summary.periodLabel}{summary.isMonthView ? " · month to date" : ""}
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Close"
+            style={{ background: "transparent", border: "none", color: "rgba(var(--tint),0.6)", fontSize: 20, lineHeight: 1, cursor: "pointer", padding: 4 }}>×</button>
+        </div>
+
+        {/* The compact view: each scope as one tight block. */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 14 }}>
+          {summary.scopes.map((s) => {
+            const pct = summary.target > 0 ? s.total / summary.target : 0;
+            return (
+              <div key={s.key} style={{ background: "rgba(var(--tint),0.03)", border: "1px solid rgba(var(--tint),0.08)", borderRadius: 12, padding: 14 }}>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, color: s.accent }}>{s.title}</div>
+                  {summary.target > 0 && (
+                    <div style={{ fontSize: 12, fontWeight: 700, fontFamily: "'Space Mono',monospace", color: s.accent }}>
+                      {Math.round(pct * 100)}%
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Space Mono',monospace", color: "var(--text)", lineHeight: 1.1, marginTop: 4 }}>
+                  {fmtRM(s.total)}
+                </div>
+                {summary.target > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <ProgressBar pct={pct} color={s.accent} height={6} />
+                    <div style={{ fontSize: 11, color: "rgba(var(--tint),0.6)", marginTop: 4 }}>of {fmtRM(summary.target)} company target</div>
+                  </div>
+                )}
+                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {s.rows.map((r) => (
+                    <div key={r.sp} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: 2, background: SP_COLORS[r.sp] || "#888", flexShrink: 0 }} />
+                      <span style={{ flex: 1, color: "rgba(var(--tint),0.85)" }}>{r.sp}</span>
+                      <span style={{ fontFamily: "'Space Mono',monospace", color: "var(--text)", fontWeight: 600 }}>{fmtRM(r.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* The exact text that gets copied — visible so there are no surprises,
+            and hand-selectable if the clipboard API is blocked. */}
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: 1, color: "rgba(var(--tint),0.45)", marginBottom: 6 }}>
+            Text to send
+          </div>
+          <textarea ref={textRef} readOnly value={text} rows={Math.min(text.split("\n").length + 1, 16)}
+            onFocus={(e) => e.target.select()}
+            style={{
+              width: "100%", boxSizing: "border-box", resize: "vertical",
+              background: "rgba(var(--tint),0.04)", border: "1px solid rgba(var(--tint),0.1)", borderRadius: 8,
+              color: "var(--text)", fontSize: 12, lineHeight: 1.5, padding: "10px 12px", fontFamily: "'DM Sans',sans-serif",
+            }} />
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+          <button onClick={copy} style={{ ...actionButton("primary"), flex: canNativeShare ? "0 0 auto" : 1, justifyContent: "center" }}>
+            {copied ? "✓ Copied" : "📋 Copy summary"}
+          </button>
+          {canNativeShare && (
+            <button onClick={share} style={{ ...actionButton("info"), flex: 1, justifyContent: "center" }}>
+              ↗ Share…
+            </button>
+          )}
+        </div>
+        <div style={{ fontSize: 11, color: "rgba(var(--tint),0.5)", marginTop: 10, lineHeight: 1.5 }}>
+          Copy and paste into WhatsApp or your team chat. The numbers match the board above.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], targets, custSummary = [], isAdmin, canViewAll = true, onUploaded, onRefresh, seriesColors }) {
   const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
+  const [shareOpen, setShareOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState(null);
   const [refreshNote, setRefreshNote] = useState(null);
@@ -504,6 +685,21 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
   const refreshBusyLabel = isAdmin ? "Recalculating…" : "Refreshing…";
   const HeaderActions = (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      {/* Share opens a compact, copy-ready summary. Any signed-in user can share
+          the view they're looking at — the admin to push it out, a rep to pass
+          on their own numbers. Hidden until there's data to summarise. */}
+      {latestPeriod && (
+        <button onClick={() => setShareOpen(true)}
+          title="Copy a compact weekly summary to send (WhatsApp, team chat…)"
+          style={{
+            ...actionButton("info"),
+            background: "color-mix(in srgb, var(--st-accent) 10%, transparent)",
+            color: "var(--st-accent)",
+            border: "1px solid color-mix(in srgb, var(--st-accent) 35%, transparent)",
+          }}>
+          <span style={{ fontSize: 13, lineHeight: 1 }}>📋</span> Share
+        </button>
+      )}
       {onRefresh && (
         <button onClick={handleRefresh} disabled={refreshing} title={refreshTitle}
           style={{ ...actionButton("info"), cursor: refreshing ? "wait" : "pointer" }}>
@@ -805,6 +1001,25 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
           period={periodLabel}
         />
       </div>
+
+      {shareOpen && (
+        <WeeklyShareModal
+          seriesColors={SP_COLORS}
+          onClose={() => setShareOpen(false)}
+          summary={{
+            monthName,
+            periodLabel,
+            isMonthView,
+            target: monthlyTarget,
+            // Same numbers the two columns above render, so the shared summary
+            // and the board can never disagree.
+            scopes: [
+              { key: "retail", title: "Retail Sales Team", subtitle: "Alan + Dino + Khen", accent: "var(--st-info)", total: teamTotal, rows: teamRows },
+              { key: "all", title: "Seed Malaysia — Whole Team", subtitle: "all teams incl. overseas", accent: "var(--st-region)", total: allTotal, rows: allRows },
+            ],
+          }}
+        />
+      )}
     </div>
   );
 }
