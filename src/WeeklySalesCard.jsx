@@ -875,7 +875,13 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
     const d = new Date(), p = (n) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   })();
-  const rangeEnd = rawEnd && rawEnd > todayIso && todayIso >= rangeStart ? todayIso : rawEnd;
+  // Pull a period end back to today when it's in the future — pure display, the
+  // underlying week bucket is unchanged. The `start <= today` guard keeps the
+  // end from ever landing before its own start (a future week, which shouldn't
+  // occur, is left as-is rather than collapsed).
+  const capEnd = (endIso, startIso) =>
+    endIso && endIso > todayIso && (!startIso || startIso <= todayIso) ? todayIso : endIso;
+  const rangeEnd = capEnd(rawEnd, rangeStart);
   const periodLabel = `${fmtDay(rangeStart)} – ${fmtDay(rangeEnd)}`;
   const headerUploadedAt = isMonthView ? monthAgg.uploadedAt : latestPeriod.uploadedAt;
   const monthName = new Date((rangeEnd || latestPeriod.end) + "T00:00:00").toLocaleString("en-US", { month: "long", year: "numeric" });
@@ -992,11 +998,14 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
               const total = w.rows.reduce((a, r) => a + (r.amount || 0), 0)
                 + (hasCustAdj && i === finalWeekIdx ? custAdjTotal : 0);
               const active = view === "week" && i === boundedWeekIndex;
+              // Cap the in-progress week's end at today (e.g. the 29–30 chip reads
+              // 29–29 on the 29th); past weeks keep their real end.
+              const wEnd = capEnd(w.end, w.start);
               return (
                 <button
                   key={w.start}
                   onClick={() => { setSelectedWeekIndex(i); setView("week"); }}
-                  title={`${w.start} → ${w.end}`}
+                  title={`${w.start} → ${wEnd}`}
                   style={{
                     background: active ? "color-mix(in srgb, var(--st-accent) 16%, transparent)" : "rgba(var(--tint),0.05)",
                     color: active ? "var(--st-accent)" : "rgba(var(--tint),0.8)",
@@ -1006,7 +1015,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
                     display: "flex", flexDirection: "column", gap: 2, minWidth: 96,
                   }}>
                   <span style={{ fontSize: 12, fontWeight: active ? 700 : 600 }}>
-                    Week {i + 1} <span style={{ fontWeight: 500, opacity: 0.75 }}>· {fmtDay(w.start)}–{fmtDay(w.end)}</span>
+                    Week {i + 1} <span style={{ fontWeight: 500, opacity: 0.75 }}>· {fmtDay(w.start)}–{fmtDay(wEnd)}</span>
                   </span>
                   <span style={{ fontSize: 12.5, fontWeight: 700, fontFamily: "'Space Mono',monospace" }}>
                     {fmtRM(total)}
