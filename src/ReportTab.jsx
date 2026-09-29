@@ -362,7 +362,7 @@ export default function ReportTab({ user, data }) {
       )}
 
       <div style={{ marginTop: 14, fontSize: 11.5, color: "rgba(var(--tint),0.65)", lineHeight: 1.6 }}>
-        Amounts load exactly from the online Detail file(s); a few product quantities (DISOP units, overseas BOC) may need a manual tweak above.
+        Amounts and quantities load from the online Detail file(s) with HQ's counting rules applied to every month (trial lenses by pack size, DISOP vials 20 per box, free boxes counted). Any cell can still be edited above before export.
         <strong> Export Excel</strong> fills HQ's template — same layout, merges and formulas — and totals recalculate when you open it.
         {sources.length > 0 && <> Source: {sources.map((s) => `${s.name} (uploaded ${fmtWhen(s.uploadedAt)})`).join(", ")}.</>}
       </div>
