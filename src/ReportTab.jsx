@@ -132,6 +132,20 @@ export default function ReportTab({ user, data }) {
     return t;
   }, [data, year]);
 
+  // Monthly company total from the Sales Analysis by customer file (customers_data)
+  // — the same figure the Weekly Sales card reconciles to with its "Cust Adj".
+  // The "All" sentinel scope is excluded so nothing is double-counted.
+  const custMonthly = useMemo(() => {
+    const t = Array(12).fill(0);
+    for (const s of data?.summary || []) {
+      if (s.year !== year || String(s.sp || "").trim().toLowerCase() === "all") continue;
+      for (let m = 0; m < 12; m++) t[m] += Number(s.months?.[m]) || 0;
+    }
+    return t.map(round2);
+  }, [data, year]);
+  const custMonthlyKey = custMonthly.join(",");
+  const [custAdj, setCustAdj] = useState(Array(12).fill(0));
+
   // Load (or reload) the grid straight from the latest online file for the year.
   // Runs automatically on open / year change, and from the small ↻ control after
   // a fresh upload — no manual "prefill" step.
@@ -159,6 +173,23 @@ export default function ReportTab({ user, data }) {
         g[p].qty = d.qty.map((v) => Math.round(v));
         g[p].amount = d.amount.map(round2);
       }
+      // Cust Adj — same rule as the Weekly Sales card: the Detail file drifts
+      // from the Sales Analysis by customer total by a few ringgit (invoice-level
+      // adjustments the item lines don't carry). For every month the customer
+      // file covers, book the gap into OTHER INCOME (where HQ books it) so the
+      // report's amount total ties exactly to the Weekly board after Cust Adj.
+      // Months the customer file doesn't cover yet are left unadjusted.
+      const adj = Array(12).fill(0);
+      for (let m = 0; m < 12; m++) {
+        if (!custMonthly[m]) continue;
+        const reportTotal = AMOUNT_ROWS.reduce((a, p) => a + (Number(g[p]?.amount[m]) || 0), 0);
+        const d = round2(custMonthly[m] - reportTotal);
+        if (Math.abs(d) >= 0.005) {
+          adj[m] = d;
+          g["OTHER INCOME"].amount[m] = round2(g["OTHER INCOME"].amount[m] + d);
+        }
+      }
+      setCustAdj(adj);
       setGrid(g); setUnmapped(unmapped); setSources(sources);
       setStatus(`Loaded ${sources.length} file(s) · ${rows.length.toLocaleString()} lines — edit any cell, then export.`);
     } catch (e) {
@@ -166,7 +197,10 @@ export default function ReportTab({ user, data }) {
     } finally {
       if (!stale()) setLoading(false);
     }
-  }, [year]);
+    // custMonthlyKey (not the array) so a data refresh with identical customer
+    // totals doesn't re-download the Detail files.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year, custMonthlyKey]);
 
   // Auto-load whenever the tab opens or the year changes — the data shows up on
   // its own and stays until a newer file is uploaded to overwrite it.
@@ -381,6 +415,10 @@ export default function ReportTab({ user, data }) {
       <div style={{ marginTop: 14, fontSize: 11.5, color: "rgba(var(--tint),0.65)", lineHeight: 1.6 }}>
         Amounts and quantities load from the online Detail file(s) with HQ's counting rules applied to every month (trial lenses by pack size, DISOP vials 20 per box, free boxes counted). Any cell can still be edited above before export.
         <strong> Export Excel</strong> fills HQ's template — same layout, merges and formulas — and totals recalculate when you open it.
+        {custAdj.some((v) => v) && (
+          <> <strong>Cust Adj</strong> (matches the Weekly Sales board / Sales Analysis by customer total, booked in OTHER INCOME):{" "}
+            {custAdj.map((v, m) => (v ? `${MONTHS[m]} ${v > 0 ? "+" : "−"}${fmtAmt(Math.abs(v))}` : null)).filter(Boolean).join(" · ")}.</>
+        )}
         {sources.length > 0 && <> Source: {sources.map((s) => `${s.name} (uploaded ${fmtWhen(s.uploadedAt)})`).join(", ")}.</>}
       </div>
     </div>
