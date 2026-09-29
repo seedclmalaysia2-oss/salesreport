@@ -135,9 +135,9 @@ export const TRIAL_PCS_PER_BOX = {
   "1 DAY MULSTISTAGE": 32, "1 DAYPURE EDOF": 32, "1 DAY VIEW SUPPORT": 32,
   "MONTHLY COLOR UV - PEGAVISION": 2, "MONTHLY COLOR UV - BLUE": 2,
   "MONTHLY COLOR UV - ORANGE": 2, "MONTHLY COLOR UV  II": 2,
-  // Minasoft 1Day colour trials: 10 pcs/box — HQ's Jan–Jun 2026 figures follow
-  // this. (HQ's Aug 2026 counted the 12 trial pcs 1:1 → 117 vs our 106; that
-  // month is the odd one out, flagged for HQ.) Care UV trials: 3 pcs/box.
+  // Minasoft 1Day colour trials: 10 pcs/box (owner-confirmed 2026-09-29). HQ's
+  // Aug 2026 sheet counted the 12 trial pcs 1:1 (117) — that's HQ's error; the
+  // correct Aug figure is 106. Care UV trials: 3 pcs/box.
   "MINASOFT 1DAY COLOR UV": 10, "MINASOFT CARE UV": 3,
   // 2 Week Pure trial lenses: 6 pcs/box (HQ Aug 2026).
   "2 WEEK PURE MULTISTAGE": 6, "2 WEEK PURE UP TORIC": 6, "2 WEEK PURE UP": 6,
