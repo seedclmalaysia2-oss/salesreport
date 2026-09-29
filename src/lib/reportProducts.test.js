@@ -163,3 +163,22 @@ describe("product list", () => {
     expect(REPORT_PRODUCTS.at(-1)).toBe("ACCESSORIES/OTHERS");
   });
 });
+
+describe("2 Week Pure (HQ Aug 2026 reconciliation)", () => {
+  it("FOC Astigmatism boxes and TORIC trial lenses feed UP TORIC; 2WK trials are 6 pcs/box", () => {
+    expect(brandToProduct("2W Pure UP Astigmatism")).toBe("2 WEEK PURE UP TORIC");
+    expect(brandToProduct("2WK PURE UP TORIC Trial Lens")).toBe("2 WEEK PURE UP TORIC");
+    expect(brandToProduct("2WK PURE UP MS A Trial Lens")).toBe("2 WEEK PURE MULTISTAGE");
+    const rows = [
+      { date: "2026-08-01", brand: "2UWKA -1.25/AX180", qty: 30, amount: 2625, uom: "BOX" },
+      { date: "2026-08-02", brand: "2W Pure UP Astigmatism [FOC tie in goods]", qty: 8, amount: 0, uom: "BOX" },
+      { date: "2026-08-03", brand: "2WK PURE UP TORIC Trial Lens [FOC tie in goods]", qty: 6, amount: 0, uom: "PCS" },
+      { date: "2026-08-04", brand: "2WK PURE UP", qty: 12, amount: 805, uom: "BOX" },
+      { date: "2026-08-05", brand: "2W Pure Up [FOC tie in goods]", qty: 2, amount: 0, uom: "BOX" },
+      { date: "2026-08-06", brand: "2WK PURE UP Trial Lens [FOC tie in goods]", qty: 6, amount: 0, uom: "PCS" },
+    ];
+    const { products } = aggregateProductMonthly(rows, 2026);
+    expect(products["2 WEEK PURE UP TORIC"].qty[7]).toBe(39); // 30 + 8 + 6/6
+    expect(products["2 WEEK PURE UP"].qty[7]).toBe(15);       // 12 + 2 + 6/6
+  });
+});

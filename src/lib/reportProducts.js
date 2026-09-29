@@ -80,6 +80,9 @@ const RULES = [
   // --- 2 Week Pure family ---
   { test: /^2W\w* PURE UP.*(MS|Multistage)/i,  product: "2 WEEK PURE MULTISTAGE" },
   { test: /^2UWKA/i,                            product: "2 WEEK PURE UP TORIC" },
+  // FOC "2W Pure UP Astigmatism" boxes and "2WK PURE UP TORIC Trial Lens" are the
+  // toric line, not plain UP (HQ Aug 2026: 30 sold + 8 FOC + 7 trial pcs ÷ 6 = 39).
+  { test: /^2W\w* PURE UP.*(TORIC|Astigmatism)/i, product: "2 WEEK PURE UP TORIC" },
   { test: /^2W\w* PURE UP/i,                    product: "2 WEEK PURE UP" },
 
   // --- Monthly Color: MCII- is the "II" line; MC- splits by colour (HQ mapping) ---
@@ -132,7 +135,12 @@ export const TRIAL_PCS_PER_BOX = {
   "1 DAY MULSTISTAGE": 32, "1 DAYPURE EDOF": 32, "1 DAY VIEW SUPPORT": 32,
   "MONTHLY COLOR UV - PEGAVISION": 2, "MONTHLY COLOR UV - BLUE": 2,
   "MONTHLY COLOR UV - ORANGE": 2, "MONTHLY COLOR UV  II": 2,
+  // Minasoft 1Day colour trials: 10 pcs/box — HQ's Jan–Jun 2026 figures follow
+  // this. (HQ's Aug 2026 counted the 12 trial pcs 1:1 → 117 vs our 106; that
+  // month is the odd one out, flagged for HQ.) Care UV trials: 3 pcs/box.
   "MINASOFT 1DAY COLOR UV": 10, "MINASOFT CARE UV": 3,
+  // 2 Week Pure trial lenses: 6 pcs/box (HQ Aug 2026).
+  "2 WEEK PURE MULTISTAGE": 6, "2 WEEK PURE UP TORIC": 6, "2 WEEK PURE UP": 6,
   "MONTHLY PURE6": 6, "MONTHLY FINE PLUS": 3,
   "EYE COFFRET-M": 10, "EYE COFFRET-M 10 TORIC": 10, "EYE COFFRET-M 30 TORIC": 10,
 };
@@ -194,7 +202,9 @@ export function aggregateProductMonthly(rows, year) {
     }
     // Report quantity is in BOXES/BOTTLES. Trial-lens lines (SKU code "TR" /
     // "Trial") are counted in PIECES — convert to boxes by pack size. DISOP is
-    // counted in bottles, and its vial lines (UOM=PCS) are 20 vials = 1 bottle.
+    // counted in bottles/boxes, and its vial lines (UOM=PCS) are 20 vials = 1
+    // box (owner-confirmed 2026-09-29 for Dual Gel; HQ's own sheet has been
+    // counting the vials 1:1, which over-states the eyedrop row).
     // Everything else is already in boxes/bottles and counts as-is.
     if (/\btrial\b/i.test(name) && TRIAL_PCS_PER_BOX[product]) qty = qty / TRIAL_PCS_PER_BOX[product];
     else if (isDisop && /^(PCS|PCE|PIECE|PC\b)/i.test(String(r.uom || "").trim())) qty = qty / 20;
