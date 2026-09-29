@@ -1,4 +1,5 @@
 import { mergeDatedRowsByMonth } from "./lib/periods.js";
+import { applyCustCorrections } from "./lib/custCorrections.js";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./lib/supabase.js";
 import { parseFile } from "./lib/parseXlsx.js";
@@ -137,7 +138,7 @@ export default function ReportTab({ user, data }) {
   // The "All" sentinel scope is excluded so nothing is double-counted.
   const custMonthly = useMemo(() => {
     const t = Array(12).fill(0);
-    for (const s of data?.summary || []) {
+    for (const s of applyCustCorrections(data?.summary || [])) {
       if (s.year !== year || String(s.sp || "").trim().toLowerCase() === "all") continue;
       for (let m = 0; m < 12; m++) t[m] += Number(s.months?.[m]) || 0;
     }

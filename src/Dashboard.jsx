@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, lazy, Suspense } from "react";
+import { applyCustCorrections } from "./lib/custCorrections.js";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, ReferenceLine } from "recharts";
 import WeeklySalesCard from "./WeeklySalesCard.jsx";
 import { aggregateProductSales, CATEGORY_COLORS_DARK, CATEGORY_COLORS_LIGHT, CATEGORY_ORDER } from "./lib/productCategories.js";
@@ -1309,7 +1310,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             <WeeklySalesCard
               weeklySales={data.weeklySales || []}
               invoiceFiles={data.invoiceFiles || []}
-              custSummary={SUMMARY}
+              custSummary={applyCustCorrections(SUMMARY)}
               targets={TARGETS}
               isAdmin={!!user?.isAdmin}
               canViewAll={!!user?.canViewAll}
