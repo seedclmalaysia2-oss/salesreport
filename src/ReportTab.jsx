@@ -47,7 +47,12 @@ const AMOUNT_ROW_ORDER = [
 ];
 
 const fmtInt = (v) => Math.round(Number(v) || 0).toLocaleString("en-MY");
-const fmtAmt = (v) => (Number(v) || 0).toLocaleString("en-MY", { maximumFractionDigits: 0 });
+// Sales amounts are shown and exported to exactly 2 decimals (sen) — never
+// rounded to whole ringgit, so the report ties to the invoices to the cent.
+const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+const fmtAmt = (v) => round2(v).toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Excel format for amount cells: HQ's accounting style, but with 2 decimals.
+const AMOUNT_NUMFMT = '_(* #,##0.00_);_(* (#,##0.00);_(* "-"??_);_(@_)';
 const sum = (arr) => arr.reduce((a, b) => a + (Number(b) || 0), 0);
 // "10 Sep 2026, 3:42 pm" — the upload time of the file this page was built from.
 const fmtWhen = (ms) =>
@@ -152,7 +157,7 @@ export default function ReportTab({ user, data }) {
       for (const [p, d] of Object.entries(products)) {
         if (!g[p]) g[p] = { qty: Array(12).fill(0), amount: Array(12).fill(0) };
         g[p].qty = d.qty.map((v) => Math.round(v));
-        g[p].amount = d.amount.map((v) => Math.round(v));
+        g[p].amount = d.amount.map(round2);
       }
       setGrid(g); setUnmapped(unmapped); setSources(sources);
       setStatus(`Loaded ${sources.length} file(s) · ${rows.length.toLocaleString()} lines — edit any cell, then export.`);
@@ -197,11 +202,11 @@ export default function ReportTab({ user, data }) {
       const ws = wb.getWorksheet(TEMPLATE_SHEET);
       if (!ws) throw new Error(`template sheet "${TEMPLATE_SHEET}" missing`);
 
-      const writeMonths = (rowNum, arr, { round = true, clearZero = true } = {}) => {
+      // Quantities are whole units; amounts keep 2 decimals (sen).
+      const writeMonths = (rowNum, arr, { decimals = 0, clearZero = true } = {}) => {
         const row = ws.getRow(rowNum);
         for (let m = 0; m < 12; m++) {
-          let v = Number(arr[m]) || 0;
-          if (round) v = Math.round(v);
+          const v = decimals ? round2(arr[m]) : Math.round(Number(arr[m]) || 0);
           row.getCell(2 + m).value = v === 0 && clearZero ? null : v;
         }
         row.commit();
@@ -209,7 +214,19 @@ export default function ReportTab({ user, data }) {
 
       // Quantity section (rows 5–35) and amount section (rows 39–70).
       REPORT_PRODUCTS.forEach((p, i) => writeMonths(QTY_FIRST_ROW + i, grid[p]?.qty || []));
-      AMOUNT_ROW_ORDER.forEach((p, i) => writeMonths(AMOUNT_FIRST_ROW + i, grid[p]?.amount || []));
+      AMOUNT_ROW_ORDER.forEach((p, i) => writeMonths(AMOUNT_FIRST_ROW + i, grid[p]?.amount || [], { decimals: 2 }));
+
+      // The template formats amounts as whole ringgit; show 2 decimals instead —
+      // every amount row, its TOTAL column (N), the amount total row, and the
+      // Msia Sales / Balance rows in both target blocks (all ringgit values).
+      const amountRows = [];
+      for (let r = AMOUNT_FIRST_ROW; r <= AMOUNT_FIRST_ROW + AMOUNT_ROW_ORDER.length; r++) amountRows.push(r);
+      amountRows.push(TARGET_ROWS[0] + 1, TARGET_ROWS[0] + 2, TARGET_ROWS[1] + 3);
+      for (const r of amountRows) {
+        const row = ws.getRow(r);
+        for (let c = 2; c <= 14; c++) row.getCell(c).numFmt = AMOUNT_NUMFMT;
+        row.commit();
+      }
 
       // Targets from the Dashboard Targets tab — only overwrite a month that has a
       // value, so an incomplete Targets tab falls back to the template's figures.
@@ -315,11 +332,11 @@ export default function ReportTab({ user, data }) {
                 <td style={{ padding: "3px 8px", fontSize: 12, color: "var(--text)", position: "sticky", left: 0, background: "var(--bg)", whiteSpace: "nowrap" }}>{p}</td>
                 {MONTHS.map((_, m) => (
                   <td key={m} style={{ padding: "1px 2px", textAlign: "right" }}>
-                    <input type="number" value={grid[p]?.[section][m] ?? 0}
+                    <input type="number" step={section === "qty" ? 1 : 0.01} value={grid[p]?.[section][m] ?? 0}
                       onChange={(e) => setCell(p, m, e.target.value)}
                       onFocus={(e) => { e.target.style.border = "1px solid color-mix(in srgb, var(--st-accent) 50%, transparent)"; e.target.style.background = "color-mix(in srgb, var(--st-accent) 6%, transparent)"; }}
                       onBlur={(e) => { e.target.style.border = "1px solid transparent"; e.target.style.background = "transparent"; }}
-                      style={cellInput} />
+                      style={section === "qty" ? cellInput : { ...cellInput, width: 84 }} />
                   </td>
                 ))}
                 <td style={{ padding: "3px 10px", textAlign: "right", fontFamily: "'Space Mono',monospace", fontSize: 12, fontWeight: 700, color: "var(--st-accent)", whiteSpace: "nowrap" }}>
