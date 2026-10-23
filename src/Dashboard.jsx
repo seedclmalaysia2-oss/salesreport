@@ -710,6 +710,54 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
     });
   }, [selectedYear, selectedSP, data, annualQtyBySpYear]);
 
+  // --- Monthly Trends: product trend per salesperson -------------------------
+  // data.productMonthly = [{ year, month 1-12, sp, product, qty, amount }], the
+  // Stock-Detail roll-up onto the HQ report products (product_monthly_sales).
+  // Follows the page's salesperson filter: "All Teams" sums every rep, a rep pill
+  // narrows to that rep. Only years with a Stock-Detail upload have data.
+  const PRODUCT_MONTHLY = data.productMonthly || [];
+  const [productMetric, setProductMetric] = useState("amount"); // 'amount' | 'qty'
+  const productYearsAvailable = useMemo(
+    () => [...new Set(PRODUCT_MONTHLY.map(r => r.year))].sort(),
+    [data]
+  );
+  const productTrend = useMemo(() => {
+    const rows = PRODUCT_MONTHLY.filter(
+      r => r.year === selectedYear && (selectedSP === "All" || r.sp === selectedSP)
+    );
+    const byProduct = new Map(); // product -> { product, months[12], total, bySp: Map }
+    const repSet = new Set();
+    let lastMonth = -1;
+    for (const r of rows) {
+      const v = Number(r[productMetric]) || 0;
+      let p = byProduct.get(r.product);
+      if (!p) {
+        p = { product: r.product, months: new Array(12).fill(0), total: 0, bySp: new Map() };
+        byProduct.set(r.product, p);
+      }
+      p.months[r.month - 1] += v;
+      p.total += v;
+      p.bySp.set(r.sp, (p.bySp.get(r.sp) || 0) + v);
+      repSet.add(r.sp);
+      if (v !== 0 && r.month - 1 > lastMonth) lastMonth = r.month - 1;
+    }
+    const products = [...byProduct.values()].sort((a, b) => b.total - a.total);
+    const reps = [...repSet].sort((a, b) => {
+      const ia = SALESPEOPLE_ORDER.indexOf(a), ib = SALESPEOPLE_ORDER.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+    });
+    // Chart the biggest eight so the lines stay readable; the table below
+    // carries every product.
+    const top = products.filter(p => p.total > 0).slice(0, 8).map(p => p.product);
+    const chartData = [];
+    for (let i = 0; i <= lastMonth; i++) {
+      const row = { month: MONTH_NAMES[i] };
+      top.forEach(name => { row[name] = byProduct.get(name).months[i]; });
+      chartData.push(row);
+    }
+    return { products, reps, top, chartData, lastMonth, grandTotal: products.reduce((a, p) => a + p.total, 0) };
+  }, [data, selectedYear, selectedSP, productMetric]);
+
   const monthlyData = useMemo(() => {
     const targetSp = selectedSP === "All" ? "_TEAM" : selectedSP;
     return MONTH_NAMES.map((m, i) => {
@@ -1572,6 +1620,149 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                 </LineChart>
               </ResponsiveContainer>
             </Card>
+
+            {(() => {
+              const isAmt = productMetric === "amount";
+              const scopeLabel = selectedSP === "All" ? "All Teams" : selectedSP;
+              const fmtCell = (v) => {
+                if (!v) return "–";
+                return isAmt
+                  ? Math.round(v).toLocaleString("en-MY")
+                  : v.toLocaleString("en-MY", { maximumFractionDigits: 1 });
+              };
+              const { products, reps, top, chartData, lastMonth, grandTotal } = productTrend;
+              const monthCols = lastMonth >= 0 ? MONTH_NAMES.slice(0, lastMonth + 1) : [];
+              const thStyle = {padding:"10px 12px",textAlign:"right",color:"rgba(var(--tint),0.65)",fontWeight:500,fontSize:11,textTransform:"uppercase",letterSpacing:1,whiteSpace:"nowrap"};
+              const tdNum = {padding:"9px 12px",textAlign:"right",fontFamily:"'Space Mono',monospace",fontSize:12,whiteSpace:"nowrap"};
+              return (
+                <>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",margin:"28px 0 12px"}}>
+                    <div>
+                      <div style={{fontSize:16,fontWeight:700}}>🏷️ Product Trend — {scopeLabel}, {selectedYear}</div>
+                      <div style={{fontSize:11,color:"rgba(var(--tint),0.65)",marginTop:4,maxWidth:640}}>
+                        Month by month for each HQ report product, from the Stock Sales Analysis - Detail file. Pick a salesperson above to see their mix; FOC and sample lines are excluded. Quantities are boxes/bottles.
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:6}}>
+                      <Pill label="Revenue" active={isAmt} onClick={()=>setProductMetric("amount")} />
+                      <Pill label="Quantity" active={!isAmt} onClick={()=>setProductMetric("qty")} />
+                    </div>
+                  </div>
+
+                  {products.length === 0 ? (
+                    <Card>
+                      <div style={{fontSize:13,color:"rgba(var(--tint),0.7)",padding:"24px 0",textAlign:"center",lineHeight:1.6}}>
+                        {PRODUCT_MONTHLY.length === 0
+                          ? "No product-level monthly data yet. It fills in once the admin uploads the Stock Sales Analysis - Detail file and the product table is set up."
+                          : productYearsAvailable.includes(selectedYear)
+                            ? `No ${selectedSP} product sales recorded for ${selectedYear}.`
+                            : `No product-level monthly data for ${selectedYear} — available for ${productYearsAvailable.join(", ")}.`}
+                      </div>
+                    </Card>
+                  ) : (
+                    <>
+                      <Card style={{marginBottom:20}}>
+                        <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>
+                          Top {top.length} products — monthly {isAmt ? "revenue" : "quantity"}
+                        </div>
+                        <div style={{fontSize:11,color:"rgba(var(--tint),0.65)",marginBottom:12}}>
+                          {products.length} product{products.length === 1 ? "" : "s"} sold · {isAmt ? fmtFull(grandTotal) : `${fmtCell(grandTotal)} units`} in total
+                        </div>
+                        <ResponsiveContainer width="100%" height={340}>
+                          <LineChart data={chartData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} />
+                            <XAxis dataKey="month" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} />
+                            <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={isAmt ? fmt : (v) => v.toLocaleString()} />
+                            <Tooltip
+                              contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}}
+                              labelStyle={{color:tk.text,fontWeight:600,marginBottom:4}}
+                              itemStyle={{color:tk.tooltipText}}
+                              itemSorter={(item) => -(Number(item.value) || 0)}
+                              formatter={(v, name) => [isAmt ? fmtFull(v) : `${fmtCell(v)} units`, name]}
+                            />
+                            <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />
+                            {top.map((name, i) => (
+                              <Line isAnimationActive={!reduceMotion} key={name} type="monotone" dataKey={name} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} strokeDasharray={i < PIE_COLORS.length ? undefined : YEAR_DASHES[i % YEAR_DASHES.length]} dot={{r:2}} />
+                            ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </Card>
+
+                      <Card style={{marginBottom:20}}>
+                        <div style={{fontSize:14,fontWeight:600,marginBottom:12}}>
+                          All products by month — {isAmt ? "RM" : "units"}
+                        </div>
+                        <div style={{overflowX:"auto"}}>
+                          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                            <thead>
+                              <tr style={{borderBottom:"1px solid rgba(var(--tint),0.08)"}}>
+                                <th style={{...thStyle,textAlign:"left"}}>Product</th>
+                                {monthCols.map(m => <th key={m} style={thStyle}>{m}</th>)}
+                                <th style={thStyle}>Total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {products.map(p => {
+                                const ti = top.indexOf(p.product);
+                                return (
+                                  <tr key={p.product} style={{borderBottom:"1px solid rgba(var(--tint),0.04)"}}>
+                                    <td style={{padding:"9px 12px",fontWeight:600,whiteSpace:"nowrap"}}>
+                                      <span style={{display:"inline-block",width:9,height:9,borderRadius:3,marginRight:8,background:ti >= 0 ? PIE_COLORS[ti % PIE_COLORS.length] : "transparent"}} />
+                                      {p.product}
+                                    </td>
+                                    {monthCols.map((m, i) => (
+                                      <td key={m} style={{...tdNum,color:p.months[i] ? "var(--text)" : "rgba(var(--tint),0.4)"}}>{fmtCell(p.months[i])}</td>
+                                    ))}
+                                    <td style={{...tdNum,fontWeight:700}}>{fmtCell(p.total)}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </Card>
+
+                      {selectedSP === "All" && reps.length > 1 && (
+                        <Card>
+                          <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>
+                            Product mix by salesperson — {selectedYear}, {isAmt ? "RM" : "units"}
+                          </div>
+                          <div style={{fontSize:11,color:"rgba(var(--tint),0.65)",marginBottom:12}}>
+                            Year to date. Click a salesperson above for their month-by-month trend.
+                          </div>
+                          <div style={{overflowX:"auto"}}>
+                            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                              <thead>
+                                <tr style={{borderBottom:"1px solid rgba(var(--tint),0.08)"}}>
+                                  <th style={{...thStyle,textAlign:"left"}}>Product</th>
+                                  {reps.map(sp => (
+                                    <th key={sp} style={thStyle}>
+                                      <span style={{display:"inline-block",width:8,height:8,borderRadius:2,marginRight:6,background:COLORS[sp] || "#888"}} />{sp}
+                                    </th>
+                                  ))}
+                                  <th style={thStyle}>Total</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {products.map(p => (
+                                  <tr key={p.product} style={{borderBottom:"1px solid rgba(var(--tint),0.04)"}}>
+                                    <td style={{padding:"9px 12px",fontWeight:600,whiteSpace:"nowrap"}}>{p.product}</td>
+                                    {reps.map(sp => (
+                                      <td key={sp} style={{...tdNum,color:p.bySp.get(sp) ? "var(--text)" : "rgba(var(--tint),0.4)"}}>{fmtCell(p.bySp.get(sp) || 0)}</td>
+                                    ))}
+                                    <td style={{...tdNum,fontWeight:700}}>{fmtCell(p.total)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </Card>
+                      )}
+                    </>
+                  )}
+                </>
+              );
+            })()}
           </>
         )}
 

@@ -154,6 +154,53 @@ export function brandToProduct(name) {
   return null; // unmapped — surfaced to the admin, never silently counted
 }
 
+// Classify one parsed Stock-Detail line for the HQ report. Returns null when the
+// line is never counted (no brand, promo giveaway, evaluation sample), otherwise
+// { product, qty, amount } with qty already converted to report units
+// (boxes/bottles), or { product: null, qty, amount } when no report row matches
+// (the caller surfaces those as "unmapped"). Shared by the HQ grid and the
+// per-salesperson product trend so both always agree on what a product is.
+export function classifyStockLine(r) {
+  const name = r && r.brand;
+  if (!name) return null;
+  // Promotional giveaways (pens/bags/thermos) are never counted. Evaluation
+  // SAMPLE lines are dropped too — EXCEPT DISOP solution samples, which HQ
+  // counts as distributed product (quantity only; revenue is 0). Within DISOP
+  // the 60ml H2O2 sample is the one that stays excluded.
+  if (/Promotion Use/i.test(name)) return null;
+  const isDisop = /DISOP/i.test(name);
+  if (/\bSAMPLE\b/i.test(name)) {
+    if (!isDisop) return null;
+    if (/\b60\s*ML\b/i.test(name)) return null;
+  }
+  // Classify by the underlying product: strip the FOC tie-in and SAMPLE tags.
+  const clean = name
+    .replace(/\[?\s*FOC tie in goods\s*\]?.*$/i, "")
+    .replace(/\bSAMPLE\b/ig, "")
+    .trim();
+  let product = brandToProduct(clean);
+  // Overseas Breath-O-Correct: HQ books BOC sold through the house
+  // "Seed Malaysia" account (Glodisa / overseas customers) to the OVERSEAS
+  // row; every other BOC line is local. The Stock-Detail export carries no
+  // customer column, but these overseas sales all run under the Seed Malaysia
+  // salesman — which ties out to HQ's local/overseas split exactly.
+  if (product === "BREATH O CORRECT" && r.sp === "Seed Malaysia") {
+    product = "BREATH O CORRECT (OVERSEAS)";
+  }
+  const amount = Number(r.amount) || 0;
+  let qty = Number(r.qty) || 0;
+  if (!product) return { product: null, qty, amount };
+  // Report quantity is in BOXES/BOTTLES. Trial-lens lines (SKU code "TR" /
+  // "Trial") are counted in PIECES — convert to boxes by pack size. DISOP is
+  // counted in bottles/boxes, and its vial lines (UOM=PCS) are 20 vials = 1
+  // box (owner-confirmed 2026-09-29 for Dual Gel; HQ's own sheet has been
+  // counting the vials 1:1, which over-states the eyedrop row).
+  // Everything else is already in boxes/bottles and counts as-is.
+  if (/\btrial\b/i.test(name) && TRIAL_PCS_PER_BOX[product]) qty = qty / TRIAL_PCS_PER_BOX[product];
+  else if (isDisop && /^(PCS|PCE|PIECE|PC\b)/i.test(String(r.uom || "").trim())) qty = qty / 20;
+  return { product, qty, amount };
+}
+
 // Roll Stock-Detail lines up into the HQ monthly grid.
 // `rows` are parsed Stock-Detail rows: { date:"YYYY-MM-DD", brand, qty, amount, sp }.
 // Returns { products, unmapped, months } where products[name] = { qty:[12], amount:[12] }
@@ -166,52 +213,17 @@ export function aggregateProductMonthly(rows, year) {
     if (!r || !r.date) continue;
     const [y, m] = r.date.split("-").map(Number);
     if (y !== year || !(m >= 1 && m <= 12)) continue;
-    const i = m - 1;
-    const name = r.brand;
-    if (!name) continue;
-    // Promotional giveaways (pens/bags/thermos) are never counted. Evaluation
-    // SAMPLE lines are dropped too — EXCEPT DISOP solution samples, which HQ
-    // counts as distributed product (quantity only; revenue is 0). Within DISOP
-    // the 60ml H2O2 sample is the one that stays excluded.
-    if (/Promotion Use/i.test(name)) continue;
-    const isDisop = /DISOP/i.test(name);
-    if (/\bSAMPLE\b/i.test(name)) {
-      if (!isDisop) continue;
-      if (/\b60\s*ML\b/i.test(name)) continue;
-    }
-    // Classify by the underlying product: strip the FOC tie-in and SAMPLE tags.
-    const clean = name
-      .replace(/\[?\s*FOC tie in goods\s*\]?.*$/i, "")
-      .replace(/\bSAMPLE\b/ig, "")
-      .trim();
-    let product = brandToProduct(clean);
-    // Overseas Breath-O-Correct: HQ books BOC sold through the house
-    // "Seed Malaysia" account (Glodisa / overseas customers) to the OVERSEAS
-    // row; every other BOC line is local. The Stock-Detail export carries no
-    // customer column, but these overseas sales all run under the Seed Malaysia
-    // salesman — which ties out to HQ's local/overseas split exactly.
-    if (product === "BREATH O CORRECT" && r.sp === "Seed Malaysia") {
-      product = "BREATH O CORRECT (OVERSEAS)";
-    }
-    const amount = Number(r.amount) || 0;
-    let qty = Number(r.qty) || 0;
-    if (!product) {
+    const c = classifyStockLine(r);
+    if (!c) continue;
+    if (!c.product) {
       const u = unmapped[r.brand] || (unmapped[r.brand] = { qty: 0, amount: 0 });
-      u.qty += qty; u.amount += amount;
+      u.qty += c.qty; u.amount += c.amount;
       continue;
     }
-    // Report quantity is in BOXES/BOTTLES. Trial-lens lines (SKU code "TR" /
-    // "Trial") are counted in PIECES — convert to boxes by pack size. DISOP is
-    // counted in bottles/boxes, and its vial lines (UOM=PCS) are 20 vials = 1
-    // box (owner-confirmed 2026-09-29 for Dual Gel; HQ's own sheet has been
-    // counting the vials 1:1, which over-states the eyedrop row).
-    // Everything else is already in boxes/bottles and counts as-is.
-    if (/\btrial\b/i.test(name) && TRIAL_PCS_PER_BOX[product]) qty = qty / TRIAL_PCS_PER_BOX[product];
-    else if (isDisop && /^(PCS|PCE|PIECE|PC\b)/i.test(String(r.uom || "").trim())) qty = qty / 20;
-    const p = products[product] ||
-      (products[product] = { qty: new Array(12).fill(0), amount: new Array(12).fill(0) });
-    p.qty[i] += qty;
-    p.amount[i] += amount;
+    const p = products[c.product] ||
+      (products[c.product] = { qty: new Array(12).fill(0), amount: new Array(12).fill(0) });
+    p.qty[m - 1] += c.qty;
+    p.amount[m - 1] += c.amount;
   }
   // round to 2dp so floating error doesn't leak into the export
   for (const p of Object.values(products)) {
@@ -219,6 +231,36 @@ export function aggregateProductMonthly(rows, year) {
     p.amount = p.amount.map(v => Math.round(v * 100) / 100);
   }
   return { products, unmapped };
+}
+
+// Same classification, kept per salesperson for the Monthly Trends product view.
+// Returns flat fact rows [{ year, month(1-12), sp, product, qty, amount }] —
+// the shape stored in public.product_monthly_sales. Unmapped brands are dropped
+// here (they stay visible to the admin on the HQ Report tab), as are cells that
+// net to exactly zero.
+export function aggregateProductMonthlyBySp(rows) {
+  const cells = new Map(); // "year|month|sp|product" -> { qty, amount }
+  for (const r of rows || []) {
+    if (!r || !r.date || !r.sp) continue;
+    const [y, m] = r.date.split("-").map(Number);
+    if (!(y > 0) || !(m >= 1 && m <= 12)) continue;
+    const c = classifyStockLine(r);
+    if (!c || !c.product) continue;
+    const key = `${y}|${m}|${r.sp}|${c.product}`;
+    const cur = cells.get(key) || { qty: 0, amount: 0 };
+    cur.qty += c.qty; cur.amount += c.amount;
+    cells.set(key, cur);
+  }
+  const out = [];
+  for (const [key, v] of cells) {
+    const [y, m, sp, product] = key.split("|");
+    const qty = Math.round(v.qty * 100) / 100;
+    const amount = Math.round(v.amount * 100) / 100;
+    if (qty === 0 && amount === 0) continue;
+    out.push({ year: Number(y), month: Number(m), sp, product, qty, amount });
+  }
+  out.sort((a, b) => a.year - b.year || a.month - b.month || a.sp.localeCompare(b.sp) || a.product.localeCompare(b.product));
+  return out;
 }
 
 // Remaining items to watch (confirmed rules above are per HQ 2026-07-31).

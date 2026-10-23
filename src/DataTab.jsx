@@ -15,7 +15,7 @@ import {
   hydrateFileRows, getFileRows,
 } from "./lib/files.js";
 import {
-  syncWeeklyFromFiles, invoiceFilesFrom,
+  syncWeeklyFromFiles, invoiceFilesFrom, productSyncWarning,
   syncCustomersFromFiles, syncBrandsFromFiles,
 } from "./lib/weekly.js";
 import { fetchAll } from "./lib/supabase.js";
@@ -208,7 +208,8 @@ export default function DataTab({ data, onRefresh }) {
         setNotice(
           `Weekly Sales updated — ${res.weeks} week${res.weeks === 1 ? "" : "s"} ` +
           `synced from ${res.files} invoice file${res.files === 1 ? "" : "s"} ` +
-          `(${res.periodStart} → ${res.periodEnd}). Open the Overview tab to see it.`
+          `(${res.periodStart} → ${res.periodEnd}). Open the Overview tab to see it.` +
+          productSyncWarning(res)
         );
         onRefresh?.();
       } else if (!silent) {
@@ -357,8 +358,11 @@ export default function DataTab({ data, onRefresh }) {
       } else {
         await runStage("weekly", async () => {
           const res = await syncWeeklyFromFiles(hydrated);
+          const prod = res.products?.error
+            ? ` · product trend FAILED (${productSyncWarning(res).trim()})`
+            : res.products?.rows ? ` · ${res.products.rows.toLocaleString()} product-month rows` : "";
           if (res.rows === 0) return `already in sync (${invoiceCount} file${invoiceCount === 1 ? "" : "s"})`;
-          return `${res.weeks} week${res.weeks === 1 ? "" : "s"} · ${res.rows} rep-week rows`;
+          return `${res.weeks} week${res.weeks === 1 ? "" : "s"} · ${res.rows} rep-week rows${prod}`;
         });
       }
 

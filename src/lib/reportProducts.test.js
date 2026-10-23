@@ -2,7 +2,7 @@
 // the unambiguous rules; the flagged-for-review cases (MC colour split, DISOP
 // variants, overseas BOC) are intentionally NOT asserted until confirmed.
 import { describe, it, expect } from "vitest";
-import { brandToProduct, isFreeOrSample, REPORT_PRODUCTS, aggregateProductMonthly } from "./reportProducts.js";
+import { brandToProduct, isFreeOrSample, REPORT_PRODUCTS, aggregateProductMonthly, aggregateProductMonthlyBySp } from "./reportProducts.js";
 
 describe("brandToProduct — unambiguous rules", () => {
   it("1-day pure torics → astigmatism", () => {
@@ -180,5 +180,51 @@ describe("2 Week Pure (HQ Aug 2026 reconciliation)", () => {
     const { products } = aggregateProductMonthly(rows, 2026);
     expect(products["2 WEEK PURE UP TORIC"].qty[7]).toBe(39); // 30 + 8 + 6/6
     expect(products["2 WEEK PURE UP"].qty[7]).toBe(15);       // 12 + 2 + 6/6
+  });
+});
+
+describe("aggregateProductMonthlyBySp", () => {
+  it("splits the same classification by year, month and salesperson", () => {
+    const rows = [
+      { date: "2026-03-10", sp: "Alan", brand: "1D PURE EDOF [HIGH]", qty: 2, amount: 280 },
+      { date: "2026-03-11", sp: "Alan", brand: "1D PURE EDOF [LOW]", qty: 1, amount: 140 },
+      { date: "2026-03-12", sp: "Dino", brand: "1D PURE EDOF [MID]", qty: 4, amount: 560 },
+      { date: "2026-04-02", sp: "Alan", brand: "ECB10-M BASE MAKE", qty: 5, amount: 200 },
+      // FOC boxes add quantity, not revenue; credit notes net the month down.
+      { date: "2026-03-15", sp: "Alan", brand: "1D PURE EDOF HIGH [FOC tie in goods]", qty: 3, amount: 0 },
+      { date: "2026-04-20", sp: "Alan", brand: "ECB10-M BASE MAKE", qty: -1, amount: -40 },
+      // Never counted: promo giveaway, unmapped brand, no salesperson, no date.
+      { date: "2026-03-16", sp: "Alan", brand: "Promotion Use - SEED Ball Pen [FOC tie in goods]", qty: 99, amount: 0 },
+      { date: "2026-03-20", sp: "Alan", brand: "NA", qty: 4, amount: 44 },
+      { date: "2026-03-21", brand: "1D PURE EDOF [MID]", qty: 1, amount: 1 },
+      { sp: "Alan", brand: "1D PURE EDOF [MID]", qty: 1, amount: 1 },
+      // A different year stays separate.
+      { date: "2025-03-01", sp: "Alan", brand: "1D PURE EDOF [MID]", qty: 9, amount: 9 },
+    ];
+    const out = aggregateProductMonthlyBySp(rows);
+    expect(out).toEqual([
+      { year: 2025, month: 3, sp: "Alan", product: "1 DAYPURE EDOF", qty: 9, amount: 9 },
+      { year: 2026, month: 3, sp: "Alan", product: "1 DAYPURE EDOF", qty: 6, amount: 420 },
+      { year: 2026, month: 3, sp: "Dino", product: "1 DAYPURE EDOF", qty: 4, amount: 560 },
+      { year: 2026, month: 4, sp: "Alan", product: "EYE COFFRET-M", qty: 4, amount: 160 },
+    ]);
+  });
+
+  it("ties out to the HQ grid: summing reps gives aggregateProductMonthly", () => {
+    const rows = [
+      { date: "2026-03-10", sp: "Alan", brand: "1D PURE EDOF [HIGH]", qty: 2, amount: 280 },
+      { date: "2026-03-12", sp: "Dino", brand: "1D PURE EDOF [MID]", qty: 4, amount: 560 },
+      { date: "2026-05-02", sp: "Khen", brand: "ECB10-M BASE MAKE", qty: 5, amount: 200 },
+    ];
+    const grid = aggregateProductMonthly(rows, 2026).products;
+    const bySp = aggregateProductMonthlyBySp(rows);
+    for (const [product, g] of Object.entries(grid)) {
+      for (let m = 0; m < 12; m++) {
+        const qty = bySp.filter(r => r.product === product && r.month === m + 1).reduce((a, r) => a + r.qty, 0);
+        const amount = bySp.filter(r => r.product === product && r.month === m + 1).reduce((a, r) => a + r.amount, 0);
+        expect(qty).toBeCloseTo(g.qty[m], 2);
+        expect(amount).toBeCloseTo(g.amount[m], 2);
+      }
+    }
   });
 });

@@ -214,12 +214,18 @@ export default function App() {
         // can show which archived files feed the current view. RLS on
         // data_files returns empty for non-admins, so the extra fetch is a
         // no-op for them — no server-side gate needed here.
-        const [customers, targets, weekly, allFiles] = await Promise.all([
+        const [customers, targets, weekly, allFiles, productMonthly] = await Promise.all([
           fetchAll("customers_data", "sp,year,customer,months,total"),
           fetchAll("sales_targets", "year,month,sp,target_amt"),
           fetchAll("weekly_sales", "period_start,period_end,sp,amount,uploaded_at"),
           fetchAll("data_files", "id,name,kind,sp,year,uploaded_at,deleted_at")
             .then(rows => rows.filter(r => !r.deleted_at))
+            .catch(() => []),
+          // Month x salesperson x product roll-up behind the Monthly Trends
+          // product view. Optional: before migration 0021 is applied the table
+          // doesn't exist, and that must not take the rest of the dashboard down.
+          fetchAll("product_monthly_sales", "year,month,sp,product,qty,amount")
+            .then(rows => rows.filter(r => !isAggScope(r.sp)))
             .catch(() => []),
         ]);
 
@@ -272,6 +278,10 @@ export default function App() {
           // Raw customer × Stock-Group rows { year, customer, sp, group, amount, qty }
           // for the Product Group Performance and Customer × Group views.
           aggregated.groupRows = groupRows;
+          aggregated.productMonthly = productMonthly.map(r => ({
+            year: r.year, month: r.month, sp: r.sp, product: r.product,
+            qty: Number(r.qty) || 0, amount: Number(r.amount) || 0,
+          }));
           return aggregated;
         };
 

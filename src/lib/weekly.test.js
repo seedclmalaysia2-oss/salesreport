@@ -39,6 +39,8 @@ import {
   invoiceFilesFrom,
   dedupeInvoiceUnits,
   syncWeeklyFromFiles,
+  syncProductMonthlyFromFiles,
+  productSyncWarning,
   syncCustomersFromFiles,
   recalcAllFacts,
 } from "./weekly.js";
@@ -162,6 +164,47 @@ describe("syncWeeklyFromFiles", () => {
     expect(H.state.upserts[0].opts).toEqual({ onConflict: "period_start,period_end,sp" });
     expect(H.state.upserts[0].payload).toEqual(EXPECTED_BOARD);
     expect(res).toMatchObject({ rows: 4, weeks: 2 });
+  });
+});
+
+describe("syncProductMonthlyFromFiles", () => {
+  const detailFile = (uploadedAt, rows) => ({ id: `d${uploadedAt}`, kind: "invoice", deletedAt: null, uploadedAt, rows });
+  const line = (date, sp, brand, qty, amount) => ({ date, sp, brand, qty, amount, invoice: `${date}-${sp}-${brand}` });
+
+  it("replaces each year with its month x rep x product roll-up", async () => {
+    const res = await syncProductMonthlyFromFiles([
+      detailFile(1000, [
+        line("2026-03-10", "Alan", "1D PURE EDOF [HIGH]", 2, 280),
+        line("2026-03-12", "Dino", "1D PURE EDOF [MID]", 4, 560),
+        line("2025-11-02", "Alan", "ECB10-M BASE MAKE", 5, 200),
+      ]),
+    ]);
+    expect(H.state.rpcs.map(r => [r.name, r.args.p_year])).toEqual([
+      ["replace_product_monthly_sales", 2025],
+      ["replace_product_monthly_sales", 2026],
+    ]);
+    expect(H.state.rpcs[1].args.p_rows).toEqual([
+      { month: 3, sp: "Alan", product: "1 DAYPURE EDOF", qty: 2, amount: 280 },
+      { month: 3, sp: "Dino", product: "1 DAYPURE EDOF", qty: 4, amount: 560 },
+    ]);
+    expect(res).toEqual({ years: [2025, 2026], rows: 3 });
+  });
+
+  it("does nothing for invoice files that carry no brand (older Invoice Listing)", async () => {
+    const res = await syncProductMonthlyFromFiles([oldInvoiceFile, newInvoiceFile]);
+    expect(H.state.rpcs).toHaveLength(0);
+    expect(res.rows).toBe(0);
+  });
+
+  it("is best-effort inside the weekly sync: a failure is reported, the weekly board still lands", async () => {
+    H.state.rpcError = { message: "Could not find the function public.replace_product_monthly_sales in the schema cache" };
+    const res = await syncWeeklyFromFiles([
+      detailFile(1000, [line("2026-07-03", "Alan", "1D PURE EDOF [HIGH]", 2, 280)]),
+    ]);
+    expect(H.state.upserts).toHaveLength(1); // weekly_sales still written
+    expect(res.rows).toBe(1);
+    expect(res.products.error).toMatch(/replace_product_monthly_sales/);
+    expect(productSyncWarning(res)).toMatch(/0021_product_monthly_sales/);
   });
 });
 

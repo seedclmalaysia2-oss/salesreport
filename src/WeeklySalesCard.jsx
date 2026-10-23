@@ -7,7 +7,7 @@ import { supabase } from "./lib/supabase.js";
 // the Refresh button rebuild the weekly board (admins only) from the invoice
 // files before reloading — a focused, weekly-only sync (the full customer/brand
 // recalc lives on the Data tab's "Recalculate now").
-import { weekBounds, REP_ORDER, syncWeeklyFromFiles } from "./lib/weekly.js";
+import { weekBounds, REP_ORDER, syncWeeklyFromFiles, productSyncWarning } from "./lib/weekly.js";
 import WeeklyAlertsButton from "./WeeklyAlerts.jsx";
 import { sendWeeklyPush, pushConfigured } from "./lib/push.js";
 
@@ -528,7 +528,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
           );
         } else {
           setRefreshNote(
-            `Rebuilt from ${res.invoices.toLocaleString()} invoice${res.invoices === 1 ? "" : "s"} across ${res.files} file${res.files === 1 ? "" : "s"} → ${res.rows} rep-week row${res.rows === 1 ? "" : "s"}${res.periodStart ? ` (${res.periodStart} → ${res.periodEnd})` : ""}. If the totals look unchanged, the uploaded file matched what was already there.`
+            `Rebuilt from ${res.invoices.toLocaleString()} invoice${res.invoices === 1 ? "" : "s"} across ${res.files} file${res.files === 1 ? "" : "s"} → ${res.rows} rep-week row${res.rows === 1 ? "" : "s"}${res.periodStart ? ` (${res.periodStart} → ${res.periodEnd})` : ""}. If the totals look unchanged, the uploaded file matched what was already there.${productSyncWarning(res)}`
           );
         }
       } catch (e) {

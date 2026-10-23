@@ -9,6 +9,7 @@
 // the file library and the weekly board.
 
 import { mergeDatedRowsByMonth, mergeMonthlyRowsByMonth } from "./periods.js";
+import { aggregateProductMonthlyBySp } from "./reportProducts.js";
 import { supabase } from "./supabase.js";
 
 // The rep rows the weekly board understands. "Seed Malaysia" is the house /
@@ -115,6 +116,32 @@ export function dedupeInvoiceUnits(files) {
   return [...units.values()];
 }
 
+// Roll the Stock-Detail lines (the invoice files that carry a brand) up to
+// month x salesperson x HQ product and replace each year's slice of
+// public.product_monthly_sales — the table behind the Monthly Trends product
+// view. Same month-ownership rule as the HQ report (newest file owns each
+// month), so the two always tie. Lines without a brand (the older Customer
+// Invoice Listing) contribute nothing, and a year with no branded lines is left
+// untouched rather than wiped.
+export async function syncProductMonthlyFromFiles(files) {
+  const rows = aggregateProductMonthlyBySp(mergeDatedRowsByMonth(invoiceFilesFrom(files)));
+  const byYear = new Map(); // year -> [{ month, sp, product, qty, amount }]
+  for (const r of rows) {
+    if (!byYear.has(r.year)) byYear.set(r.year, []);
+    byYear.get(r.year).push({ month: r.month, sp: r.sp, product: r.product, qty: r.qty, amount: r.amount });
+  }
+  let inserted = 0;
+  for (const [year, yearRows] of byYear) {
+    const { data, error } = await supabase.rpc("replace_product_monthly_sales", {
+      p_year: year,
+      p_rows: yearRows,
+    });
+    if (error) throw error;
+    inserted += data?.[0]?.inserted ?? yearRows.length;
+  }
+  return { years: [...byYear.keys()].sort(), rows: inserted };
+}
+
 // Rebuild weekly_sales from every invoice file currently visible. Idempotent
 // and duplicate-proof: invoices are de-duplicated across files first (see
 // dedupeInvoiceUnits), then bucketed into Mon–Sun weeks and upserted on the
@@ -132,6 +159,16 @@ export async function syncWeeklyFromFiles(files) {
     .from("weekly_sales")
     .upsert(payload, { onConflict: "period_start,period_end,sp" });
   if (error) throw error;
+  // The product trend rides on the same invoice files, so every path that
+  // refreshes the weekly board (upload, Update, Recalculate, Weekly Refresh)
+  // refreshes it too. Best-effort: a failure here (typically migration 0021 not
+  // applied yet) must never block the weekly board, so it is reported, not thrown.
+  let products;
+  try {
+    products = await syncProductMonthlyFromFiles(files);
+  } catch (e) {
+    products = { years: [], rows: 0, error: e?.message || String(e) };
+  }
   const starts = payload.map((p) => p.period_start).sort();
   const ends = payload.map((p) => p.period_end).sort();
   return {
@@ -141,7 +178,19 @@ export async function syncWeeklyFromFiles(files) {
     rows: payload.length,
     periodStart: starts[0],
     periodEnd: ends[ends.length - 1],
+    products,
   };
+}
+
+// One-line warning for the sync notices when the product-trend half of a sync
+// failed ("" when it succeeded or there was nothing to do).
+export function productSyncWarning(res) {
+  const err = res?.products?.error;
+  if (!err) return "";
+  const missing = /product_monthly_sales|replace_product_monthly_sales|schema cache|does not exist/i.test(err);
+  return missing
+    ? " Product trend not updated — run migration 0021_product_monthly_sales.sql in Supabase Studio."
+    : ` Product trend not updated: ${err}`;
 }
 
 // One press that rebuilds every fact table the dashboard reads, from the newest
