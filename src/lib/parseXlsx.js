@@ -113,7 +113,7 @@ export function parseFilename(name) {
   return null;
 }
 
-function sheetToRows(XLSX, sheet) {
+export function sheetToRows(XLSX, sheet) {
   return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true, blankrows: true });
 }
 
@@ -347,7 +347,7 @@ function parseAutocountDate(s) {
   }
   return null;
 }
-function parseInvoiceRows(rows) {
+export function parseInvoiceRows(rows) {
   const out = [];
   for (const row of rows) {
     if (!row) continue;
@@ -418,7 +418,7 @@ function findStockDetailLayout(rows) {
   return null;
 }
 
-function parseStockDetailRows(rows) {
+export function parseStockDetailRows(rows) {
   const layout = findStockDetailLayout(rows);
   if (!layout) return [];
   const { headerRow, dateCol, docCol, spCol, amtCol, qtyCol, uomCol } = layout;
