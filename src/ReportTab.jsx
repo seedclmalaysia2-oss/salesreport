@@ -24,18 +24,21 @@ const YEARS = [2026, 2025, 2024, 2023, 2022];
 const AMOUNT_ROWS = [...REPORT_PRODUCTS, ...AMOUNT_ONLY_ROWS];
 
 // --- HQ template layout (sheet "monthly sales", SEED(M) Sales Summary) ---
-// The quantity section (rows 5–35) lists the 31 products in REPORT_PRODUCTS order,
-// so QTY row = 5 + index. The amount section (rows 39–70) uses a slightly different
-// order (Ultra Vision sits below Wohlk) and adds OTHER INCOME, so it needs an
-// explicit list. Only the 12 monthly cells (cols B–M = 2–13) are written; every
-// TOTAL / BALANCE / ACC% / target-block cell is a formula and recalculates on open.
+// The quantity section lists the products in REPORT_PRODUCTS order, so QTY row =
+// 5 + index. The amount section uses a slightly different order (Ultra Vision
+// sits below Wohlk) and adds OTHER INCOME, so it needs an explicit list. Only the
+// 12 monthly cells (cols B–M = 2–13) are written; every TOTAL / BALANCE / ACC% /
+// target-block cell is a formula and recalculates on open.
 const TEMPLATE_SHEET = "monthly sales";
-// Template was extended with a "DISOP ACUAISS DUAL GEL EYEDROP" row in both the
-// quantity section (after DISOP ULTRA EYEDROP) and the amount section, so the
-// amount section and the target block sit one/two rows lower than the original.
-const QTY_FIRST_ROW = 5;              // REPORT_PRODUCTS[i] -> row 5 + i (32 products, rows 5-36)
-const AMOUNT_FIRST_ROW = 40;          // AMOUNT_ROW_ORDER[i] -> row 40 + i (33 rows, 40-72)
-const TARGET_ROWS = [76, 85];         // "Jpn Sales Target" and "Revised Sales Target"
+// Template history: a "DISOP ACUAISS DUAL GEL EYEDROP" row was added to both
+// sections, then (2026-10-24) "Wohlk KE RGP" was split into three rows — KE RGP
+// + "Wohlk Contact Life Sph" + "Wohlk Contact Life Toric" — adding two rows to
+// each section (see scripts/out/build_wohlk_template.mjs). So the quantity
+// section is now 34 products (rows 5-38), the amount section 35 rows (42-76),
+// and the target block sits four rows lower than the original.
+const QTY_FIRST_ROW = 5;              // REPORT_PRODUCTS[i] -> row 5 + i (34 products, rows 5-38)
+const AMOUNT_FIRST_ROW = 42;          // AMOUNT_ROW_ORDER[i] -> row 42 + i (35 rows, 42-76)
+const TARGET_ROWS = [80, 89];         // "Jpn Sales Target" and "Revised Sales Target"
 const AMOUNT_ROW_ORDER = [
   "1 DAY PURE", "1 DAY PURE SILFA", "1 DAY PURE ASTIGMATISM", "1 DAY MULSTISTAGE",
   "1 DAYPURE EDOF", "1 DAY VIEW SUPPORT", "2 WEEK PURE MULTISTAGE", "2 WEEK PURE UP TORIC",
@@ -43,7 +46,8 @@ const AMOUNT_ROW_ORDER = [
   "MONTHLY FINE PLUS", "MONTHLY PURE3", "MONTHLY PURE6",
   "MONTHLY COLOR UV - PEGAVISION", "MONTHLY COLOR UV - BLUE", "MONTHLY COLOR UV - ORANGE", "MONTHLY COLOR UV  II",
   "MINASOFT 1DAY COLOR UV", "MINASOFT CARE UV", "RGP UV-1 / UV-1 KC", "RGP AS-LUNA/O2 NOAH",
-  "IRIS LENS", "BREATH O CORRECT", "BREATH O CORRECT (OVERSEAS)", "Wohlk KE RGP", "ULTRA VISION",
+  "IRIS LENS", "BREATH O CORRECT", "BREATH O CORRECT (OVERSEAS)",
+  "Wohlk KE RGP", "Wohlk Contact Life Sph", "Wohlk Contact Life Toric", "ULTRA VISION",
   "DISOP H2O2 SOLUTION", "DISOP ULTRA EYEDROP", "DISOP ACUAISS DUAL GEL EYEDROP", "ACCESSORIES/OTHERS", "OTHER INCOME",
 ];
 

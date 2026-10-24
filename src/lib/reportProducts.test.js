@@ -25,7 +25,20 @@ describe("brandToProduct — unambiguous rules", () => {
   it("RGP / Ultra Vision / Wohlk", () => {
     expect(brandToProduct("SEED UV-1 KC RGP")).toBe("RGP UV-1 / UV-1 KC");
     expect(brandToProduct("UV DURAWAVE [Sphere]")).toBe("ULTRA VISION");
-    expect(brandToProduct("Wohlk C.Life Sphere")).toBe("Wohlk KE RGP");
+  });
+
+  // Wohlk splits three ways (HQ 2026-10-24): KE RGP (hard), Contact Life Sph and
+  // Contact Life Toric (soft). KE must win over the Contact Life rules.
+  it("Wohlk → KE RGP / Contact Life Sph / Contact Life Toric", () => {
+    expect(brandToProduct("Wohlk C.Life Sphere")).toBe("Wohlk Contact Life Sph");
+    expect(brandToProduct("Wohlk C.Life Toric -1.25")).toBe("Wohlk Contact Life Toric");
+    expect(brandToProduct("Wohlk Contact Life Sphere")).toBe("Wohlk Contact Life Sph");
+    expect(brandToProduct("WHCL Sphere +2.00")).toBe("Wohlk Contact Life Sph");
+    expect(brandToProduct("Wohlk KE RGP BC7.80")).toBe("Wohlk KE RGP");
+    expect(brandToProduct("Wohlk KE")).toBe("Wohlk KE RGP");
+    expect(brandToProduct("Wohlk")).toBe("Wohlk KE RGP"); // bare fallback
+    // "UV …[Sphere]" is Ultra Vision, not a Wohlk sphere (UV rule wins first).
+    expect(brandToProduct("UV AVANTI [Sphere]")).toBe("ULTRA VISION");
   });
 });
 
@@ -157,10 +170,15 @@ describe("Breath-O-Correct overseas split by salesman (HQ 2026-09)", () => {
 });
 
 describe("product list", () => {
-  it("has the 31 report rows in order, starting 1 DAY PURE", () => {
-    expect(REPORT_PRODUCTS).toHaveLength(32);
+  it("has the 34 report rows in order, starting 1 DAY PURE", () => {
+    expect(REPORT_PRODUCTS).toHaveLength(34); // +Wohlk Contact Life Sph/Toric (2026-10-24)
     expect(REPORT_PRODUCTS[0]).toBe("1 DAY PURE");
     expect(REPORT_PRODUCTS.at(-1)).toBe("ACCESSORIES/OTHERS");
+    // Wohlk block: KE RGP then the two Contact Life rows.
+    const w = REPORT_PRODUCTS.indexOf("Wohlk KE RGP");
+    expect(REPORT_PRODUCTS.slice(w, w + 3)).toEqual([
+      "Wohlk KE RGP", "Wohlk Contact Life Sph", "Wohlk Contact Life Toric",
+    ]);
   });
 });
 

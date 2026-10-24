@@ -42,6 +42,8 @@ export const REPORT_PRODUCTS = [
   "BREATH O CORRECT",
   "BREATH O CORRECT (OVERSEAS)",
   "Wohlk KE RGP",
+  "Wohlk Contact Life Sph",
+  "Wohlk Contact Life Toric",
   "DISOP H2O2 SOLUTION",
   "DISOP ULTRA EYEDROP",
   "DISOP ACUAISS DUAL GEL EYEDROP",
@@ -106,7 +108,15 @@ const RULES = [
   { test: /^UV /i,                             product: "ULTRA VISION" },           // UV AVANTI/DURAWAVE/etc.
   { test: /Glodisa/i,                          product: "BREATH O CORRECT (OVERSEAS)" }, // HQ: Glodisa = overseas
   { test: /BOC|ORTHO-?K/i,                     product: "BREATH O CORRECT" },       // all other Ortho-K = local
-  { test: /Wohlk|WHCL/i,                       product: "Wohlk KE RGP" },
+  // Wohlk splits three ways (HQ 2026-10-24): "KE" is the RGP (hard) lens; the
+  // Contact Life (soft) line is reported separately as Sph vs Toric. SKU names
+  // look like "Wohlk C.Life Sphere" / "...Toric" / "Wohlk KE ..."; WHCL is a
+  // Contact Life code. KE first (so an RGP never lands in Contact Life), then
+  // toric, then Contact Life sphere, then a bare-Wohlk fallback to KE RGP.
+  { test: /Wohlk.*\bKE\b/i,                           product: "Wohlk KE RGP" },
+  { test: /(Wohlk|WHCL).*\btoric\b/i,                 product: "Wohlk Contact Life Toric" },
+  { test: /Wohlk.*(C\.?\s*Life|Contact\s*Life|Spher|\bSph\b)|WHCL/i, product: "Wohlk Contact Life Sph" },
+  { test: /Wohlk/i,                                   product: "Wohlk KE RGP" },
 
   // --- DISOP solutions / drops (HQ: DUAL GEL & ACUAISS are eyedrop; HidroHealth is H2O2) ---
   // Split DISOP eyedrops: "Dual Gel" is its own report row; "Ultra"/"Acuaiss"
