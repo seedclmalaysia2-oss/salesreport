@@ -79,9 +79,28 @@ function actionButton(variant, { active = false } = {}) {
     border: "1px solid color-mix(in srgb, var(--st-info) 35%, transparent)" };
 }
 
-// The weekly source-file list is rendered once, in the page-level "Data sources"
-// footer (SourceFilesFooter in Dashboard.jsx). It used to be duplicated inline on
-// this card — removed so the whole invoice-file list isn't shown twice.
+// Minimised source line: the single newest file feeding the board, on one row,
+// with a "+N more" hint so the long per-file list doesn't crowd the card (the
+// full list lives in the page "Data sources" footer). Non-admins get an empty
+// list from RLS, so the block collapses to nothing for them.
+function SourceFiles({ files }) {
+  const list = [...(files || [])].sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+  const latest = list[0];
+  if (!latest) return null;
+  const more = list.length - 1;
+  const when = latest.uploadedAt
+    ? new Date(latest.uploadedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+    : "—";
+  return (
+    <div style={{ marginTop: 6, fontSize: 11.5, color: "rgba(var(--tint),0.69)", lineHeight: 1.5, display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+      <span style={{ fontWeight: 600, color: "rgba(var(--tint),0.7)" }}>Source:</span>
+      <span style={{ fontFamily: "'Space Mono',monospace", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "min(100%, 340px)" }} title={latest.name}>
+        {latest.name}
+      </span>
+      <span style={{ color: "rgba(var(--tint),0.66)" }}>· uploaded {when}{more > 0 ? ` · +${more} more` : ""}</span>
+    </div>
+  );
+}
 
 function Spinner({ size = 13, color = "var(--st-info)" }) {
   return (
@@ -885,9 +904,9 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
               Last updated {new Date(headerUploadedAt).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
             </div>
           )}
-          {/* The per-file source list lives only in the "Data sources" footer at
-              the bottom of the page (SourceFilesFooter) — it was shown here too,
-              which duplicated the whole weekly-invoice list on the card. */}
+          {/* Minimised source line (newest file + "+N more"); the full per-file
+              list lives in the page "Data sources" footer. */}
+          {invoiceFiles.length > 0 && <SourceFiles files={invoiceFiles} />}
         </div>
         {HeaderActions}
       </div>
