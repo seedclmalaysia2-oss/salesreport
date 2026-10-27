@@ -665,10 +665,19 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
       }
       const board = new Map(monthAgg.rows.map(r => [r.sp, r.amount]));
       // The Sales Analysis (customer) file is exported periodically and lags the
-      // invoice feed, so the current month is usually not in it yet. When it has
-      // NO figure for this month at all, there is nothing to reconcile to — skip
-      // the adjustment rather than subtracting the whole month down to zero.
-      if (sa.size > 0) {
+      // invoice feed, so for the current month it is usually missing or only
+      // partially filled. Reconciling the board DOWN to a half-empty customer
+      // total wipes the month out — e.g. Oct 2026 showed a −RM 269,992 "Cust
+      // Adj" because the board was ~RM 287k but the still-catching-up customer
+      // file read ~RM 17k, which drove Week 4 (and the whole month) negative.
+      // So only reconcile when the customer total has actually caught up to this
+      // month — within a sane band of the board total. Below that, show the raw
+      // invoice board (no adjustment); credit-note drift, the only thing this is
+      // meant to correct, never removes half a month of sales.
+      const saTotal = [...sa.values()].reduce((a, b) => a + b, 0);
+      const boardTotal = [...board.values()].reduce((a, b) => a + b, 0);
+      const caughtUp = sa.size > 0 && (boardTotal <= 0 || saTotal >= boardTotal * 0.5);
+      if (caughtUp) {
         for (const rep of new Set([...sa.keys(), ...board.keys()])) {
           const adj = Math.round(((sa.get(rep) || 0) - (board.get(rep) || 0)) * 100) / 100;
           if (Math.abs(adj) >= 0.005) m.set(rep, adj);
