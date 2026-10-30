@@ -323,6 +323,28 @@ function WeeklyShareModal({ summary, seriesColors, isAdmin, onClose }) {
   // WhatsApp asks which chat or group to send it to, with the text prefilled.
   const whatsappHref = `https://wa.me/?text=${encodeURIComponent(text)}`;
 
+  // Admin: one button per rep, straight into that rep's WhatsApp chat. The
+  // numbers come from the server (REP_WHATSAPP env) — never the public repo.
+  const [repContacts, setRepContacts] = useState({});
+  useEffect(() => {
+    if (!isAdmin) return;
+    let live = true;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const token = data?.session?.access_token;
+        if (!token) return;
+        const r = await fetch("/api/rep-contacts", { headers: { Authorization: `Bearer ${token}` } });
+        const j = await r.json().catch(() => ({}));
+        if (live && r.ok) setRepContacts(j.contacts || {});
+      } catch { /* buttons just don't show */ }
+    })();
+    return () => { live = false; };
+  }, [isAdmin]);
+  const repLinks = Object.entries(repContacts)
+    .filter(([, n]) => /^\d{8,15}$/.test(String(n)))
+    .sort(([a], [b]) => (REP_ORDER.indexOf(a) + 1 || 99) - (REP_ORDER.indexOf(b) + 1 || 99));
+
   return (
     <div
       onClick={onClose}
@@ -423,6 +445,24 @@ function WeeklyShareModal({ summary, seriesColors, isAdmin, onClose }) {
             </button>
           )}
         </div>
+        {repLinks.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: 1, color: "rgba(var(--tint),0.45)", marginBottom: 6 }}>
+              Send to each salesperson
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {repLinks.map(([sp, num]) => (
+                <a key={sp} href={`https://wa.me/${num}?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer"
+                  style={{ ...actionButton("info"), padding: "7px 12px", textDecoration: "none",
+                    background: "color-mix(in srgb, var(--st-ok) 10%, transparent)", color: "var(--st-ok)",
+                    border: "1px solid color-mix(in srgb, var(--st-ok) 35%, transparent)" }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 2, background: SP_COLORS[sp] || "#888" }} />
+                  {sp}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
         <div style={{ fontSize: 11, color: "rgba(var(--tint),0.5)", marginTop: 10, lineHeight: 1.5 }}>
           💬 WhatsApp opens the chat picker with the summary filled in — choose the team group and tap send. The numbers match the board above.
         </div>

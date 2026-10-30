@@ -123,7 +123,7 @@ Put the same three VAPID values in your local `.env` too, to test locally. Then 
 
 **e. Send it.** Admin → Overview → the weekly board → **📋 Share** → **🔔 Send as push alert to the team**. It goes only to reps who enabled alerts.
 
-**f. Automatic weekly send.** Vercel Cron calls `/api/weekly-digest` every Monday 01:00 UTC (9am Malaysia, see `vercel.json`) and pushes the same month-to-date summary as the Share modal. It needs `CRON_SECRET` in Vercel (Vercel Cron sends it as `Authorization: Bearer …`). To preview the text without sending: `curl -H "Authorization: Bearer $CRON_SECRET" https://sales.seedclmalaysiastore.com/api/weekly-digest?dry=1`.
+**f. Automatic send on every update.** Whenever an upload / Update / Recalculate / Refresh rebuilds the weekly board, the browser calls `POST /api/weekly-digest`; the server rebuilds the month-to-date summary and pushes it **only if the figures changed** since the last push (fingerprint in storage at `data-files/digest/last-weekly.json`). Tapping the alert opens the summary with a 💬 WhatsApp button. To preview the text: `curl -H "Authorization: Bearer $CRON_SECRET" https://sales.seedclmalaysiastore.com/api/weekly-digest?dry=1`.
 
 If nobody gets a push: check the three VAPID env vars and the service_role key are set in Vercel and you've redeployed since; confirm the rep tapped Allow (and, on iPhone, installed to Home Screen first); the ⚠ on the weekly board means the *data* is stale, unrelated to push.
 

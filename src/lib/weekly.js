@@ -169,6 +169,7 @@ export async function syncWeeklyFromFiles(files) {
   } catch (e) {
     products = { years: [], rows: 0, error: e?.message || String(e) };
   }
+  notifyWeeklyUpdated();
   const starts = payload.map((p) => p.period_start).sort();
   const ends = payload.map((p) => p.period_end).sort();
   return {
@@ -180,6 +181,24 @@ export async function syncWeeklyFromFiles(files) {
     periodEnd: ends[ends.length - 1],
     products,
   };
+}
+
+// Tell the server the weekly board may have changed, so it pushes the updated
+// summary to the reps. Every path that refreshes the board (upload, Update,
+// Recalculate, weekly Refresh) runs through syncWeeklyFromFiles, so this one
+// call covers them all. The server only sends when the numbers actually differ
+// from the last push, so a no-op re-sync stays silent. Fire-and-forget: a push
+// problem must never block or fail the sync itself.
+function notifyWeeklyUpdated() {
+  if (typeof window === "undefined") return;
+  (async () => {
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token;
+      if (!token) return;
+      await fetch("/api/weekly-digest", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+    } catch { /* best-effort */ }
+  })();
 }
 
 // One-line warning for the sync notices when the product-trend half of a sync

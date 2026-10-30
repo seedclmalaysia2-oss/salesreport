@@ -1,6 +1,6 @@
 // Vercel serverless function — send a Web Push notification to every subscribed
 // device. Called by the admin "Send now" button (auth: the admin's Supabase
-// JWT). The scheduled weekly send lives in api/weekly-digest.js.
+// JWT). The automatic send-on-update lives in api/weekly-digest.js.
 //
 // Env (set in Vercel → Settings → Environment Variables):
 //   VITE_VAPID_PUBLIC_KEY   — VAPID public key (same one the browser uses)
@@ -9,22 +9,7 @@
 //   SUPABASE_URL            — project URL   (falls back to VITE_SUPABASE_URL)
 //   SUPABASE_SERVICE_ROLE_KEY — service role key (SECRET; bypasses RLS)
 
-import { SUPABASE_URL, SERVICE_KEY, sb, pushEnvMissing, pushToAll } from "./_push.js";
-
-// Confirm the bearer token belongs to an admin. Returns true/false.
-async function callerIsAdmin(token) {
-  if (!token) return false;
-  const u = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` },
-  });
-  if (!u.ok) return false;
-  const user = await u.json();
-  if (!user?.id) return false;
-  const r = await sb(`sp_user_map?select=is_admin&user_id=eq.${user.id}`);
-  if (!r.ok) return false;
-  const rows = await r.json();
-  return rows?.[0]?.is_admin === true;
-}
+import { callerIsAdmin, pushEnvMissing, pushToAll } from "./_push.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });

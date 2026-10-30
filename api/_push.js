@@ -26,6 +26,21 @@ export async function sb(path, init = {}) {
   });
 }
 
+// Confirm a Supabase JWT belongs to an admin. Returns true/false.
+export async function callerIsAdmin(token) {
+  if (!token) return false;
+  const u = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` },
+  });
+  if (!u.ok) return false;
+  const user = await u.json();
+  if (!user?.id) return false;
+  const r = await sb(`sp_user_map?select=is_admin&user_id=eq.${user.id}`);
+  if (!r.ok) return false;
+  const rows = await r.json();
+  return rows?.[0]?.is_admin === true;
+}
+
 // Push { title, body, url } to every subscribed device; prunes dead endpoints.
 export async function pushToAll({ title, body, url = "/" }) {
   const payload = JSON.stringify({
