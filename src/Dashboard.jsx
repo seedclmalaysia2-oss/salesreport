@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, lazy, Suspense } from "react";
 import { applyCustCorrections } from "./lib/custCorrections.js";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, ReferenceLine } from "recharts";
 import WeeklySalesCard from "./WeeklySalesCard.jsx";
+import InstallApp from "./InstallApp.jsx";
 import { aggregateProductSales, CATEGORY_COLORS_DARK, CATEGORY_COLORS_LIGHT, CATEGORY_ORDER } from "./lib/productCategories.js";
 // The light/dark mode decision is shared with the pre-auth screens (App /
 // LoginScreen) so they agree on the active mode. THEMES below keeps the full
@@ -1207,6 +1208,24 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             </div>
           </div>
           <div style={{display:"flex",alignItems:"flex-start",gap:14,flexWrap:"wrap"}}>
+            {/* Install as a phone / desktop app — same control as the HR dashboard.
+                Hidden when already running as the installed app. */}
+            <InstallApp style={{
+              background:"rgba(var(--tint),0.05)",
+              border:"1px solid rgba(var(--tint),0.12)",
+              color:"var(--text)",
+              borderRadius:20,
+              padding:"6px 14px",
+              fontSize:13,
+              fontWeight:600,
+              cursor:"pointer",
+              fontFamily:"'Inter',sans-serif",
+              display:"flex",
+              alignItems:"center",
+              gap:8,
+              whiteSpace:"nowrap",
+              transition:"background 200ms",
+            }} />
             {/* Back to the SEED CL HUB portal home — same tab, it's the parent site. */}
             <a
               href="https://seedclmalaysiastore.com"

@@ -10,6 +10,13 @@ window.addEventListener('vite:preloadError', (e) => {
 // An open tab / Home-Screen app picks up new deploys without a manual reload.
 watchForNewBuild();
 
+// Chrome fires its install offer once, early (often before sign-in renders the
+// header), so keep it for the Install app button (src/InstallApp.jsx).
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window.__seedInstallPrompt = e;
+});
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />
