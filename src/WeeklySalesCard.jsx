@@ -11,6 +11,7 @@ import { weekBounds, REP_ORDER, syncWeeklyFromFiles, productSyncWarning } from "
 import WeeklyAlertsButton from "./WeeklyAlerts.jsx";
 import { sendWeeklyPush, pushConfigured } from "./lib/push.js";
 import { buildWeeklyShareText } from "./lib/weeklySummary.js";
+import { isStaleChunkError, reloadForNewBuild } from "./lib/staleChunk.js";
 
 // Retail Sales Team = the three reps who count toward the "Sales Team" column.
 // Everyone else only contributes to the "Seed Malaysia" total.
@@ -567,6 +568,8 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
           );
         }
       } catch (e) {
+        // The app was updated since this tab opened: load the new version.
+        if (isStaleChunkError(e) && reloadForNewBuild()) return;
         setRefreshError(
           `Couldn't rebuild the weekly board from the files — reloaded the existing numbers instead. ${e?.message || e}`
         );
