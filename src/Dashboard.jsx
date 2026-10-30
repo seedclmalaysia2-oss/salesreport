@@ -589,7 +589,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   // stray sp="All" scope so it can't render a redundant "All" filter pill. The
   // live data path already strips it in App.jsx; this also covers the baked
   // fallback and legacy data.json.
-  const SALESPEOPLE = SALESPEOPLE_ORDER.filter(sp => (data.salespeople || []).includes(sp))
+  const SALESPEOPLE_ALL = SALESPEOPLE_ORDER.filter(sp => (data.salespeople || []).includes(sp))
     .concat((data.salespeople || []).filter(sp => !SALESPEOPLE_ORDER.includes(sp) && sp !== "All"));
 
   useEffect(() => {
@@ -607,6 +607,17 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   const CUSTOMERS = data.customers || [];
   const BRAND_SALES = data.brandSales || [];
   const TARGETS = data.targets || [];
+
+  // Reps who left (Salim, Jerry) only appear in the years they sold: any
+  // single-year view lists just the reps with sales or a target that year.
+  // Multi-year charts keep SALESPEOPLE_ALL so their past years still show.
+  const SALESPEOPLE = SALESPEOPLE_ALL.filter(sp =>
+    SUMMARY.some(s => s.sp === sp && s.year === selectedYear && s.total > 0) ||
+    TARGETS.some(t => t.sp === sp && t.year === selectedYear && t.target > 0));
+
+  useEffect(() => {
+    if (selectedSP !== "All" && !SALESPEOPLE.includes(selectedSP)) setSelectedSP("All");
+  }, [selectedYear, data]);
 
   // Brand ⇄ Product Group dimension. The Brand Performance and Customer × Brand
   // views can pivot on either the SKU brand or the Autocount Stock-Group. Group
@@ -817,11 +828,11 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   const yearCompData = useMemo(() => {
     return YEARS.map(y => {
       const row = { year: y.toString() };
-      SALESPEOPLE.forEach(sp => {
+      SALESPEOPLE_ALL.forEach(sp => {
         const s = SUMMARY.find(d => d.sp === sp && d.year === y);
         row[sp] = s ? s.total : 0;
       });
-      row.total = SALESPEOPLE.reduce((acc, sp) => acc + (row[sp] || 0), 0);
+      row.total = SALESPEOPLE_ALL.reduce((acc, sp) => acc + (row[sp] || 0), 0);
       return row;
     });
   }, [data]);
@@ -888,7 +899,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
     const yearFilter = topCustomersBySpYear === "all"
       ? () => true
       : (r) => r.year === topCustomersBySpYear;
-    SALESPEOPLE.forEach(sp => {
+    SALESPEOPLE_ALL.forEach(sp => {
       const map = new Map();
       CUSTOMERS.filter(r => r.sp === sp && r.total > 0 && yearFilter(r)).forEach(r => {
         map.set(r.customer, (map.get(r.customer) || 0) + r.total);
@@ -1914,7 +1925,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
             {topCustomersBySpView === "grid" && (
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(min(380px,100%), 1fr))",gap:16}}>
-                {SALESPEOPLE.map(sp => {
+                {SALESPEOPLE_ALL.filter(sp => (topCustomersBySP[sp] || []).length > 0).map(sp => {
                   const list = topCustomersBySP[sp] || [];
                   const spTotal = list.reduce((a, c) => a + c.total, 0);
                   return (
@@ -1952,7 +1963,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
             {topCustomersBySpView === "list" && (
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(min(420px,100%), 1fr))",gap:16}}>
-                {SALESPEOPLE.map(sp => {
+                {SALESPEOPLE_ALL.filter(sp => (topCustomersBySP[sp] || []).length > 0).map(sp => {
                   const list = topCustomersBySP[sp] || [];
                   const spTotal = list.reduce((a, c) => a + c.total, 0);
                   const maxVal = list[0]?.total || 1;
@@ -2023,7 +2034,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   <Tooltip content={<CustomTooltip />} />
                   {selectedSP === "All" && <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />}
                   {selectedSP === "All" ? (
-                    SALESPEOPLE.map(sp => (
+                    SALESPEOPLE_ALL.map(sp => (
                       <Bar isAnimationActive={!reduceMotion} key={sp} dataKey={sp} fill={COLORS[sp] || "#888"} radius={[2,2,0,0]} />
                     ))
                   ) : (
@@ -2088,7 +2099,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               <>
                 <div style={{marginTop:24,marginBottom:14,fontSize:14,fontWeight:600}}>YoY by Sales Team</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(min(280px,100%), 1fr))",gap:16}}>
-                  {SALESPEOPLE.map(sp => {
+                  {SALESPEOPLE_ALL.map(sp => {
                     const spYears = YEARS.map(y => {
                       const s = SUMMARY.find(d => d.sp === sp && d.year === y);
                       return { year: y.toString(), total: s?.total || 0 };
