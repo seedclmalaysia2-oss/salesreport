@@ -71,7 +71,7 @@ export default async function handler(req, res) {
     const text = buildWeeklyShareText(summary);
     if (dry) return res.status(200).json({ dry: true, text });
 
-    const result = await pushToAll({ title: `SEED Weekly Sales — ${summary.monthName}`, body: text, url: "/" });
+    const result = await pushToAll({ title: `SEED Weekly Sales — ${summary.monthName}`, body: text, url: "/?share=weekly" });
     return res.status(200).json({ ...result, month: summary.monthKey });
   } catch (e) {
     return res.status(500).json({ error: e.message || String(e) });

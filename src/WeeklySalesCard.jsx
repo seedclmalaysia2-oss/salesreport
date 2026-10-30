@@ -264,7 +264,7 @@ function WeeklyShareModal({ summary, seriesColors, isAdmin, onClose }) {
     setSending(true);
     setSendResult(null);
     try {
-      const r = await sendWeeklyPush({ title: `SEED Weekly Sales — ${summary.monthName}`, body: text, url: "/" });
+      const r = await sendWeeklyPush({ title: `SEED Weekly Sales — ${summary.monthName}`, body: text, url: "/?share=weekly" });
       setSendResult({
         ok: true,
         msg: r.sent > 0
@@ -317,6 +317,11 @@ function WeeklyShareModal({ summary, seriesColors, isAdmin, onClose }) {
     try { await navigator.share({ title: "SEED Weekly Sales", text }); }
     catch { /* user dismissed the share sheet */ }
   };
+
+  // Click-to-chat (same wa.me pattern as the clinical app's recall card): no
+  // WhatsApp Business / Meta account needed. With no number in the link,
+  // WhatsApp asks which chat or group to send it to, with the text prefilled.
+  const whatsappHref = `https://wa.me/?text=${encodeURIComponent(text)}`;
 
   return (
     <div
@@ -403,17 +408,23 @@ function WeeklyShareModal({ summary, seriesColors, isAdmin, onClose }) {
         </div>
 
         <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-          <button onClick={copy} style={{ ...actionButton("primary"), flex: canNativeShare ? "0 0 auto" : 1, justifyContent: "center" }}>
+          <button onClick={copy} style={{ ...actionButton("primary"), flex: "0 0 auto", justifyContent: "center" }}>
             {copied ? "✓ Copied" : "📋 Copy summary"}
           </button>
+          <a href={whatsappHref} target="_blank" rel="noopener noreferrer"
+            style={{ ...actionButton("info"), flex: 1, justifyContent: "center", textDecoration: "none",
+              background: "color-mix(in srgb, var(--st-ok) 12%, transparent)", color: "var(--st-ok)",
+              border: "1px solid color-mix(in srgb, var(--st-ok) 40%, transparent)" }}>
+            💬 WhatsApp
+          </a>
           {canNativeShare && (
-            <button onClick={share} style={{ ...actionButton("info"), flex: 1, justifyContent: "center" }}>
+            <button onClick={share} style={{ ...actionButton("info"), flex: "0 0 auto", justifyContent: "center" }}>
               ↗ Share…
             </button>
           )}
         </div>
         <div style={{ fontSize: 11, color: "rgba(var(--tint),0.5)", marginTop: 10, lineHeight: 1.5 }}>
-          Copy and paste into WhatsApp or your team chat. The numbers match the board above.
+          💬 WhatsApp opens the chat picker with the summary filled in — choose the team group and tap send. The numbers match the board above.
         </div>
 
         {/* Admin: also push it to everyone who's enabled alerts on their phone.
@@ -447,7 +458,17 @@ function WeeklyShareModal({ summary, seriesColors, isAdmin, onClose }) {
 
 export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], targets, custSummary = [], isAdmin, canViewAll = true, onUploaded, onRefresh, seriesColors }) {
   const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
-  const [shareOpen, setShareOpen] = useState(false);
+  // A tap on the weekly push notification lands on /?share=weekly, which opens
+  // the summary straight away so it's one more tap to WhatsApp.
+  const [shareOpen, setShareOpen] = useState(
+    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("share") === "weekly"
+  );
+  const closeShare = () => {
+    setShareOpen(false);
+    if (new URLSearchParams(window.location.search).has("share")) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+    }
+  };
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState(null);
   const [refreshNote, setRefreshNote] = useState(null);
@@ -1057,7 +1078,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
         <WeeklyShareModal
           seriesColors={SP_COLORS}
           isAdmin={isAdmin}
-          onClose={() => setShareOpen(false)}
+          onClose={closeShare}
           summary={{
             monthName,
             periodLabel,

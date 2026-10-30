@@ -36,7 +36,11 @@ self.addEventListener("notificationclick", (event) => {
       // Focus an already-open dashboard tab if there is one; else open a new one.
       for (const w of wins) {
         try {
-          if (new URL(w.url).origin === self.location.origin && "focus" in w) return w.focus();
+          if (new URL(w.url).origin === self.location.origin && "focus" in w) {
+            // Carry the notification's link (e.g. /?share=weekly) into the open tab.
+            if (url !== "/" && "navigate" in w) return w.navigate(url).then((c) => (c || w).focus());
+            return w.focus();
+          }
         } catch { /* ignore malformed client url */ }
       }
       if (self.clients.openWindow) return self.clients.openWindow(url);
