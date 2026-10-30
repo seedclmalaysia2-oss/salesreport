@@ -455,11 +455,15 @@ function SourceFilesFooter({ files, isAdmin }) {
   const fmtDate = (ms) => ms ? new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
 
   return (
-    <div style={{ marginTop: 28, padding: "18px 20px", background: "rgba(var(--tint),0.02)", border: "1px solid rgba(var(--tint),0.08)", borderRadius: 14 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, color: "rgba(var(--tint),0.7)", marginBottom: 14 }}>
+    // Collapsed by default — the full list is long; open it when tracing a number.
+    <details style={{ marginTop: 28, padding: "12px 20px", background: "rgba(var(--tint),0.02)", border: "1px solid rgba(var(--tint),0.08)", borderRadius: 14 }}>
+      <summary style={{ cursor: "pointer", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.2, color: "rgba(var(--tint),0.7)", userSelect: "none" }}>
         Data sources · files in use
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: 8 }}>
+          ({kinds.map(k => `${byKind[k].length} ${LABELS[k].toLowerCase()}`).join(" · ")}) — tap to show
+        </span>
+      </summary>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 14 }}>
         {kinds.map(kind => (
           <div key={kind}>
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, color: "var(--st-info)", marginBottom: 7 }}>{LABELS[kind]}</div>
@@ -477,7 +481,7 @@ function SourceFilesFooter({ files, isAdmin }) {
       <div style={{ fontSize: 11.5, color: "rgba(var(--tint),0.7)", marginTop: 14, lineHeight: 1.55 }}>
         Numbers off or missing on a page? Update the matching file on the <strong style={{ color: "var(--text)" }}>Data ⤴</strong> tab. Customer and weekly figures take each month from the newest file covering it; brand figures use the newest file per salesperson and year.
       </div>
-    </div>
+    </details>
   );
 }
 
