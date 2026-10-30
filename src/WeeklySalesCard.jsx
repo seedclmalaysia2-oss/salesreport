@@ -10,6 +10,7 @@ import { supabase } from "./lib/supabase.js";
 import { weekBounds, REP_ORDER, syncWeeklyFromFiles, productSyncWarning } from "./lib/weekly.js";
 import WeeklyAlertsButton from "./WeeklyAlerts.jsx";
 import { sendWeeklyPush, pushConfigured } from "./lib/push.js";
+import { buildWeeklyShareText } from "./lib/weeklySummary.js";
 
 // Retail Sales Team = the three reps who count toward the "Sales Team" column.
 // Everyone else only contributes to the "Seed Malaysia" total.
@@ -246,29 +247,8 @@ function ScopeColumn({ title, subtitle, accentColor, total, target, rows, period
 // view") with a plain-text export sized for a WhatsApp / group-chat paste.
 // ============================================================
 
-// Plain text, deliberately no monospace alignment: WhatsApp only renders the
-// ``` block in a fixed font on some clients, so padded columns break more often
-// than they help. Bold headers (*…*) and bullets read well everywhere.
-function buildWeeklyShareText(summary) {
-  const { monthName, periodLabel, isMonthView, target, scopes } = summary;
-  const pctLine = (total) =>
-    target > 0 ? ` (${Math.round((total / target) * 100)}% of ${fmtRM(target)})` : "";
-  const lines = [];
-  lines.push(`📊 SEED Weekly Sales — ${monthName}`);
-  lines.push(`${periodLabel}${isMonthView ? " · month to date" : ""}`);
-  for (const s of scopes) {
-    lines.push("");
-    lines.push(`*${s.title}*${s.subtitle ? ` (${s.subtitle})` : ""}`);
-    for (const r of s.rows) lines.push(`• ${r.sp} — ${fmtRM(r.amount)}`);
-    lines.push(`Total: ${fmtRM(s.total)}${pctLine(s.total)}`);
-  }
-  if (target > 0) {
-    lines.push("");
-    lines.push(`_Both teams measured against the company target of ${fmtRM(target)}._`);
-  }
-  return lines.join("\n");
-}
-
+// buildWeeklyShareText lives in lib/weeklySummary.js so the scheduled sender
+// (api/weekly-digest.js) sends the exact same text.
 function WeeklyShareModal({ summary, seriesColors, isAdmin, onClose }) {
   const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
   const text = buildWeeklyShareText(summary);

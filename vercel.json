@@ -12,5 +12,11 @@
       "destination": "https://sales.seedclmalaysiastore.com/$1",
       "permanent": false
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/weekly-digest",
+      "schedule": "0 1 * * 1"
+    }
   ]
 }

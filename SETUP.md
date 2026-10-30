@@ -121,7 +121,9 @@ Put the same three VAPID values in your local `.env` too, to test locally. Then 
 - **iPhone:** Share → *Add to Home Screen*, open the app from the Home Screen, then tap **🔔 Enable alerts** on the weekly board. (iOS only allows push for installed sites — there's no way around this.)
 - **Android / desktop Chrome:** just tap **🔔 Enable alerts** → *Allow*.
 
-**e. Send it.** Admin → Overview → the weekly board → **📋 Share** → **🔔 Send as push alert to the team**. It goes only to reps who enabled alerts. (An automatic weekly schedule via Vercel Cron is a planned phase 2 — the function already accepts a `CRON_SECRET` header for it.)
+**e. Send it.** Admin → Overview → the weekly board → **📋 Share** → **🔔 Send as push alert to the team**. It goes only to reps who enabled alerts.
+
+**f. Automatic weekly send.** Vercel Cron calls `/api/weekly-digest` every Monday 01:00 UTC (9am Malaysia, see `vercel.json`) and pushes the same month-to-date summary as the Share modal. It needs `CRON_SECRET` in Vercel (Vercel Cron sends it as `Authorization: Bearer …`). To preview the text without sending: `curl -H "Authorization: Bearer $CRON_SECRET" https://sales.seedclmalaysiastore.com/api/weekly-digest?dry=1`.
 
 If nobody gets a push: check the three VAPID env vars and the service_role key are set in Vercel and you've redeployed since; confirm the rep tapped Allow (and, on iPhone, installed to Home Screen first); the ⚠ on the weekly board means the *data* is stale, unrelated to push.
 
