@@ -28,17 +28,29 @@ export async function sb(path, init = {}) {
 
 // Confirm a Supabase JWT belongs to an admin. Returns true/false.
 export async function callerIsAdmin(token) {
-  if (!token) return false;
+  return (await callerRole(token)).admin;
+}
+
+// Admin or uploader (can_upload, migration 0022). select=* so the check still
+// works before that column exists.
+export async function callerCanUpload(token) {
+  const r = await callerRole(token);
+  return r.admin || r.upload;
+}
+
+async function callerRole(token) {
+  const none = { admin: false, upload: false };
+  if (!token) return none;
   const u = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` },
   });
-  if (!u.ok) return false;
+  if (!u.ok) return none;
   const user = await u.json();
-  if (!user?.id) return false;
-  const r = await sb(`sp_user_map?select=is_admin&user_id=eq.${user.id}`);
-  if (!r.ok) return false;
-  const rows = await r.json();
-  return rows?.[0]?.is_admin === true;
+  if (!user?.id) return none;
+  const r = await sb(`sp_user_map?select=*&user_id=eq.${user.id}`);
+  if (!r.ok) return none;
+  const row = (await r.json())?.[0];
+  return { admin: row?.is_admin === true, upload: row?.can_upload === true };
 }
 
 // Push { title, body, url } to every subscribed device; prunes dead endpoints.

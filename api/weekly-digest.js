@@ -14,7 +14,7 @@
 //
 // Env: CRON_SECRET (dry-run only), plus everything api/_push.js needs.
 
-import { SUPABASE_URL, SERVICE_KEY, sb, callerIsAdmin, pushEnvMissing, pushToAll } from "./_push.js";
+import { SUPABASE_URL, SERVICE_KEY, sb, callerCanUpload, pushEnvMissing, pushToAll } from "./_push.js";
 import { monthToDateSummary, buildWeeklyShareText } from "../src/lib/weeklySummary.js";
 import { applyCustCorrections } from "../src/lib/custCorrections.js";
 
@@ -94,7 +94,7 @@ export default async function handler(req, res) {
   } else {
     if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-    if (!(await callerIsAdmin(token))) return res.status(403).json({ error: "Admins only." });
+    if (!(await callerCanUpload(token))) return res.status(403).json({ error: "Admins and uploaders only." });
     if (pushEnvMissing()) return res.status(500).json({ error: "Push is not configured (VAPID keys / service key missing)." });
   }
 

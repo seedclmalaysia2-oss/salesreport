@@ -169,7 +169,9 @@ export default function App() {
       try {
         const { data: row, error } = await supabase
           .from("sp_user_map")
-          .select("sp,is_admin,managed_sps,can_view_all")
+          // "*" rather than a column list so a missing newer column (can_upload,
+          // migration 0022) can't fail the profile read and lock everyone out.
+          .select("*")
           .eq("user_id", session.user.id)
           .maybeSingle();
         if (error) throw error;
@@ -194,6 +196,9 @@ export default function App() {
         email: session.user.email,
         sp: profile.sp,
         isAdmin: !!profile.is_admin,
+        // Uploaders (warehouse@, cs@) get the Data tab and the weekly rebuild
+        // but none of the admin panels. RLS enforces it (0022).
+        canUpload: !!profile.is_admin || !!profile.can_upload,
         // Admins always see all; everyone else sees all unless an admin has
         // restricted them (can_view_all = false).
         canViewAll: !!profile.is_admin || !!profile.can_view_all,

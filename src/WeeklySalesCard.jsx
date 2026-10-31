@@ -497,7 +497,7 @@ function WeeklyShareModal({ summary, seriesColors, isAdmin, onClose }) {
   );
 }
 
-export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], targets, custSummary = [], isAdmin, canViewAll = true, onUploaded, onRefresh, seriesColors }) {
+export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], targets, custSummary = [], isAdmin, canUpload = isAdmin, canViewAll = true, onUploaded, onRefresh, seriesColors }) {
   const SP_COLORS = seriesColors || SP_COLORS_FALLBACK;
   // A tap on the weekly push notification lands on /?share=weekly, which opens
   // the summary straight away so it's one more tap to WhatsApp.
@@ -546,7 +546,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
     setRefreshing(true);
     setRefreshError(null);
     setRefreshNote(null);
-    if (isAdmin) {
+    if (canUpload) {
       try {
         // files.js pulls in the xlsx parser transitively; import it on demand so
         // it never weighs down the initial bundle (parser loads xlsx lazily too).
@@ -579,7 +579,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
     // Failsafe: the weeklySales-arrival effect normally stops the spinner, but a
     // sync + refetch can take several seconds, so give the admin path room
     // before force-clearing.
-    setTimeout(() => setRefreshing(false), isAdmin ? 15000 : 6000);
+    setTimeout(() => setRefreshing(false), canUpload ? 15000 : 6000);
   };
 
   // Build the month + week navigation index. periodsByMonth is an ordered map
@@ -774,10 +774,10 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
   // Refresh recalculates every fact table from the newest files first, then
   // reloads (see handleRefresh); for everyone else it just re-fetches the
   // latest weekly_sales rows the admin's last sync produced.
-  const refreshTitle = isAdmin
+  const refreshTitle = canUpload
     ? "Recalculate from the latest uploaded files, then reload"
     : "Reload the latest weekly numbers from the database";
-  const refreshBusyLabel = isAdmin ? "Recalculating…" : "Refreshing…";
+  const refreshBusyLabel = canUpload ? "Recalculating…" : "Refreshing…";
   const HeaderActions = (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
       {/* Per-user push opt-in (renders nothing where unsupported / not set up). */}
@@ -850,7 +850,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
         <strong style={{ fontFamily: "'Space Mono',monospace" }}>
           {new Date(sourceUpdatedMs).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
         </strong>{" "}· {staleDays} days ago.{" "}
-        {isAdmin
+        {canUpload
           ? "Upload a fresh “Stock Sales Analysis - Detail” file on the Data ⤴ tab to bring it current — the “Sales Analysis by customer” file does not update this card."
           : "Ask the admin to upload a fresh “Stock Sales Analysis - Detail” file."}
       </span>
@@ -876,7 +876,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
             {Eyebrow}
             <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginTop: 6 }}>No weekly data yet</div>
             <div style={{ fontSize: 13, color: "rgba(var(--tint),0.72)", marginTop: 4, maxWidth: 520, lineHeight: 1.6 }}>
-              {isAdmin
+              {canUpload
                 ? "Upload a Stock Sales Analysis - Detail (or Customer Invoice Listing) file on the Data ⤴ tab — it syncs here automatically. The Sales Analysis by customer file feeds the other charts, not this card. Hit Refresh if the numbers haven't caught up yet."
                 : "Waiting for the admin to upload this week's numbers. Hit Refresh once they have."}
             </div>

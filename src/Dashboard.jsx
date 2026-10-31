@@ -498,7 +498,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   const visibleTabKeys = [
     "overview","monthly","team","customers","yoy","drilldown",
     "brands","products","cohort","heatmap","targets",
-    ...(user?.isAdmin ? ["report","data","users"] : []),
+    ...(user?.isAdmin ? ["report"] : []),
+    ...(user?.canUpload ? ["data"] : []),
+    ...(user?.isAdmin ? ["users"] : []),
   ];
   const onTablistKeyDown = (e) => {
     const keys = visibleTabKeys;
@@ -1355,7 +1357,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           {user?.isAdmin && (
             <TabButton tabKey="report" active={tab==="report"} onClick={()=>setTab("report")} accent>📄 HQ Report</TabButton>
           )}
-          {user?.isAdmin && (
+          {user?.canUpload && (
             <TabButton tabKey="data" active={tab==="data"} onClick={()=>setTab("data")} accent>Data ⤴</TabButton>
           )}
           {user?.isAdmin && (
@@ -1395,6 +1397,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               custSummary={applyCustCorrections(SUMMARY)}
               targets={TARGETS}
               isAdmin={!!user?.isAdmin}
+              canUpload={!!user?.canUpload}
               canViewAll={!!user?.canViewAll}
               onUploaded={onRefresh}
               onRefresh={onRefresh}
@@ -2806,11 +2809,11 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           : <Card><div style={{fontSize:13,color:"rgba(var(--tint),0.67)"}}>Admins only.</div></Card>
         )}
 
-        {tab === "data" && (user?.isAdmin
+        {tab === "data" && (user?.canUpload
           ? <Suspense fallback={<Card><div style={{fontSize:13,color:"rgba(var(--tint),0.67)"}}>Loading file manager…</div></Card>}>
               <DataTab user={user} data={data} onRefresh={onRefresh} />
             </Suspense>
-          : <Card><div style={{fontSize:13,color:"rgba(var(--tint),0.67)"}}>Admins only.</div></Card>
+          : <Card><div style={{fontSize:13,color:"rgba(var(--tint),0.67)"}}>Admins and uploaders only.</div></Card>
         )}
 
         {tab === "users" && (user?.isAdmin
@@ -2822,7 +2825,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
       </div>
 
-      {tab !== "data" && tab !== "users" && tab !== "report" && <SourceFilesFooter files={data.dataFiles} isAdmin={user?.isAdmin} />}
+      {tab !== "data" && tab !== "users" && tab !== "report" && <SourceFilesFooter files={data.dataFiles} isAdmin={user?.canUpload} />}
 
       <div style={{textAlign:"center",fontSize:11,color:"rgba(var(--tint),0.67)",padding:"40px 0 20px",fontFamily:"'Space Mono',monospace"}}>
         SEED Malaysia Sales Dashboard · {CUSTOMERS.length.toLocaleString()} customer-year rows · {BRAND_SALES.length.toLocaleString()} brand-sale rows · signed in as {user?.email || "—"}
