@@ -20,13 +20,27 @@ export const supabase = createClient(url || "", anonKey || "", {
 // Fetch all rows from a table. Past the 1000-row cap, fires every page in
 // parallel after a head-only count query, so 22 sequential round-trips
 // become 1 + (22 in parallel) ≈ 2 round-trips.
+// Postgres cancels a read that runs past the role's statement_timeout (57014)
+// when the database is momentarily busy — e.g. right after a big upload while
+// the fact tables are being rewritten. The same read usually succeeds a moment
+// later, so retry it a couple of times before failing the whole Recalculate.
+const isStatementTimeout = (e) =>
+  e?.code === "57014" || /statement timeout/i.test(e?.message || "");
+async function withTimeoutRetry(run, tries = 3) {
+  for (let i = 1; ; i++) {
+    const r = await run();
+    if (!r.error || !isStatementTimeout(r.error) || i >= tries) return r;
+    await new Promise((res) => setTimeout(res, 1500 * i));
+  }
+}
+
 export async function fetchAll(table, columns = "*") {
   const PAGE = 1000;
 
   // 1) cheap head-only request to learn the row count
-  const { count, error: countErr } = await supabase
+  const { count, error: countErr } = await withTimeoutRetry(() => supabase
     .from(table)
-    .select(columns, { count: "exact", head: true });
+    .select(columns, { count: "exact", head: true }));
   if (countErr) throw countErr;
   if (!count) return [];
 
@@ -39,10 +53,10 @@ export async function fetchAll(table, columns = "*") {
   // 3) fire all pages concurrently
   const results = await Promise.all(
     ranges.map(([from, to]) =>
-      supabase
+      withTimeoutRetry(() => supabase
         .from(table)
         .select(columns)
-        .range(from, to)
+        .range(from, to))
         .then((r) => {
           if (r.error) throw r.error;
           return r.data || [];
