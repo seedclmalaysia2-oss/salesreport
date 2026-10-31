@@ -1120,7 +1120,7 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
       {shareOpen && (
         <WeeklyShareModal
           seriesColors={SP_COLORS}
-          isAdmin={isAdmin}
+          isAdmin={canUpload}
           onClose={closeShare}
           summary={{
             monthName,
