@@ -1069,20 +1069,20 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
   const top8BrandNames = useMemo(() => {
     const all = new Map();
-    dimRows.forEach(r => { all.set(r.brand, (all.get(r.brand) || 0) + r.amt); });
+    itemRows.forEach(r => { all.set(r.brand, (all.get(r.brand) || 0) + r.amt); });
     return [...all.entries()].sort((a,b) => b[1]-a[1]).slice(0,8).map(([b]) => b);
-  }, [dimRows]);
+  }, [itemRows]);
 
   const brandYoY = useMemo(() => {
     return YEARS.map(y => {
       const row = { year: y.toString() };
       top8BrandNames.forEach(b => { row[b] = 0; });
-      dimRows.filter(r => r.year === y && top8BrandNames.includes(r.brand)).forEach(r => {
+      itemRows.filter(r => r.year === y && top8BrandNames.includes(r.brand)).forEach(r => {
         row[r.brand] = (row[r.brand] || 0) + r.amt;
       });
       return row;
     });
-  }, [top8BrandNames, dimRows]);
+  }, [top8BrandNames, itemRows]);
 
   const cohort = useMemo(() => {
     const inSet = (sp, year) => {
@@ -2459,7 +2459,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               </Card>
 
               <Card>
-                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Top 8 {dimNoun}s — Year over Year</div>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Top 8 {dimNoun}s — Year over Year{selectedSP === "All" ? "" : ` · ${selectedSP}`}</div>
                 <ResponsiveContainer width="100%" height={380}>
                   <LineChart data={brandYoY}>
                     <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} />
