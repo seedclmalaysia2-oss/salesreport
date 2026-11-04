@@ -19,7 +19,7 @@ const VERDICT_STYLE = {
 const SORTS = {
   priority: { label: "Needs action first" },
   sales:    { label: "Sales",  by: s => s.sales },
-  usage:    { label: "Trial use", by: s => (Number.isFinite(s.usage) ? s.usage : 9) },
+  usage:    { label: "Sales Trial use", by: s => (Number.isFinite(s.usage) ? s.usage : 9) },
   roi:      { label: "Return", by: s => s.roi ?? -1 },
   growth:   { label: "Trend",  by: s => s.growth ?? -9 },
 };
@@ -44,7 +44,7 @@ function Meter({ usage, tall = false }) {
   return (
     <div
       role="img"
-      aria-label={`Trial use ${usageText(usage)}, allowance ${allowancePct}%`}
+      aria-label={`Sales Trial use ${usageText(usage)}, allowance ${allowancePct}%`}
       className={`relative w-full rounded-full bg-track ${tall ? "h-3" : "h-1.5"}`}
     >
       <div className={`h-full rounded-full ${usageClass(usage)}`} style={{ width: `${pct}%` }} />
@@ -73,17 +73,46 @@ function Fact({ label, value, note }) {
   );
 }
 
+// The two ways trial lenses go out. Only Sales Trial is in the dashboard's data,
+// so PRM Trial gets its own open section rather than being folded into a total.
+function TrialSections({ totals, costAvailable }) {
+  return (
+    <section aria-label="Trial lens use" className="grid grid-cols-1 gap-3 md:grid-cols-[3fr_2fr]">
+      <div className="rounded-xl border border-solid border-line p-4">
+        <h3 className="m-0 text-base font-bold text-ink">Sales Trial <span className="font-normal text-muted">(tie in goods)</span></h3>
+        <p className="m-0 mt-1 text-xs leading-snug text-muted">Sent together with the invoice. Every figure on this page is based on this.</p>
+        <div className="mb-3 mt-4 flex flex-wrap items-baseline gap-x-2">
+          <span className="font-metric text-3xl font-bold leading-none text-ink">{usageText(totals.usage)}</span>
+          <span className="text-sm text-muted">{`of boxes sold, against a ${allowancePct}% allowance`}</span>
+        </div>
+        <Meter usage={totals.usage} tall />
+        <dl className="m-0 mt-4 grid grid-cols-3 gap-3">
+          <Fact label="Boxes" value={boxes(totals.trialBoxes)} />
+          <Fact label="Pieces" value={boxes(totals.trialPieces)} />
+          <Fact label="Cost" value={costAvailable ? moneyShort(totals.trialCost) : "Pending"} />
+        </dl>
+      </div>
+      <div className="rounded-xl border border-dashed border-faint p-4">
+        <h3 className="m-0 text-base font-bold text-ink">PRM Trial <span className="font-normal text-muted">(tie in PRM)</span></h3>
+        <p className="m-0 mt-1 text-xs leading-snug text-muted">Issued on PRM documents, outside sales.</p>
+        <p className="m-0 mt-4 font-metric text-xl font-bold leading-tight text-muted">Not captured</p>
+        <p className="m-0 mt-2 text-xs leading-relaxed text-muted">It isn't in the sales data, so it's left out of this page. A store's total trial lens use is higher wherever PRM Trial was also given.</p>
+      </div>
+    </section>
+  );
+}
+
 function Headline({ result, scopeName }) {
   const { totals, segments, year, costAvailable } = result;
   const review = segments.review.stores;
   const lead = totals.roi != null
-    ? `Every RM 1 of trial lenses earned ${scopeName} RM ${totals.roi.toFixed(2)} in gross profit in ${year}.`
-    : `${scopeName} used ${(totals.usage * 100).toFixed(1)}% in trial lenses in ${year}, against a ${allowancePct}% allowance.`;
+    ? `Every RM 1 of Sales Trial lenses earned ${scopeName} RM ${totals.roi.toFixed(2)} in gross profit in ${year}.`
+    : `${scopeName} used ${(totals.usage * 100).toFixed(1)}% in Sales Trial lenses in ${year}, against a ${allowancePct}% allowance.`;
   const follow = review === 0
     ? "No store needs a review right now."
     : costAvailable
-      ? `${review} ${review === 1 ? "store needs" : "stores need"} a review, and ${money(totals.overCost)} of trials went over allowance.`
-      : `${review} ${review === 1 ? "store needs" : "stores need"} a review, with ${boxes(totals.overBoxes)} trial boxes over allowance.`;
+      ? `${review} ${review === 1 ? "store needs" : "stores need"} a review, and ${money(totals.overCost)} of Sales Trial went over allowance.`
+      : `${review} ${review === 1 ? "store needs" : "stores need"} a review, with ${boxes(totals.overBoxes)} Sales Trial boxes over allowance.`;
   return (
     <div className="max-w-3xl">
       <h2 className="m-0 text-2xl font-bold leading-tight tracking-tight text-ink sm:text-3xl">{lead}</h2>
@@ -146,16 +175,16 @@ function StoreDetail({ store, history, costAvailable }) {
 
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[30rem] border-collapse text-xs">
-          <caption className="pb-2 text-left text-sm font-semibold text-ink">{`By product, ${store.year}`}</caption>
+          <caption className="pb-2 text-left text-sm font-semibold text-ink">{`By product, ${store.year} (Sales Trial only)`}</caption>
           <thead>
             <tr className="text-right text-muted">
               <th scope="col" className="py-1.5 pr-2 text-left font-medium">Product</th>
               <th scope="col" className="px-2 py-1.5 font-medium">Boxes sold</th>
-              <th scope="col" className="px-2 py-1.5 font-medium">Trial pieces</th>
-              <th scope="col" className="px-2 py-1.5 font-medium">Trial boxes</th>
-              <th scope="col" className="px-2 py-1.5 font-medium">Trial use</th>
+              <th scope="col" className="px-2 py-1.5 font-medium">Sales Trial pieces</th>
+              <th scope="col" className="px-2 py-1.5 font-medium">Sales Trial boxes</th>
+              <th scope="col" className="px-2 py-1.5 font-medium">Sales Trial use</th>
               <th scope="col" className="px-2 py-1.5 font-medium">Free boxes</th>
-              {showCost && <th scope="col" className="py-1.5 pl-2 font-medium">Trial cost</th>}
+              {showCost && <th scope="col" className="py-1.5 pl-2 font-medium">Sales Trial cost</th>}
             </tr>
           </thead>
           <tbody className="font-metric">
@@ -183,7 +212,7 @@ function StoreDetail({ store, history, costAvailable }) {
                 <th scope="col" className="py-1.5 pr-2 text-left font-medium">Year</th>
                 <th scope="col" className="px-2 py-1.5 font-medium">Sales</th>
                 <th scope="col" className="px-2 py-1.5 font-medium">Boxes sold</th>
-                <th scope="col" className="px-2 py-1.5 font-medium">Trial use</th>
+                <th scope="col" className="px-2 py-1.5 font-medium">Sales Trial use</th>
                 {showCost && <th scope="col" className="py-1.5 pl-2 font-medium">Return per RM 1</th>}
               </tr>
             </thead>
@@ -225,7 +254,7 @@ function StoreRow({ store, open, onToggle, history, costAvailable, showRep }) {
           <span className="mt-2 hidden font-metric text-sm md:mt-0 md:block md:text-right">{moneyShort(store.sales)}</span>
           <span className="mt-2 block md:mt-0">
             <span className="mb-1.5 flex items-baseline justify-between text-xs">
-              <span className="text-muted md:hidden">Trial use</span>
+              <span className="text-muted md:hidden">Sales Trial use</span>
               <span className="font-metric font-bold">{usageText(store.usage)}</span>
             </span>
             <Meter usage={store.usage} />
@@ -261,7 +290,7 @@ function StoreMap({ stores, onOpen, tk }) {
     return (
       <div style={{ background: tk.tooltipBg, border: `1px solid ${tk.tooltipBorder}`, color: tk.tooltipText, borderRadius: 8, padding: "8px 10px", fontSize: 12, maxWidth: 240 }}>
         <div style={{ fontWeight: 600, color: tk.text }}>{p.name}</div>
-        <div>{`${usageText(p.usage)} trial use, ${trendText(p.growth)} sales, ${moneyShort(p.sales)}`}</div>
+        <div>{`${usageText(p.usage)} Sales Trial use, ${trendText(p.growth)} sales, ${moneyShort(p.sales)}`}</div>
       </div>
     );
   };
@@ -276,7 +305,7 @@ function StoreMap({ stores, onOpen, tk }) {
           <ScatterChart margin={{ top: 8, right: 8, bottom: 18, left: -8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} />
             <XAxis type="number" dataKey="x" domain={[0, 80]} tickFormatter={v => `${v}%`} tick={{ fill: tk.chartTickFill, fontSize: 11 }} axisLine={false}
-              label={{ value: "Trial use", position: "insideBottom", offset: -10, fill: tk.chartTickFill, fontSize: 11 }} />
+              label={{ value: "Sales Trial use", position: "insideBottom", offset: -10, fill: tk.chartTickFill, fontSize: 11 }} />
             <YAxis type="number" dataKey="y" domain={[-100, 100]} tickFormatter={v => `${v}%`} tick={{ fill: tk.chartTickFill, fontSize: 11 }} axisLine={false} width={48}
               label={{ value: "Sales trend", angle: -90, position: "insideLeft", offset: 12, fill: tk.chartTickFill, fontSize: 11 }} />
             <ZAxis type="number" dataKey="z" range={[24, 260]} />
@@ -304,7 +333,7 @@ function RepTable({ reps, onPick, costAvailable }) {
               <th scope="col" className="py-1.5 pr-2 text-left font-medium">Salesperson</th>
               <th scope="col" className="px-2 py-1.5 font-medium">Stores</th>
               <th scope="col" className="px-2 py-1.5 font-medium">Sales</th>
-              <th scope="col" className="px-2 py-1.5 font-medium">Trial use</th>
+              <th scope="col" className="px-2 py-1.5 font-medium">Sales Trial use</th>
               {costAvailable && <th scope="col" className="px-2 py-1.5 font-medium">Return per RM 1</th>}
               <th scope="col" className="py-1.5 pl-2 font-medium">To review</th>
             </tr>
@@ -425,25 +454,17 @@ export default function RoiTab({ data, year, user, tk }) {
 
       <Headline result={result} scopeName={scopeName} />
 
-      <section aria-label={`Trial use against the ${allowancePct}% allowance`} className="max-w-3xl">
-        <div className="mb-3 flex items-baseline justify-between gap-3 text-sm">
-          <span className="text-muted">Trial use</span>
-          <span className="font-metric font-bold">{`${usageText(totals.usage)} against ${allowancePct}% allowance`}</span>
-        </div>
-        <Meter usage={totals.usage} tall />
-      </section>
+      <TrialSections totals={totals} costAvailable={costAvailable} />
 
-      <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
+      <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
         <Fact label="Sales" value={moneyShort(totals.sales)} note={`${result.stores.length} stores`} />
         <Fact label="Lens boxes sold" value={boxes(totals.boxes)} />
-        <Fact label="Trial boxes given" value={boxes(totals.trialBoxes)} note={`${boxes(totals.trialPieces)} pieces`} />
-        <Fact label="Trial cost" value={costAvailable ? moneyShort(totals.trialCost) : "Cost pending"} />
         <Fact label="Return per RM 1" value={totals.roi != null ? `RM ${totals.roi.toFixed(2)}` : "Cost pending"} note="Gross profit on lenses" />
       </dl>
 
       {!costAvailable && (
         <p role="status" className="m-0 rounded-lg border border-solid border-watch p-3 text-sm leading-relaxed text-ink">
-          Cost pending: RM figures appear after an admin runs migration 0023 and uploads the latest Stock Detail file again. Trial use below is already correct, and a few verdicts may change once return is known.
+          Cost pending: RM figures appear after an admin runs migration 0023 and uploads the latest Stock Detail file again. Sales Trial use below is already correct, and a few verdicts may change once return is known.
         </p>
       )}
 
@@ -476,7 +497,7 @@ export default function RoiTab({ data, year, user, tk }) {
 
         <div className="overflow-hidden rounded-xl border border-solid border-line">
           <div className={`hidden border-0 border-b border-solid border-line px-4 py-2 text-xs text-muted ${LIST_COLUMNS}`}>
-            {[["priority", "Store", ""], [null, "Verdict", ""], ["sales", "Sales", "text-right"], ["usage", "Trial use", ""], ["roi", "Return per RM 1", "text-right"], ["growth", "Trend", "text-right"]].map(([key, label, align]) => (
+            {[["priority", "Store", ""], [null, "Verdict", ""], ["sales", "Sales", "text-right"], ["usage", "Sales Trial use", ""], ["roi", "Return per RM 1", "text-right"], ["growth", "Trend", "text-right"]].map(([key, label, align]) => (
               key ? (
                 <button
                   key={label}
@@ -530,12 +551,12 @@ export default function RoiTab({ data, year, user, tk }) {
       <details className="rounded-xl border border-solid border-line p-3 text-sm md:p-4">
         <summary className="cursor-pointer font-semibold text-ink">How this is worked out</summary>
         <ul className="m-0 mt-3 flex list-disc flex-col gap-2 pl-5 leading-relaxed text-muted">
-          <li>Trial use is trial boxes divided by lens boxes sold. Trial pieces become boxes using each product's pack size. Free promo boxes are shown per product, but don't count as trial lenses.</li>
+          <li>Sales Trial use is Sales Trial boxes divided by lens boxes sold. Pieces become boxes using each product's pack size. Free promo boxes are shown per product, but don't count as trial lenses.</li>
           <li>{`The allowance is ${allowancePct}%, set from what a typical store actually uses. Above ${Math.round(ROI_CONFIG.allowance * ROI_CONFIG.reviewMultiple * 100)}% is always a Review.`}</li>
-          <li>Trial cost uses each product's average cost per box from the Stock Detail file. Return is gross profit on lenses sold, per RM 1 of trial cost.</li>
+          <li>Sales Trial cost uses each product's average cost per box from the Stock Detail file. Return is gross profit on lenses sold, per RM 1 of Sales Trial cost.</li>
           <li>{`Trend compares ${result.months === 12 ? "the full year" : `January to the latest month (${result.months} months)`} with the same months last year, so a part-year is fair. "New" means no sales last year.`}</li>
-          <li>Trials issued on PRM documents aren't included yet, because no export links them to a store. Real trial use may be higher than shown.</li>
-          {groupFile?.uploadedAt && <li>{`Product and trial figures come from the ${year} Summary file uploaded on ${new Date(groupFile.uploadedAt).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}.`}</li>}
+          <li>PRM Trial isn't included, because it's issued outside sales and isn't in the dashboard's data.</li>
+          {groupFile?.uploadedAt && <li>{`Product and Sales Trial figures come from the ${year} Summary file uploaded on ${new Date(groupFile.uploadedAt).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}.`}</li>}
           {isAdmin && result.unknownCodes.length > 0 && (
             <li>{`Product codes not recognised, so counted in sales only: ${result.unknownCodes.map(u => u.code).join(", ")}.`}</li>
           )}

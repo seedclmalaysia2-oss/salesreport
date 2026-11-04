@@ -1,5 +1,11 @@
-// Store ROI: what each store sold, what it was given in trial lenses, and what
-// that trial support returned. Pure functions behind the ROI tab.
+// Store ROI: what each store sold, what it was given in Sales Trial lenses, and
+// what that support returned. Pure functions behind the ROI tab.
+//
+// Trial lenses go out two ways:
+//   Sales Trial (tie in goods)  sent on the invoice, so it is in the sales reports.
+//                               This is what every "trial" figure here means.
+//   PRM Trial (tie in PRM)      issued on PRM documents, outside sales. Not in the
+//                               dashboard's data, so never counted here.
 //
 // Inputs are data the dashboard already loads:
 //   groupRows  { year, customer, sp, group, amount, qty }  customer x Stock-Group
@@ -27,10 +33,10 @@ export const ROI_CONFIG = {
 };
 
 export const VERDICTS = {
-  review:   { label: "Review",    action: "Over allowance without the sales to show for it" },
-  coach:    { label: "Coach",     action: "Over allowance, but sales are growing" },
+  review:   { label: "Review",    action: "Sales Trial over allowance without the sales to show for it" },
+  coach:    { label: "Coach",     action: "Sales Trial over allowance, but sales are growing" },
   grow:     { label: "Grow",      action: "Within allowance and paying back" },
-  untapped: { label: "Untapped",  action: "Big store using almost no trials" },
+  untapped: { label: "Untapped",  action: "Big store using almost no Sales Trial" },
   keep:     { label: "Keep",      action: "Within allowance and steady" },
   small:    { label: "Too small", action: "Too few boxes to judge" },
 };
@@ -161,25 +167,25 @@ export function adviceFor(s, cfg = ROI_CONFIG) {
   switch (s.verdict) {
     case "review":
       return !(s.boxes > 0)
-        ? `Trial lenses went in, but returns cancelled out the boxes sold. Stop top-ups until orders pick up again.`
+        ? `Sales Trial lenses went in, but returns cancelled out the boxes sold. Stop top-ups until orders pick up again.`
         : s.growth != null && s.growth >= cfg.growing
-        ? `Sales are growing, but trials are well past allowance. Cut back to new fits only: ${pc(s.usage)} against ${allowancePc(cfg)}, ${overText}, ${trend}.`
-        : `Pause trial top-ups and agree a plan: ${pc(s.usage)} against ${allowancePc(cfg)}, ${overText}, ${trend}.`;
+        ? `Sales are growing, but Sales Trial is well past allowance. Cut back to new fits only: ${pc(s.usage)} against ${allowancePc(cfg)}, ${overText}, ${trend}.`
+        : `Pause Sales Trial top-ups and agree a plan: ${pc(s.usage)} against ${allowancePc(cfg)}, ${overText}, ${trend}.`;
     case "coach":
-      return `Trials are working but running high. Keep them on new fits only: ${pc(s.usage)}, ${overText}, ${trend}.`;
+      return `Sales Trial is working but running high. Keep it to new fits only: ${pc(s.usage)}, ${overText}, ${trend}.`;
     case "grow":
       return s.growth != null && s.growth >= cfg.growing
-        ? `Give this store more support: ${trend} while trials sit at ${pc(s.usage)}, within allowance.`
-        : `Strong return on trial lenses at ${pc(s.usage)}. Worth more support to restart growth.`;
+        ? `Give this store more support: ${trend} while Sales Trial sits at ${pc(s.usage)}, within allowance.`
+        : `Strong return on Sales Trial at ${pc(s.usage)}. Worth more support to restart growth.`;
     case "untapped":
-      return `Offer a trial push: ${rm(s.sales)} in sales with only ${pc(s.usage)} trial use.`;
+      return `Offer a trial push: ${rm(s.sales)} in sales with only ${pc(s.usage)} Sales Trial use.`;
     case "keep":
       return s.growth != null && s.growth <= cfg.falling
-        ? `Trial use is fine at ${pc(s.usage)}, so look elsewhere for the drop: ${trend}. Plan a visit.`
-        : `Keep support as it is: ${pc(s.usage)} trial use, ${trend}.`;
+        ? `Sales Trial use is fine at ${pc(s.usage)}, so look elsewhere for the drop: ${trend}. Plan a visit.`
+        : `Keep support as it is: ${pc(s.usage)} Sales Trial use, ${trend}.`;
     default:
       return s.sales >= cfg.untappedMinSales
-        ? `Most of ${rm(s.sales)} in sales is not soft lenses, so trial use doesn't apply here.`
+        ? `Most of ${rm(s.sales)} in sales is not soft lenses, so Sales Trial use doesn't apply here.`
         : `Only ${Math.round(s.boxes)} boxes sold. Too few to judge, so check again next quarter.`;
   }
 }
