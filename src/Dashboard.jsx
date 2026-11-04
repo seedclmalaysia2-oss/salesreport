@@ -1003,11 +1003,17 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   }, [brandYearTotals]);
 
   // --- Single-item explorer: one brand/group's revenue + quantity over the years ---
+  // Follows the "Filter by SP" pills. dimYears stays unscoped so the chart's year
+  // axis doesn't jump around between reps.
+  const itemRows = useMemo(
+    () => (selectedSP === "All" ? dimRows : dimRows.filter(r => r.sp === selectedSP)),
+    [dimRows, selectedSP],
+  );
   const dimAgg = useMemo(() => {
     const m = new Map();
-    dimRows.forEach(r => m.set(r.brand, (m.get(r.brand) || 0) + r.amt));
+    itemRows.forEach(r => m.set(r.brand, (m.get(r.brand) || 0) + r.amt));
     return m;
-  }, [dimRows]);
+  }, [itemRows]);
   // Dropdown sorted by NAME (numeric-aware, case-insensitive) so families like
   // "SEED …", "DISOP …", "Monthly …", "Eye Coffret …" cluster together and scan
   // cleanly — not by revenue, which scattered related items.
@@ -1028,12 +1034,12 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   const activeItem = (itemPick && dimAgg.has(itemPick)) ? itemPick : dimTopItem;
   const itemYoY = useMemo(() => {
     const byYear = new Map();
-    dimRows.filter(r => r.brand === activeItem).forEach(r => {
+    itemRows.filter(r => r.brand === activeItem).forEach(r => {
       const e = byYear.get(r.year) || { amt: 0, qty: 0 };
       e.amt += r.amt; e.qty += r.qty || 0; byYear.set(r.year, e);
     });
     return dimYears.map(y => ({ year: String(y), amt: byYear.get(y)?.amt || 0, qty: byYear.get(y)?.qty || 0 }));
-  }, [dimRows, activeItem, dimYears]);
+  }, [itemRows, activeItem, dimYears]);
   const itemStats = useMemo(() => {
     const totAmt = itemYoY.reduce((a, r) => a + r.amt, 0);
     const totQty = itemYoY.reduce((a, r) => a + r.qty, 0);
@@ -1042,12 +1048,12 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   }, [itemYoY]);
   const itemBySP = useMemo(() => {
     const m = new Map();
-    dimRows.filter(r => r.brand === activeItem && r.year === selectedYear).forEach(r => {
+    itemRows.filter(r => r.brand === activeItem && r.year === selectedYear).forEach(r => {
       const e = m.get(r.sp) || { amt: 0, qty: 0 };
       e.amt += r.amt; e.qty += r.qty || 0; m.set(r.sp, e);
     });
     return [...m.entries()].map(([sp, v]) => ({ sp, ...v })).sort((a, b) => b.amt - a.amt);
-  }, [dimRows, activeItem, selectedYear]);
+  }, [itemRows, activeItem, selectedYear]);
 
   const brandSPBreakdown = useMemo(() => {
     const top = brandYearTotals.slice(0, 15);
@@ -2314,7 +2320,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:16,flexWrap:"wrap",marginBottom:16}}>
                 <div>
                   <div style={{fontSize:14,fontWeight:600}}>🔍 {dimNoun} Explorer</div>
-                  <div style={{fontSize:12,color:"rgba(var(--tint),0.6)",marginTop:2}}>Pick one {dimNoun.toLowerCase()} to see its revenue &amp; quantity across the years.</div>
+                  <div style={{fontSize:12,color:"rgba(var(--tint),0.6)",marginTop:2}}>Pick one {dimNoun.toLowerCase()} to see its revenue &amp; quantity across the years — {selectedSP === "All" ? "all teams" : selectedSP}.</div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:4}}>
                   <label style={{fontSize:11,color:"rgba(var(--tint),0.55)",fontWeight:600,letterSpacing:0.3}}>{dimNoun.toUpperCase()} <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400}}>· {dimOptions.length}</span></label>
@@ -2381,7 +2387,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   )}
                 </>
               ) : (
-                <div style={{padding:"30px 0",textAlign:"center",color:"rgba(var(--tint),0.6)"}}>No {dimNoun.toLowerCase()} data available.</div>
+                <div style={{padding:"30px 0",textAlign:"center",color:"rgba(var(--tint),0.6)"}}>No {dimNoun.toLowerCase()} data for {selectedSP === "All" ? "this scope" : selectedSP}.</div>
               )}
             </Card>
 
