@@ -395,6 +395,7 @@ function findStockDetailLayout(rows) {
     const amtCol = row.findIndex(c => typeof c === "string" && /^Net\s*Sales$/i.test(c.trim()));
     const qtyCol = row.findIndex(c => typeof c === "string" && /^Quantity$/i.test(c.trim()));
     const uomCol = row.findIndex(c => typeof c === "string" && /^UOM$/i.test(c.trim()));
+    const costCol = row.findIndex(c => typeof c === "string" && /^Net\s*Cost$/i.test(c.trim()));
     if (docCol >= 0 && amtCol >= 0) {
       return {
         headerRow: r,
@@ -412,6 +413,8 @@ function findStockDetailLayout(rows) {
         // UOM header; the value sits at or just LEFT of the header (BOX/PCS/BTL),
         // so the reader checks a small window around it.
         uomCol: uomCol >= 0 ? uomCol : -1,
+        // Net Cost, for cost per box on the ROI tab. Trial and FOC lines carry 0.
+        costCol: costCol >= 0 ? costCol : -1,
       };
     }
   }
@@ -421,7 +424,7 @@ function findStockDetailLayout(rows) {
 export function parseStockDetailRows(rows) {
   const layout = findStockDetailLayout(rows);
   if (!layout) return [];
-  const { headerRow, dateCol, docCol, spCol, amtCol, qtyCol, uomCol } = layout;
+  const { headerRow, dateCol, docCol, spCol, amtCol, qtyCol, uomCol, costCol } = layout;
 
   const out = [];
   let currentBrand = null;
@@ -478,6 +481,7 @@ export function parseStockDetailRows(rows) {
       brand: currentBrand,
       qty,
       uom,
+      ...(costCol >= 0 && typeof row[costCol] === "number" ? { cost: row[costCol] } : {}),
     });
   }
   return out;

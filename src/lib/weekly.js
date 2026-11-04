@@ -128,7 +128,10 @@ export async function syncProductMonthlyFromFiles(files) {
   const byYear = new Map(); // year -> [{ month, sp, product, qty, amount }]
   for (const r of rows) {
     if (!byYear.has(r.year)) byYear.set(r.year, []);
-    byYear.get(r.year).push({ month: r.month, sp: r.sp, product: r.product, qty: r.qty, amount: r.amount });
+    byYear.get(r.year).push({
+      month: r.month, sp: r.sp, product: r.product, qty: r.qty, amount: r.amount,
+      ...(r.cost != null ? { cost: r.cost, cost_qty: r.cost_qty } : {}),
+    });
   }
   let inserted = 0;
   for (const [year, yearRows] of byYear) {

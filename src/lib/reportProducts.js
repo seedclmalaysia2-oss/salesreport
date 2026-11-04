@@ -257,8 +257,12 @@ export function aggregateProductMonthlyBySp(rows) {
     const c = classifyStockLine(r);
     if (!c || !c.product) continue;
     const key = `${y}|${m}|${r.sp}|${c.product}`;
-    const cur = cells.get(key) || { qty: 0, amount: 0 };
+    const cur = cells.get(key) || { qty: 0, amount: 0, cost: 0, costQty: 0 };
     cur.qty += c.qty; cur.amount += c.amount;
+    // Only lines that carry a cost count towards cost per box: trial and FOC
+    // lines are booked at 0 and would otherwise drag the average down.
+    const cost = Number(r.cost) || 0;
+    if (cost !== 0) { cur.cost += cost; cur.costQty += c.qty; }
     cells.set(key, cur);
   }
   const out = [];
@@ -267,7 +271,10 @@ export function aggregateProductMonthlyBySp(rows) {
     const qty = Math.round(v.qty * 100) / 100;
     const amount = Math.round(v.amount * 100) / 100;
     if (qty === 0 && amount === 0) continue;
-    out.push({ year: Number(y), month: Number(m), sp, product, qty, amount });
+    out.push({
+      year: Number(y), month: Number(m), sp, product, qty, amount,
+      ...(v.cost !== 0 ? { cost: Math.round(v.cost * 100) / 100, cost_qty: Math.round(v.costQty * 100) / 100 } : {}),
+    });
   }
   out.sort((a, b) => a.year - b.year || a.month - b.month || a.sp.localeCompare(b.sp) || a.product.localeCompare(b.product));
   return out;

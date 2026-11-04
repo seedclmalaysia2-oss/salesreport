@@ -13,6 +13,7 @@ import { DARK_KEY, LIGHT_KEY, prefersLightScheme, migrateThemeKey } from "./lib/
 const DataTab = lazy(() => import("./DataTab.jsx"));
 const AdminUsers = lazy(() => import("./AdminUsers.jsx"));
 const ReportTab = lazy(() => import("./ReportTab.jsx"));
+const RoiTab = lazy(() => import("./RoiTab.jsx"));
 import { groupLabel } from "./lib/groupLabels.js";
 
 // Uploads used to be parsed into these keys while the dashboard ran open to
@@ -497,7 +498,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   // and the arrow-key handler that drives the WAI-ARIA tabs roving focus.
   const visibleTabKeys = [
     "overview","monthly","team","customers","yoy","drilldown",
-    "brands","products","cohort","heatmap","targets",
+    "brands","products","cohort","heatmap","roi","targets",
     ...(user?.isAdmin ? ["report"] : []),
     ...(user?.canUpload ? ["data"] : []),
     ...(user?.isAdmin ? ["users"] : []),
@@ -1360,6 +1361,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           <TabButton tabKey="products" active={tab==="products"} onClick={()=>setTab("products")}>Product Sales</TabButton>
           <TabButton tabKey="cohort" active={tab==="cohort"} onClick={()=>setTab("cohort")}>New vs Lost</TabButton>
           <TabButton tabKey="heatmap" active={tab==="heatmap"} onClick={()=>setTab("heatmap")}>Customer × Brand</TabButton>
+          <TabButton tabKey="roi" active={tab==="roi"} onClick={()=>setTab("roi")}>ROI</TabButton>
           {user?.isAdmin && (
             <TabButton tabKey="report" active={tab==="report"} onClick={()=>setTab("report")} accent>📄 HQ Report</TabButton>
           )}
@@ -2545,6 +2547,12 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               ))}
             </div>
           </>
+        )}
+
+        {tab === "roi" && (
+          <Suspense fallback={<div style={{padding:40,textAlign:"center",color:"rgba(var(--tint),0.6)"}}>Loading ROI…</div>}>
+            <RoiTab data={data} year={selectedYear} user={user} tk={tk} />
+          </Suspense>
         )}
 
         {tab === "heatmap" && (

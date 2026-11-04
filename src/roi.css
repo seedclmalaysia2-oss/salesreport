@@ -1,0 +1,23 @@
+/* Tailwind for the ROI tab only. No preflight, and utilities are generated from
+   RoiTab.jsx alone, so the inline-styled pages can't shift. Colours point at the
+   dashboard's theme variables, so every theme keeps working. */
+@import "tailwindcss/theme.css";
+@import "tailwindcss/utilities.css" source(none);
+@source "./RoiTab.jsx";
+
+@theme inline {
+  --color-ink: var(--text);
+  --color-muted: rgba(var(--tint), 0.68);
+  --color-faint: rgba(var(--tint), 0.5);
+  --color-line: rgba(var(--tint), 0.13);
+  --color-wash: rgba(var(--tint), 0.04);
+  --color-track: rgba(var(--tint), 0.1);
+  --color-steady: rgba(var(--tint), 0.45);
+  --color-idle: rgba(var(--tint), 0.22);
+  --color-accent: var(--st-accent);
+  --color-ok: var(--st-ok);
+  --color-bad: var(--st-bad);
+  --color-watch: var(--st-watch);
+  --color-info: var(--st-info);
+  --font-metric: "Space Mono", monospace;
+}

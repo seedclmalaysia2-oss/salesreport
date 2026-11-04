@@ -219,7 +219,7 @@ export default function App() {
         // can show which archived files feed the current view. RLS on
         // data_files returns empty for non-admins, so the extra fetch is a
         // no-op for them — no server-side gate needed here.
-        const [customers, targets, weekly, allFiles, productMonthly] = await Promise.all([
+        const [customers, targets, weekly, allFiles, productMonthly, productCosts] = await Promise.all([
           fetchAll("customers_data", "sp,year,customer,months,total"),
           fetchAll("sales_targets", "year,month,sp,target_amt"),
           fetchAll("weekly_sales", "period_start,period_end,sp,amount,uploaded_at"),
@@ -230,6 +230,12 @@ export default function App() {
           // product view. Optional: before migration 0021 is applied the table
           // doesn't exist, and that must not take the rest of the dashboard down.
           fetchAll("product_monthly_sales", "year,month,sp,product,qty,amount")
+            .then(rows => rows.filter(r => !isAggScope(r.sp)))
+            .catch(() => []),
+          // Cost per box for the ROI tab. A separate read on purpose: until
+          // migration 0023 adds these columns, asking for them above would fail
+          // the whole product trend. Without cost the tab shows "Cost pending".
+          fetchAll("product_monthly_sales", "year,sp,product,cost,cost_qty")
             .then(rows => rows.filter(r => !isAggScope(r.sp)))
             .catch(() => []),
         ]);
@@ -287,6 +293,7 @@ export default function App() {
             year: r.year, month: r.month, sp: r.sp, product: r.product,
             qty: Number(r.qty) || 0, amount: Number(r.amount) || 0,
           }));
+          aggregated.productCosts = productCosts;
           return aggregated;
         };
 

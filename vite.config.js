@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   // Fixed to 5200 (NOT 5173 — that port belongs to the seedclportal dev
   // server). strictPort: true so this fails loudly if 5200 is taken instead
   // of silently wandering onto another project's port, e.g. reclaiming 5173.
