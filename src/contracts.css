@@ -1,0 +1,96 @@
+/* Tailwind for the Contracts tab only. Same arrangement as drilldown.css: no
+   preflight, utilities generated from the two Contracts files alone, colours for
+   the workspace pointing at the dashboard's theme variables.
+
+   The paper is the exception: it is a printed page, so it keeps fixed ink-on-white
+   colours (sheet-*) whatever theme the dashboard is in. */
+@layer theme, base, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./ContractsTab.jsx";
+@source "./ContractPaper.jsx";
+
+/* Stands in for preflight, only inside this tab and below the utilities. */
+@layer base {
+  .ct-root, .ct-root *, .ct-root *::before, .ct-root *::after,
+  .ct-paper *, .ct-paper *::before, .ct-paper *::after { box-sizing: border-box; }
+  .ct-root button { background: transparent; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: inherit; cursor: pointer; }
+  .ct-root button:disabled { cursor: not-allowed; }
+  .ct-root :where(ul, ol, dl, dd, h1, h2, h3, h4, p, table) { margin: 0; padding: 0; list-style: none; }
+  .ct-root :where(h1, h2, h3, h4) { font-size: inherit; font-weight: inherit; }
+  .ct-root :where(input, textarea, select) { font: inherit; color: inherit; }
+  .ct-root table { border-collapse: collapse; }
+  .ct-paper :where(ul, ol, dl, dd, h1, h2, h3, h4, p, table) { margin: 0; padding: 0; list-style: none; }
+  .ct-paper :where(h1, h2, h3, h4) { font-size: inherit; font-weight: inherit; }
+  .ct-paper table { border-collapse: collapse; }
+}
+
+@theme inline {
+  --color-ink: var(--text);
+  --color-muted: rgba(var(--tint), 0.68);
+  --color-faint: rgba(var(--tint), 0.5);
+  --color-line: rgba(var(--tint), 0.13);
+  --color-wash: rgba(var(--tint), 0.04);
+  --color-track: rgba(var(--tint), 0.1);
+  --color-accent: var(--st-accent);
+  --color-ok: var(--st-ok);
+  --color-bad: var(--st-bad);
+  --color-watch: var(--st-watch);
+  --color-info: var(--st-info);
+  --font-metric: "Space Mono", monospace;
+}
+
+@theme {
+  --color-sheet: #ffffff;
+  --color-sheet-ink: #1b2026;
+  --color-sheet-mute: #566170;
+  --color-sheet-rule: #cdd3da;
+  --color-sheet-wash: #f2f4f6;
+  --color-sheet-accent: #8f3412;
+  --color-sheet-mark: #fff0b8;
+  --font-sheet: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+}
+
+/* ---- the paper ---- */
+
+/* A4 on screen. The tab scales it to fit with `zoom`; in print the page margins
+   come from @page instead and the sheet fills the printable width. */
+.ct-sheet {
+  box-sizing: border-box;
+  width: 210mm;
+  min-height: 297mm;
+  padding: 18mm 17mm 20mm;
+  background: #fff;
+  color: #1b2026;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 12px 32px -12px rgba(0, 0, 0, 0.35);
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  font-size: 10.5pt;
+  line-height: 1.5;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.ct-sheet + .ct-sheet { margin-top: 10mm; }
+.ct-avoid { break-inside: avoid; }
+
+#ct-print-root { display: none; }
+
+@media print {
+  @page { size: A4; margin: 14mm 15mm 16mm; }
+
+  /* Only while the tab is printing (the class is set around window.print()), so
+     printing any other tab afterwards is untouched. */
+  body.ct-printing { background: #fff !important; }
+  body.ct-printing > *:not(#ct-print-root) { display: none !important; }
+  body.ct-printing #ct-print-root { display: block !important; }
+  body.ct-printing .ct-sheet {
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    box-shadow: none;
+    break-after: page;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.ct-printing .ct-sheet + .ct-sheet { margin-top: 0; }
+  body.ct-printing .ct-sheet:last-child { break-after: auto; }
+  body.ct-printing .ct-mark { background: transparent !important; }
+}

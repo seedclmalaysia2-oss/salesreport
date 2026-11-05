@@ -14,6 +14,7 @@ const DataTab = lazy(() => import("./DataTab.jsx"));
 const AdminUsers = lazy(() => import("./AdminUsers.jsx"));
 const ReportTab = lazy(() => import("./ReportTab.jsx"));
 const RoiTab = lazy(() => import("./RoiTab.jsx"));
+const ContractsTab = lazy(() => import("./ContractsTab.jsx"));
 const DrilldownTab = lazy(() => import("./DrilldownTab.jsx"));
 const CustomerBrandTab = lazy(() => import("./CustomerBrandTab.jsx"));
 import { groupLabel } from "./lib/groupLabels.js";
@@ -484,7 +485,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
     "overview","monthly","team","customers","yoy","drilldown",
     "brands","products","cohort","heatmap","roi","targets",
     ...(user?.isAdmin ? ["report"] : []),
-    ...(user?.canUpload ? ["data"] : []),
+    ...(user?.canUpload ? ["contracts", "data"] : []),
     ...(user?.isAdmin ? ["users"] : []),
   ];
   const onTablistKeyDown = (e) => {
@@ -1246,6 +1247,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           <TabButton tabKey="roi" active={tab==="roi"} onClick={()=>setTab("roi")}>ROI</TabButton>
           {user?.isAdmin && (
             <TabButton tabKey="report" active={tab==="report"} onClick={()=>setTab("report")} accent>📄 HQ Report</TabButton>
+          )}
+          {user?.canUpload && (
+            <TabButton tabKey="contracts" active={tab==="contracts"} onClick={()=>setTab("contracts")} accent>📝 Contracts</TabButton>
           )}
           {user?.canUpload && (
             <TabButton tabKey="data" active={tab==="data"} onClick={()=>setTab("data")} accent>Data ⤴</TabButton>
@@ -2305,6 +2309,12 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         {tab === "roi" && (
           <Suspense fallback={<div style={{padding:40,textAlign:"center",color:"rgba(var(--tint),0.6)"}}>Loading ROI…</div>}>
             <RoiTab data={data} year={selectedYear} user={user} tk={tk} />
+          </Suspense>
+        )}
+
+        {tab === "contracts" && user?.canUpload && (
+          <Suspense fallback={<div style={{padding:40,textAlign:"center",color:"rgba(var(--tint),0.6)"}}>Loading contracts…</div>}>
+            <ContractsTab data={data} year={selectedYear} user={user} tk={tk} />
           </Suspense>
         )}
 
