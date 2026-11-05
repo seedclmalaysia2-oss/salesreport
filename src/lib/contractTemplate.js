@@ -17,34 +17,29 @@ export const PLACEHOLDERS = [
   { key: "rebate_table", hint: "The rebate ladder, one line per tier" },
 ];
 
-// Starting wording. Plain and short on purpose: it is a draft to be replaced by
-// the company's own template, not legal advice.
+// Starting wording, taken from the company's 2026 "Loyalty Appreciation Campaign"
+// memorandum of understanding. Every clause stays editable.
 export const DEFAULT_CLAUSES = [
-  { title: "Term", body: "This agreement covers {{start}} to {{end}}." },
+  { title: "Invoice billing", body: "All outlet invoices will be issued at the standard cost price." },
   {
-    title: "Sales target",
-    body: "{{customer}} will aim to reach net purchases of {{target}} from {{supplier}} in {{year}}, covering {{scope}}, phased by quarter as set out in this agreement.",
+    title: "Total sales calculation",
+    body: "Net sales are calculated as follows:\nTotal sales on invoices − (credit notes + sales discount) = net sales.",
   },
   {
-    title: "Rebate",
-    body: "If net purchases for {{year}} reach a tier below, a rebate at that tier's rate is earned on all net purchases for the year:\n{{rebate_table}}\nThe rebate is settled after the year-end reconciliation and does not apply to purchases that remain unpaid.",
+    title: "Standard bulk order",
+    body: "Sales through standard bulk orders are included in, and count towards, the annual sales target. Bulk order items do not earn the product incentive.",
   },
   {
-    title: "Net purchases",
-    body: "Net purchases means goods invoiced to {{customer}} in {{year}}, less returns and credit notes. Free-of-charge and sample items do not count towards the target.",
+    title: "Promotion",
+    body: "Promotion items (buy 1 free 1, buy 2 free 2) and free items do not earn any rebate or incentive under this agreement. The sales count towards the sales target % achievement.",
   },
   {
-    title: "Prices and payment",
-    body: "Prices and payment terms follow {{supplier}}'s prevailing price list and credit terms unless both parties agree otherwise in writing.",
+    title: "Special offer: clearance stock",
+    body: "Special offer means clearance stock, bulk or loose order items. They do not earn any rebate or incentive under this agreement. The sales count towards the sales target % achievement.",
   },
-  {
-    title: "Review",
-    body: "Either party may ask to review the target during the year if supply or market conditions change materially. Any change must be agreed in writing.",
-  },
-  {
-    title: "General",
-    body: "This agreement is the whole understanding between the parties on its subject. It may be changed only in writing signed by both parties and is governed by the laws of Malaysia.",
-  },
+  { title: "Reimbursement", body: "All reimbursement will take 14 working days after full settlement is received." },
+  { title: "Duration", body: "This agreement runs from {{start}} to {{end}}." },
+  { title: "Note", body: "{{supplier}} reserves the right to change prices with prior notice." },
 ];
 
 let uid = 0;

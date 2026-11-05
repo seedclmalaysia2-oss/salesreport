@@ -9,7 +9,10 @@
 //   supplier, supplierSignatory, customerSignatory, startDate, endDate, issued,
 //   growth (fraction or null), target (RM), quarters (4 amounts, or null = follow the season),
 //   tiers: [{ at, pct }], clauses: [{ id, title, body }], docs: { proposal, contract },
-//   notes, touched (a person has set the numbers by hand)
+//   notes, touched (a person has set the numbers by hand),
+//   active (false = the customer is not continuing), inactiveNote, docTitle,
+//   supplierPosition, salesperson, salespersonPosition, customerPosition,
+//   incentives [{ item, value }], promoNote
 // }
 
 import {
@@ -19,7 +22,25 @@ import {
 import { CHAINS, chainBranches } from "./chains.js";
 import { GROUP_NAME } from "./chains.js";
 
-export const SUPPLIER_DEFAULT = "Seed Malaysia";
+// Names, wording and signatories follow the company's own 2026 "Loyalty
+// Appreciation Campaign" memorandum of understanding.
+export const SUPPLIER_DEFAULT = "SEED CONTACT LENS (M) SDN. BHD.";
+export const DOC_TITLE_DEFAULT = "Loyalty Appreciation Campaign";
+// Salesperson names as they are printed on the signed agreements.
+export const REP_NAMES = { Dino: "DINO LIM", Khen: "KHEN TAN", Simon: "SIMON LOW" };
+
+// Fields a saved draft may predate: a draft saved before they existed gets these.
+export const DRAFT_DEFAULTS = {
+  active: true,            // false = not continuing; kept for the record
+  inactiveNote: "",
+  docTitle: DOC_TITLE_DEFAULT,
+  supplierPosition: "General Manager",
+  salesperson: "",
+  salespersonPosition: "Sales Executive",
+  customerPosition: "",
+  incentives: [],          // [{ item, value }] e.g. { item: "1dayPure Moisture", value: "RM5/box" }
+  promoNote: "",
+};
 
 const iso = (d) => d.toISOString().slice(0, 10);
 
@@ -57,7 +78,7 @@ export function newDraft({ kind, name = "", rows, baseYear, clauses, supplier = 
     groupChains: kind === "group" ? groupChains : [],
     customerLegal: "",
     supplier,
-    supplierSignatory: "",
+    supplierSignatory: "SIMON LOW",
     customerSignatory: "",
     startDate: `${contractYear}-01-01`,
     endDate: `${contractYear}-12-31`,
@@ -70,7 +91,12 @@ export function newDraft({ kind, name = "", rows, baseYear, clauses, supplier = 
     docs: { proposal: true, contract: true },
     notes: "",
     touched: false,
+    ...DRAFT_DEFAULTS,
   };
+  if (kind === "ecp") {
+    const rep = [...(activeCustomers(rows, baseYear).get(name)?.reps || [])][0];
+    if (rep) draft.salesperson = REP_NAMES[rep] || String(rep).toUpperCase();
+  }
   return applySuggestions(draft, rows);
 }
 
@@ -144,5 +170,5 @@ export function recordFromDraft(draft) {
   return { id, title: draft.title || "Untitled contract", kind: draft.kind, baseYear: draft.baseYear, contractYear: draft.contractYear, status: draft.status, payload };
 }
 export function draftFromRecord(rec) {
-  return { ...rec.payload, id: rec.id, kind: rec.kind, title: rec.title, baseYear: rec.baseYear, contractYear: rec.contractYear, status: rec.status };
+  return { ...DRAFT_DEFAULTS, ...rec.payload, id: rec.id, kind: rec.kind, title: rec.title, baseYear: rec.baseYear, contractYear: rec.contractYear, status: rec.status };
 }

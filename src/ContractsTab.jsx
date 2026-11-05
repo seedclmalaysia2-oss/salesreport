@@ -18,6 +18,7 @@ const primaryCls =
   "inline-flex items-center justify-center gap-1.5 rounded-md bg-accent px-3.5 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 const KIND_LABEL = { ecp: "Single ECP", group: "Chain group", prospect: "Prospect" };
+const isActive = (r) => r.payload?.active !== false;
 const parseNum = (s) => {
   const t = String(s ?? "").replace(/[^0-9.\-]/g, "");
   if (t === "" || t === "-" || t === ".") return null;
@@ -197,7 +198,7 @@ function PaperViewport({ children }) {
 function Editor({ draft, setDraft, rows, customers, template, onBack, onSave, saving, dirty, canSave, notice, setNotice, setupMessage }) {
   const calc = useMemo(() => computeCalc(draft, rows), [draft, rows]);
   const a = calc.analysis;
-  const [open, setOpen] = useState({ who: true, year: true, target: true, rebate: true, terms: false, details: false });
+  const [open, setOpen] = useState({ who: true, year: true, target: true, rebate: true, incentives: false, terms: false, details: false });
   const [focusKey, setFocusKey] = useState(null);
   const [pane, setPane] = useState("edit");
   const [changing, setChanging] = useState(false);
@@ -419,8 +420,8 @@ function Editor({ draft, setDraft, rows, customers, template, onBack, onSave, sa
       </Section>
 
       {/* ----- rebate ----- */}
-      <Section id="rebate" title="Rebate tiers" summary={summaries.rebate} open={open.rebate} onToggle={() => toggle("rebate")}>
-        <p className="text-xs leading-relaxed text-muted">When a tier is reached, its rebate % is earned on all net purchases for the year.</p>
+      <Section id="rebate" title="Rebate tiers (additional sponsorship)" summary={summaries.rebate} open={open.rebate} onToggle={() => toggle("rebate")}>
+        <p className="text-xs leading-relaxed text-muted">When a tier is reached, its rate is earned as additional sponsorship on all net sales for the period. Enter the tier as a % of target; the RM it works out to is shown on the paper.</p>
         <div className="grid gap-2">
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_1.75rem] gap-2 text-xs text-faint"><span>Reach % of target</span><span>Rebate %</span><span className="text-right">Costs you</span><span /></div>
           {draft.tiers.map((t, i) => (
@@ -445,6 +446,22 @@ function Editor({ draft, setDraft, rows, customers, template, onBack, onSave, sa
           applied={usingTiers}
           onUse={() => setDraft((d) => ({ ...d, tiers: calc.tierSuggestion.tiers }))}
         />
+      </Section>
+
+      {/* ----- incentives ----- */}
+      <Section id="incentives" title="Product incentives and promotion" summary={draft.incentives.length ? `${draft.incentives.length} products` : "None"} open={open.incentives} onToggle={() => toggle("incentives")}>
+        <p className="text-xs leading-relaxed text-muted">Optional. Per-box incentives and any special promotion, printed as on your signed memoranda.</p>
+        {draft.incentives.map((x, i) => (
+          <div key={i} className="grid grid-cols-[minmax(0,1fr)_7rem_1.75rem] items-center gap-2">
+            <input aria-label={`Product ${i + 1}`} className={inputCls} placeholder="Product" value={x.item} onChange={(e) => patch({ incentives: draft.incentives.map((y, j) => (j === i ? { ...y, item: e.target.value } : y)) })} />
+            <input aria-label={`Incentive ${i + 1}`} className={inputCls} placeholder="RM5/box" value={x.value} onChange={(e) => patch({ incentives: draft.incentives.map((y, j) => (j === i ? { ...y, value: e.target.value } : y)) })} />
+            <button type="button" aria-label={`Remove product ${i + 1}`} onClick={() => patch({ incentives: draft.incentives.filter((_, j) => j !== i) })} className="rounded text-faint hover:text-bad focus-visible:outline-2 focus-visible:outline-accent">✕</button>
+          </div>
+        ))}
+        <div><button type="button" className={btnCls} onClick={() => patch({ incentives: [...draft.incentives, { item: "", value: "" }] })}>Add a product</button></div>
+        <Field label="Special promotion" hint="For example: Buy 3 free 1 (1daypure sphere)." htmlFor="ct-promo">
+          <input id="ct-promo" className={inputCls} value={draft.promoNote || ""} onChange={(e) => patch({ promoNote: e.target.value })} />
+        </Field>
       </Section>
 
       {/* ----- terms ----- */}
@@ -481,9 +498,16 @@ function Editor({ draft, setDraft, rows, customers, template, onBack, onSave, sa
           <Field label="Starts" htmlFor="ct-start"><input id="ct-start" type="date" className={inputCls} value={draft.startDate} onFocus={focus("dates")} onChange={(e) => patch({ startDate: e.target.value })} /></Field>
           <Field label="Ends" htmlFor="ct-end"><input id="ct-end" type="date" className={inputCls} value={draft.endDate} onFocus={focus("dates")} onChange={(e) => patch({ endDate: e.target.value })} /></Field>
         </div>
+        <Field label="Document title" hint="Printed as the heading of the contract, with the year." htmlFor="ct-doctitle">
+          <input id="ct-doctitle" className={inputCls} value={draft.docTitle || ""} onChange={(e) => patch({ docTitle: e.target.value })} />
+        </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Signs for you" htmlFor="ct-ssig"><input id="ct-ssig" className={inputCls} placeholder="Name, title" value={draft.supplierSignatory} onChange={(e) => patch({ supplierSignatory: e.target.value })} /></Field>
-          <Field label="Signs for the customer" htmlFor="ct-csig"><input id="ct-csig" className={inputCls} placeholder="Name, title" value={draft.customerSignatory} onChange={(e) => patch({ customerSignatory: e.target.value })} /></Field>
+          <Field label="Authorizer" htmlFor="ct-ssig"><input id="ct-ssig" className={inputCls} value={draft.supplierSignatory} onChange={(e) => patch({ supplierSignatory: e.target.value })} /></Field>
+          <Field label="Authorizer's position" htmlFor="ct-spos"><input id="ct-spos" className={inputCls} value={draft.supplierPosition || ""} onChange={(e) => patch({ supplierPosition: e.target.value })} /></Field>
+          <Field label="Salesperson" htmlFor="ct-sales"><input id="ct-sales" className={inputCls} value={draft.salesperson || ""} onChange={(e) => patch({ salesperson: e.target.value })} /></Field>
+          <Field label="Salesperson's position" htmlFor="ct-salespos"><input id="ct-salespos" className={inputCls} value={draft.salespersonPosition || ""} onChange={(e) => patch({ salespersonPosition: e.target.value })} /></Field>
+          <Field label="Customer's person in charge" htmlFor="ct-csig"><input id="ct-csig" className={inputCls} placeholder="Filled in at signing if blank" value={draft.customerSignatory} onChange={(e) => patch({ customerSignatory: e.target.value })} /></Field>
+          <Field label="Customer's position" htmlFor="ct-cpos"><input id="ct-cpos" className={inputCls} value={draft.customerPosition || ""} onChange={(e) => patch({ customerPosition: e.target.value })} /></Field>
         </div>
         <Field label="Note on the proposal" hint="Optional. Printed at the foot of the proposal page." htmlFor="ct-notes">
           <textarea id="ct-notes" rows={3} className={inputCls} value={draft.notes} onChange={(e) => patch({ notes: e.target.value })} />
@@ -518,11 +542,23 @@ function Editor({ draft, setDraft, rows, customers, template, onBack, onSave, sa
         <button type="button" onClick={onBack} className="text-sm font-semibold text-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-accent">← All contracts</button>
         <h2 className="min-w-0 basis-full truncate text-lg font-bold tracking-tight text-ink sm:flex-1 sm:basis-0">{draft.title || "Untitled contract"}</h2>
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${draft.status === "final" ? "bg-ok/15 text-ok" : "bg-wash text-muted"}`}>{draft.status === "final" ? "Final" : "Draft"}</span>
+        <div role="group" aria-label="Active or inactive" className="inline-flex overflow-hidden rounded-full border border-line text-xs font-semibold">
+          {[[true, "Active"], [false, "Inactive"]].map(([v, l]) => (
+            <button key={l} type="button" aria-pressed={draft.active !== false === v} onClick={() => patch({ active: v })}
+              className={`px-3 py-1 ${(draft.active !== false) === v ? (v ? "bg-ok/15 text-ok" : "bg-bad/15 text-bad") : "text-muted hover:bg-wash"}`}>{l}</button>
+          ))}
+        </div>
         {dirty && <span className="text-xs text-watch">Unsaved changes</span>}
         <button type="button" className={btnCls} disabled={saving || !canSave} onClick={() => onSave("draft")}>{saving ? "Saving…" : "Save draft"}</button>
         <button type="button" className={primaryCls} disabled={saving || !canSave} onClick={() => onSave("final")}>{draft.status === "final" ? "Save final" : "Mark final"}</button>
       </div>
 
+      {draft.active === false && (
+        <div role="status" className="mb-4 grid gap-2 rounded-md border border-bad/40 bg-bad/10 px-3 py-2.5 text-sm text-ink">
+          <p><strong className="font-semibold">Inactive:</strong> this customer is not continuing. The contract is kept for the record and left out of the suggestions for new proposals.</p>
+          <input aria-label="Why it is inactive" className={inputCls} placeholder="Why, or when it ended (optional)" value={draft.inactiveNote || ""} onChange={(e) => patch({ inactiveNote: e.target.value })} />
+        </div>
+      )}
       {setupMessage && <p role="status" className="mb-4 rounded-md border border-watch/40 bg-watch/10 px-3 py-2 text-sm text-ink">{setupMessage} You can still preview and print.</p>}
       {notice && (
         <p role="status" className={`mb-4 flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm ${notice.tone === "bad" ? "border-bad/40 bg-bad/10" : "border-ok/40 bg-ok/10"} text-ink`}>
@@ -599,12 +635,16 @@ function usePrintRoot() {
 
 // ---------- home ----------
 
-function Home({ customers, baseYear, contractYear, records, listState, template, onCustomer, onGroup, onProspect, onOpen, onDelete, onTemplate, onResetTemplate, busy }) {
+function Home({ customers, baseYear, contractYear, records, listState, template, onCustomer, onGroup, onProspect, onOpen, onDelete, onSetActive, onTemplate, onResetTemplate, busy }) {
   const fileRef = useRef(null);
-  const contracted = useMemo(() => new Set(records.filter((r) => r.contractYear === contractYear).map((r) => r.title.toLowerCase())), [records, contractYear]);
+  // Already covered for the year, or not continuing: neither needs a new proposal.
+  const contracted = useMemo(() => new Set(records.filter((r) => r.contractYear === contractYear || !isActive(r)).flatMap((r) => [r.title, ...(r.payload?.customerNames || [])]).map((n) => String(n).toLowerCase())), [records, contractYear]);
   const suggestions = useMemo(() => customers.filter((c) => c.cur > 0 && !contracted.has(c.name.toLowerCase())).slice(0, 6), [customers, contracted]);
   const [filter, setFilter] = useState("all");
-  const shown = records.filter((r) => filter === "all" || r.kind === filter);
+  const [activity, setActivity] = useState("active");
+  const nActive = records.filter(isActive).length;
+  const counts = { active: nActive, inactive: records.length - nActive, all: records.length };
+  const shown = records.filter((r) => (filter === "all" || r.kind === filter) && (activity === "all" || (activity === "active") === isActive(r)));
   return (
     <div className="grid gap-8">
       <header className="max-w-2xl">
@@ -641,6 +681,11 @@ function Home({ customers, baseYear, contractYear, records, listState, template,
       <section aria-labelledby="ct-saved" className="grid gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <h3 id="ct-saved" className="text-sm font-semibold text-ink">Saved contracts</h3>
+          <div className="flex gap-1.5" role="group" aria-label="Filter by active or inactive">
+            {[["active", "Active"], ["inactive", "Inactive"], ["all", "All"]].map(([k, l]) => (
+              <button key={k} type="button" aria-pressed={activity === k} onClick={() => setActivity(k)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${activity === k ? "border-accent bg-accent/15 text-accent" : "border-line text-muted hover:bg-wash"}`}>{l} <span className="font-metric font-normal">{counts[k]}</span></button>
+            ))}
+          </div>
           <div className="flex gap-1.5" role="group" aria-label="Filter by type">
             {[["all", "All"], ["ecp", "Single ECP"], ["group", "Chain group"], ["prospect", "Prospect"]].map(([k, l]) => (
               <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${filter === k ? "border-accent bg-accent/15 text-accent" : "border-line text-muted hover:bg-wash"}`}>{l}</button>
@@ -650,22 +695,23 @@ function Home({ customers, baseYear, contractYear, records, listState, template,
         {listState.loading && <p className="text-sm text-faint">Loading saved contracts…</p>}
         {listState.error && <p role="alert" className="rounded-md border border-watch/40 bg-watch/10 px-3 py-2 text-sm text-ink">{listState.error}</p>}
         {!listState.loading && !listState.error && shown.length === 0 && (
-          <p className="rounded-md border border-dashed border-line px-4 py-6 text-center text-sm text-muted">{records.length ? "Nothing of that type is saved." : "No saved contracts yet. Start one above and save it as a draft."}</p>
+          <p className="rounded-md border border-dashed border-line px-4 py-6 text-center text-sm text-muted">{records.length ? `No ${activity === "all" ? "" : activity + " "}contracts of that type.` : "No saved contracts yet. Start one above and save it as a draft."}</p>
         )}
         {shown.length > 0 && (
           <div className="overflow-x-auto rounded-md border border-line">
-            <table className="w-full min-w-[34rem] text-sm">
+            <table className="w-full min-w-[40rem] text-sm">
               <thead className="bg-wash text-left text-xs text-muted">
-                <tr><th className="px-3 py-2 font-medium">Customer</th><th className="px-3 py-2 font-medium">Type</th><th className="px-3 py-2 font-medium">Year</th><th className="px-3 py-2 text-right font-medium">Target</th><th className="px-3 py-2 font-medium">Status</th><th className="px-3 py-2 font-medium">Updated</th><th className="px-3 py-2"><span className="sr-only">Delete</span></th></tr>
+                <tr><th className="px-3 py-2 font-medium">Customer</th><th className="px-3 py-2 font-medium">Type</th><th className="px-3 py-2 font-medium">Year</th><th className="px-3 py-2 text-right font-medium">Target</th><th className="px-3 py-2 font-medium">Status</th><th className="px-3 py-2 font-medium">Continuing</th><th className="px-3 py-2 font-medium">Updated</th><th className="px-3 py-2"><span className="sr-only">Delete</span></th></tr>
               </thead>
               <tbody>
                 {shown.map((r) => (
-                  <tr key={r.id} className="border-t border-line hover:bg-wash">
+                  <tr key={r.id} className={`border-t border-line hover:bg-wash ${isActive(r) ? "" : "opacity-60"}`}>
                     <td className="max-w-[16rem] truncate px-3 py-2"><button type="button" onClick={() => onOpen(r)} className="font-semibold text-ink underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-accent">{r.title}</button></td>
                     <td className="px-3 py-2 text-muted">{KIND_LABEL[r.kind]}</td>
                     <td className="px-3 py-2 font-metric text-xs text-muted">{r.contractYear}</td>
                     <td className="px-3 py-2 text-right font-metric text-xs text-ink">{r.payload?.target ? rmShort(r.payload.target) : "—"}</td>
                     <td className="px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${r.status === "final" ? "bg-ok/15 text-ok" : "bg-wash text-muted"}`}>{r.status === "final" ? "Final" : "Draft"}</span></td>
+                    <td className="px-3 py-2"><button type="button" onClick={() => onSetActive(r, !isActive(r))} title={isActive(r) ? "Mark as not continuing" : "Mark as continuing again"} className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-accent ${isActive(r) ? "border-ok/40 text-ok hover:bg-ok/10" : "border-bad/40 text-bad hover:bg-bad/10"}`}>{isActive(r) ? "Active" : "Inactive"}</button></td>
                     <td className="px-3 py-2 text-xs text-muted">{whenText(r.updatedAt)}</td>
                     <td className="px-3 py-2 text-right"><button type="button" aria-label={`Delete ${r.title}`} onClick={() => onDelete(r)} className="text-faint hover:text-bad focus-visible:outline-2 focus-visible:outline-accent">✕</button></td>
                   </tr>
@@ -777,6 +823,16 @@ export default function ContractsTab({ data, year, user, tk, store = supabaseSto
     try { await store.remove(rec.id); await reload(); } catch (e) { setListState((s) => ({ ...s, error: e.message || String(e) })); }
   };
 
+  // Flip a saved contract between active and inactive without opening it.
+  const setActive = async (rec, active) => {
+    try {
+      await store.save({ ...rec, payload: { ...rec.payload, active } });
+      await reload();
+    } catch (e) {
+      setListState((s) => ({ ...s, error: e.message || String(e) }));
+    }
+  };
+
   const uploadTemplate = async (file) => {
     setBusy(true);
     try {
@@ -838,6 +894,7 @@ export default function ContractsTab({ data, year, user, tk, store = supabaseSto
             onProspect={() => start("prospect")}
             onOpen={open}
             onDelete={remove}
+            onSetActive={setActive}
             onTemplate={uploadTemplate}
             onResetTemplate={resetTemplate}
           />

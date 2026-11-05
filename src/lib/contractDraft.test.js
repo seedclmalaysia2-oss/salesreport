@@ -115,6 +115,29 @@ describe("calc", () => {
   });
 });
 
+describe("active / inactive and the signed-agreement fields", () => {
+  it("starts active, with the salesperson as printed on the agreements", () => {
+    const d = newDraft({ kind: "ecp", name: "A OPTICS", rows: rows.map((r) => ({ ...r, sp: "Dino" })), baseYear: 2026, clauses });
+    expect(d.active).toBe(true);
+    expect(d.salesperson).toBe("DINO LIM");
+    expect(d.supplier).toBe("SEED CONTACT LENS (M) SDN. BHD.");
+    expect(d.supplierSignatory).toBe("SIMON LOW");
+  });
+
+  it("falls back to the rep's own name when the full name isn't known", () => {
+    const d = newDraft({ kind: "ecp", name: "A OPTICS", rows, baseYear: 2026, clauses });
+    expect(d.salesperson).toBe("ALAN");
+  });
+
+  it("opens a contract saved before these fields existed as active, and keeps an inactive one inactive", () => {
+    const old = { id: "o1", title: "OLD", kind: "ecp", baseYear: 2025, contractYear: 2026, status: "final", payload: { target: 5000 } };
+    expect(draftFromRecord(old)).toMatchObject({ active: true, incentives: [], docTitle: "Loyalty Appreciation Campaign", target: 5000 });
+    const off = draftFromRecord({ ...old, payload: { target: 5000, active: false, inactiveNote: "Closed down" } });
+    expect(off.active).toBe(false);
+    expect(off.inactiveNote).toBe("Closed down");
+  });
+});
+
 describe("saving", () => {
   it("round-trips through the saved record", () => {
     const d = { ...make({ kind: "ecp", name: "A OPTICS" }), id: "abc" };

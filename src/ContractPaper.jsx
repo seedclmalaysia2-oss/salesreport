@@ -29,7 +29,7 @@ export function clauseVars(draft, calc) {
     target: rmFull(draft.target),
     scope: draft.kind === "group" ? "all participating outlets, counted together as one total" : "all of its outlets",
     rebate_table: tiers
-      .map((t) => `At ${pct(t.at * 100)} of target (${rmFull(t.sales)}): ${pct(t.pct)} rebate`)
+      .map((t) => `At ${pct(t.at * 100)} of target (${rmFull(t.sales)}): ${pct(t.pct)} additional sponsorship`)
       .join("\n"),
   };
 }
@@ -86,11 +86,11 @@ function Td({ children, right, bold }) {
 
 export function RebateTable({ draft, hl }) {
   const rows = tierCosts(draft.target, draft.tiers);
-  if (!rows.length) return <p className="text-sheet-mute">No rebate tiers set.</p>;
+  if (!rows.length) return <p className="text-sheet-mute">No sponsorship tiers set.</p>;
   return (
     <table className="ct-avoid w-full">
       <thead>
-        <tr><Th>Reach this share of target</Th><Th right>Net purchases of</Th><Th right>Rebate on all net purchases</Th><Th right>Rebate value</Th></tr>
+        <tr><Th>Reach this share of target</Th><Th right>Net sales of</Th><Th right>Additional sponsorship</Th><Th right>Sponsorship value</Th></tr>
       </thead>
       <tbody>
         {rows.map((t, i) => (
@@ -139,6 +139,31 @@ function Outlets({ draft, calc }) {
           <p className="text-sheet-mute">{list.map((n) => n.replace(/^[^-–]*[-–]\s*/, "") || n).join(", ")}</p>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Product incentives (RM per box) and a special promotion line, as on the signed MOUs.
+function Incentives({ draft }) {
+  const list = (draft.incentives || []).filter((x) => (x.item || x.value));
+  if (!list.length && !draft.promoNote) return null;
+  return (
+    <div className="ct-avoid">
+      {draft.promoNote && (
+        <>
+          <SheetHeading>Special promotion</SheetHeading>
+          <p className="whitespace-pre-line text-[10pt]">{draft.promoNote}</p>
+        </>
+      )}
+      {list.length > 0 && (
+        <>
+          <SheetHeading>Product incentive</SheetHeading>
+          <table className="w-full">
+            <thead><tr><Th>Product</Th><Th right>Incentive</Th></tr></thead>
+            <tbody>{list.map((x, i) => <tr key={i}><Td>{x.item}</Td><Td right bold>{x.value}</Td></tr>)}</tbody>
+          </table>
+        </>
+      )}
     </div>
   );
 }
@@ -212,9 +237,10 @@ function ProposalSheet({ draft, calc, hl }) {
       <div className="mt-3"><TargetTable draft={draft} calc={calc} hl={hl} /></div>
       {draft.kind === "group" && <p className="mt-2 text-[9pt] text-sheet-mute">One total for {draft.customerNames.length} outlet{draft.customerNames.length === 1 ? "" : "s"} across the group. Outlets count together towards it.</p>}
 
-      <SheetHeading>The rebate you can earn</SheetHeading>
+      <SheetHeading>The additional sponsorship you can earn</SheetHeading>
       <RebateTable draft={draft} hl={hl.tiers} />
-      <p className="mt-2 text-[9pt] text-sheet-mute">The rebate rate for the highest tier reached applies to all net purchases for {draft.contractYear}.</p>
+      <p className="mt-2 text-[9pt] text-sheet-mute">The rate for the highest tier reached applies to all net sales for {draft.contractYear}.</p>
+      <Incentives draft={draft} />
 
       {draft.notes && <p className="mt-5 whitespace-pre-line text-[10pt]">{draft.notes}</p>}
       {a && a.hasHistory && m < 12 && (
@@ -242,8 +268,8 @@ function ContractSheet({ draft, calc, hl }) {
   return (
     <section className="ct-sheet" aria-label="Contract">
       <header className="border-b-2 border-sheet-ink pb-3">
-        <p className="text-[9pt] text-sheet-mute">{draft.supplier || "Supplier"}</p>
-        <h1 className="mt-1 text-[22pt] font-bold leading-tight tracking-tight">Sales agreement {draft.contractYear}</h1>
+        <p className="text-[9pt] text-sheet-mute">Memorandum of understanding</p>
+        <h1 className="mt-1 text-[22pt] font-bold leading-tight tracking-tight">{draft.docTitle || "Sales agreement"} {draft.contractYear}</h1>
       </header>
 
       <table className="mt-5 w-full text-[10pt]">
@@ -262,10 +288,11 @@ function ContractSheet({ draft, calc, hl }) {
 
       {!rebateInClauses && (
         <>
-          <SheetHeading>Rebate</SheetHeading>
+          <SheetHeading>Additional sponsorship</SheetHeading>
           <RebateTable draft={draft} hl={hl.tiers} />
         </>
       )}
+      <Incentives draft={draft} />
 
       {draft.kind === "group" && draft.customerNames.length > 0 && (
         <>
@@ -291,16 +318,17 @@ function ContractSheet({ draft, calc, hl }) {
         </>
       )}
 
-      <div className="ct-avoid mt-10 grid grid-cols-2 gap-12 text-[10pt]">
+      <div className="ct-avoid mt-10 grid grid-cols-3 gap-8 text-[10pt]">
         {[
-          ["For the Supplier", draft.supplier, draft.supplierSignatory],
-          ["For the Customer", draft.title, draft.customerSignatory],
-        ].map(([label, org, who]) => (
+          ["Authorizer's signature", draft.supplierSignatory, draft.supplierPosition, "Name"],
+          ["Salesperson's signature", draft.salesperson, draft.salespersonPosition, "Name"],
+          ["Business partner's signature", draft.customerSignatory, draft.customerPosition, "Person in charge"],
+        ].map(([label, who, position, blank]) => (
           <div key={label}>
             <p className="text-sheet-mute">{label}</p>
-            <p className="font-bold">{org || " "}</p>
             <div className="mt-12 border-t border-sheet-ink pt-1">
-              <p>{who || "Name and title"}</p>
+              <p className="font-bold">{who || blank}</p>
+              <p>{position || "Position"}</p>
               <p className="mt-3 text-sheet-mute">Date</p>
             </div>
           </div>
