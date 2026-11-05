@@ -193,7 +193,7 @@ function Detail({ c, year, scopeLabel, data, scopeSp, brandsLoading, tk, colors,
   );
 }
 
-export default function DrilldownTab({ data, year, selectedSP, setSelectedSP, salespeople, colors, brandsLoading, tk, reduceMotion }) {
+export default function DrilldownTab({ data, year, years, setYear, selectedSP, setSelectedSP, salespeople, colors, brandsLoading, tk, reduceMotion }) {
   const [tier, setTier] = useState(null); // index into TIERS, or null for everyone
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(null); // expanded customer name
@@ -213,12 +213,33 @@ export default function DrilldownTab({ data, year, selectedSP, setSelectedSP, sa
   const topMax = list.length ? list[0].total : 0;
 
   const pickTier = (idx) => { setTier((cur) => (cur === idx ? null : idx)); setShown(PAGE); setOpen(null); };
+  const pickYear = (y) => { setYear(y); setTier(null); setShown(PAGE); setOpen(null); };
   const pickSP = (sp) => { setSelectedSP(sp); setTier(null); setShown(PAGE); setOpen(null); };
 
   return (
     <div className="dd-root space-y-6 text-ink">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Year">
+        <span className="w-24 text-sm text-muted">Year</span>
+        {years.map((y) => {
+          const active = year === y;
+          return (
+            <button
+              key={y}
+              type="button"
+              aria-pressed={active}
+              onClick={() => pickYear(y)}
+              className={`cursor-pointer rounded-full px-4 py-1.5 font-metric text-xs font-semibold outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent ${
+                active ? "bg-accent text-white" : "bg-wash text-muted hover:text-ink"
+              }`}
+            >
+              {y}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Salesperson">
-        <span className="mr-1 text-sm text-muted">Salesperson</span>
+        <span className="w-24 text-sm text-muted">Salesperson</span>
         {["All", ...salespeople].map((sp) => {
           const active = selectedSP === sp;
           return (

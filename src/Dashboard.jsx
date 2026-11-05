@@ -2095,6 +2095,8 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             <DrilldownTab
               data={data}
               year={selectedYear}
+              years={YEARS}
+              setYear={setSelectedYear}
               selectedSP={selectedSP}
               setSelectedSP={setSelectedSP}
               salespeople={SALESPEOPLE}
