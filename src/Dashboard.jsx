@@ -14,6 +14,7 @@ const DataTab = lazy(() => import("./DataTab.jsx"));
 const AdminUsers = lazy(() => import("./AdminUsers.jsx"));
 const ReportTab = lazy(() => import("./ReportTab.jsx"));
 const RoiTab = lazy(() => import("./RoiTab.jsx"));
+const DrilldownTab = lazy(() => import("./DrilldownTab.jsx"));
 import { groupLabel } from "./lib/groupLabels.js";
 
 // Uploads used to be parsed into these keys while the dashboard ran open to
@@ -524,11 +525,6 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   };
   const [selectedYear, setSelectedYear] = useState(2026);
   const [selectedSP, setSelectedSP] = useState("All");
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [customerSearch, setCustomerSearch] = useState("");
-  // Drill-down customer list ordering: by lifetime amount or by name, either
-  // direction. Default keeps the previous behaviour (biggest spender first).
-  const [customerSort, setCustomerSort] = useState("amount-desc");
   const [topCustomersBySpView, setTopCustomersBySpView] = useState("grid");
   // "all" or a year in YEARS. Defaults to all-time so the existing view is
   // unchanged until the admin picks a year.
@@ -918,74 +914,6 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
     });
     return out;
   }, [data, topCustomersBySpYear]);
-
-  const filteredCustomerList = useMemo(() => {
-    const q = customerSearch.trim().toLowerCase();
-    // Copy before sorting — customerIndex is shared with the Top-Customers
-    // panels, which rely on its amount-desc order and must not be mutated.
-    const list = q
-      ? customerIndex.filter(c => c.customer.toLowerCase().includes(q))
-      : customerIndex.slice();
-    const byName = (a, b) =>
-      a.customer.localeCompare(b.customer, undefined, { numeric: true, sensitivity: "base" });
-    switch (customerSort) {
-      case "amount-asc": list.sort((a, b) => a.total - b.total); break;
-      case "name-asc":   list.sort(byName); break;
-      case "name-desc":  list.sort((a, b) => byName(b, a)); break;
-      default:           list.sort((a, b) => b.total - a.total); break; // amount-desc
-    }
-    return list;
-  }, [customerIndex, customerSearch, customerSort]);
-
-  const activeCustomer = useMemo(() => {
-    if (!selectedCustomer) return customerIndex[0];
-    return customerIndex.find(c => c.customer === selectedCustomer) || customerIndex[0];
-  }, [customerIndex, selectedCustomer]);
-
-  const customerMonthlyData = useMemo(() => {
-    if (!activeCustomer) return [];
-    return MONTH_NAMES.map((m, i) => {
-      const row = { month: m };
-      YEARS.forEach(y => {
-        row[y] = activeCustomer.monthsByYear[y]?.[i] || 0;
-      });
-      return row;
-    });
-  }, [activeCustomer, data]);
-
-  const customerYearTotals = useMemo(() => {
-    if (!activeCustomer) return [];
-    return YEARS.map(y => ({ year: y.toString(), total: activeCustomer.perYear[y] || 0 }));
-  }, [activeCustomer, data]);
-
-  const customerTopBrandsByAmt = useMemo(() => {
-    if (!activeCustomer) return [];
-    const m = new Map();
-    BRAND_SALES.filter(r => r.customer === activeCustomer.customer).forEach(r => {
-      const e = m.get(r.brand) || { amt: 0, qty: 0 };
-      e.amt += r.amt; e.qty += r.qty || 0;
-      m.set(r.brand, e);
-    });
-    return [...m.entries()]
-      .map(([brand, v]) => ({ brand, amt: v.amt, qty: v.qty }))
-      .sort((a, b) => b.amt - a.amt)
-      .slice(0, 12);
-  }, [activeCustomer, data]);
-
-  const customerTopBrandsByQty = useMemo(() => {
-    if (!activeCustomer) return [];
-    const m = new Map();
-    BRAND_SALES.filter(r => r.customer === activeCustomer.customer).forEach(r => {
-      const e = m.get(r.brand) || { amt: 0, qty: 0 };
-      e.amt += r.amt; e.qty += r.qty || 0;
-      m.set(r.brand, e);
-    });
-    return [...m.entries()]
-      .map(([brand, v]) => ({ brand, amt: v.amt, qty: v.qty }))
-      .filter(x => x.qty > 0)
-      .sort((a, b) => b.qty - a.qty)
-      .slice(0, 12);
-  }, [activeCustomer, data]);
 
   const brandYearTotals = useMemo(() => {
     const m = new Map();
@@ -2163,150 +2091,19 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         )}
 
         {tab === "drilldown" && (
-          <div style={{display:"grid",gridTemplateColumns: isNarrow ? "1fr" : "320px 1fr",gap:20}}>
-            <Card>
-              <div style={{fontSize:14,fontWeight:600,marginBottom:12}}>Customers ({customerIndex.length.toLocaleString()})</div>
-              <input
-                type="text"
-                value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
-                placeholder="Search customer…"
-                style={{
-                  width:"100%",boxSizing:"border-box",padding:"8px 12px",
-                  background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.08)",
-                  color:"var(--text)",borderRadius:8,fontSize:13,marginBottom:10,outline:"none"
-                }}
-              />
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-                <span style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,color:"rgba(var(--tint),0.55)",fontWeight:600,flexShrink:0}}>Sort</span>
-                <select
-                  value={customerSort}
-                  onChange={(e) => setCustomerSort(e.target.value)}
-                  aria-label="Sort customers"
-                  style={{
-                    flex:1,minWidth:0,boxSizing:"border-box",padding:"7px 10px",
-                    background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.08)",
-                    color:"var(--text)",borderRadius:8,fontSize:12,cursor:"pointer",outline:"none",
-                    fontFamily:"'DM Sans',sans-serif",colorScheme:"dark light",
-                  }}>
-                  <option value="amount-desc">Amount: high → low</option>
-                  <option value="amount-asc">Amount: low → high</option>
-                  <option value="name-asc">Name: A → Z</option>
-                  <option value="name-desc">Name: Z → A</option>
-                </select>
-              </div>
-              <div style={{maxHeight:560,overflowY:"auto"}}>
-                {filteredCustomerList.map(c => (
-                  <button
-                    key={c.customer}
-                    onClick={() => setSelectedCustomer(c.customer)}
-                    style={{
-                      display:"flex",justifyContent:"space-between",alignItems:"center",
-                      width:"100%",padding:"8px 10px",marginBottom:2,
-                      background: activeCustomer?.customer === c.customer ? "color-mix(in srgb, var(--st-accent) 15%, transparent)" : "transparent",
-                      border: activeCustomer?.customer === c.customer ? "1px solid color-mix(in srgb, var(--st-accent) 30%, transparent)" : "1px solid transparent",
-                      color:"var(--text)",borderRadius:6,cursor:"pointer",fontSize:12,textAlign:"left"
-                    }}>
-                    <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:8}}>{c.customer}</span>
-                    <span style={{fontFamily:"'Space Mono',monospace",fontSize:11,color:"rgba(var(--tint),0.67)"}}>{fmt(c.total)}</span>
-                  </button>
-                ))}
-              </div>
-            </Card>
-
-            <div>
-              {activeCustomer && (
-                <>
-                  <Card style={{marginBottom:16}}>
-                    <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:1.5,color:"rgba(var(--tint),0.65)",marginBottom:6}}>Customer</div>
-                    <div style={{fontSize:24,fontWeight:700,marginBottom:8}}>{activeCustomer.customer}</div>
-                    <div style={{display:"flex",gap:24,flexWrap:"wrap",fontSize:13,color:"rgba(var(--tint),0.7)"}}>
-                      <div><span style={{color:"rgba(var(--tint),0.65)"}}>Total all time:</span> <span style={{fontFamily:"'Space Mono',monospace",fontWeight:600,color:STATUS.accent}}>{fmtFull(activeCustomer.total)}</span></div>
-                      <div><span style={{color:"rgba(var(--tint),0.65)"}}>Active years:</span> {Object.keys(activeCustomer.perYear).filter(y => activeCustomer.perYear[y] > 0).length}</div>
-                      <div>
-                        <span style={{color:"rgba(var(--tint),0.65)"}}>Served by:</span>{" "}
-                        {activeCustomer.perSP.map(sp => (
-                          <span key={sp} style={{display:"inline-flex",alignItems:"center",gap:4,marginRight:8}}>
-                            <span style={{width:8,height:8,borderRadius:2,background:COLORS[sp] || "#888",display:"inline-block"}} />
-                            {sp}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </Card>
-
-                  <Card style={{marginBottom:16}}>
-                    <div style={{fontSize:14,fontWeight:600,marginBottom:14}}>Monthly Revenue by Year</div>
-                    <ResponsiveContainer width="100%" height={280}>
-                      <LineChart data={customerMonthlyData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} />
-                        <XAxis dataKey="month" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} />
-                        <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />
-                        {YEARS.map((y, i) => (
-                          <Line isAnimationActive={!reduceMotion} key={y} type="monotone" dataKey={y} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} dot={false} name={y.toString()} />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </Card>
-
-                  <div style={{display:"grid",gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",gap:16}}>
-                    <Card>
-                      <div style={{fontSize:14,fontWeight:600,marginBottom:14}}>Annual Total</div>
-                      <ResponsiveContainer width="100%" height={220}>
-                        <BarChart data={customerYearTotals}>
-                          <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} />
-                          <XAxis dataKey="year" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} />
-                          <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
-                          <Tooltip formatter={(v) => fmtFull(v)} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} labelStyle={{color:tk.text,fontWeight:600,marginBottom:4}} itemStyle={{color:tk.tooltipText}} />
-                          <Bar isAnimationActive={!reduceMotion} dataKey="total" fill={STATUS.accent} radius={[3,3,0,0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </Card>
-                    <Card>
-                      <div style={{fontSize:14,fontWeight:600,marginBottom:14}}>💰 Top Brands by Revenue</div>
-                      {customerTopBrandsByAmt.length === 0 ? (
-                        <div style={{color:"rgba(var(--tint),0.65)",fontSize:13,padding:"40px 0",textAlign:"center"}}>No brand revenue for this customer</div>
-                      ) : (
-                        <ResponsiveContainer width="100%" height={Math.max(customerTopBrandsByAmt.length * 22, 220)}>
-                          <BarChart data={customerTopBrandsByAmt} layout="vertical" margin={{left:80, right:60}}>
-                            <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} horizontal={false} />
-                            <XAxis type="number" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
-                            <YAxis type="category" dataKey="brand" tick={{fill:tk.chartTickFillDim,fontSize:11}} axisLine={false} width={75} />
-                            <Tooltip formatter={(v, name, props) => [`${fmtFull(v)}  (${(props.payload.qty || 0).toLocaleString()} units)`, "Revenue"]} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} labelStyle={{color:tk.text,fontWeight:600,marginBottom:4}} itemStyle={{color:tk.tooltipText}} />
-                            <Bar isAnimationActive={!reduceMotion} dataKey="amt" fill={STATUS.accent} radius={[0,3,3,0]}>
-                              <LabelList dataKey="amt" position="right" formatter={(v) => fmt(v)} fill={tk.text} fontSize={10} fontFamily="'Space Mono',monospace" />
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
-                      )}
-                    </Card>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr",gap:16,marginTop:16}}>
-                    <Card>
-                      <div style={{fontSize:14,fontWeight:600,marginBottom:14}}>📦 Top Brands by Quantity</div>
-                      {customerTopBrandsByQty.length === 0 ? (
-                        <div style={{color:"rgba(var(--tint),0.65)",fontSize:13,padding:"40px 0",textAlign:"center"}}>No quantity data for this customer</div>
-                      ) : (
-                        <ResponsiveContainer width="100%" height={Math.max(customerTopBrandsByQty.length * 22, 220)}>
-                          <BarChart data={customerTopBrandsByQty} layout="vertical" margin={{left:80, right:60}}>
-                            <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} horizontal={false} />
-                            <XAxis type="number" tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={(v) => v.toLocaleString()} />
-                            <YAxis type="category" dataKey="brand" tick={{fill:tk.chartTickFillDim,fontSize:11}} axisLine={false} width={75} />
-                            <Tooltip formatter={(v, name, props) => [`${v.toLocaleString()} units  (${fmtFull(props.payload.amt || 0)})`, "Quantity"]} contentStyle={{background:tk.tooltipBg,border:`1px solid ${tk.tooltipBorder}`,borderRadius:8,fontSize:12,color:tk.tooltipText}} labelStyle={{color:tk.text,fontWeight:600,marginBottom:4}} itemStyle={{color:tk.tooltipText}} />
-                            <Bar isAnimationActive={!reduceMotion} dataKey="qty" fill={STATUS.qty} radius={[0,3,3,0]}>
-                              <LabelList dataKey="qty" position="right" formatter={(v) => v.toLocaleString()} fill={tk.text} fontSize={10} fontFamily="'Space Mono',monospace" />
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
-                      )}
-                    </Card>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+          <Suspense fallback={<div style={{padding:40,textAlign:"center",color:"rgba(var(--tint),0.6)"}}>Loading customers…</div>}>
+            <DrilldownTab
+              data={data}
+              year={selectedYear}
+              selectedSP={selectedSP}
+              setSelectedSP={setSelectedSP}
+              salespeople={SALESPEOPLE}
+              colors={COLORS}
+              brandsLoading={brandsLoading}
+              tk={tk}
+              reduceMotion={reduceMotion}
+            />
+          </Suspense>
         )}
 
         {tab === "brands" && (

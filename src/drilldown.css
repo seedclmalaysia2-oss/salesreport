@@ -1,0 +1,31 @@
+/* Tailwind for the Customer Drill-down tab only. Same arrangement as roi.css: no
+   preflight, and utilities are generated from DrilldownTab.jsx alone, so the
+   inline-styled pages can't shift. Colours point at the dashboard's theme
+   variables, so every theme keeps working. */
+@layer theme, base, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./DrilldownTab.jsx";
+
+/* Stands in for preflight, but only inside this tab and in a layer below the
+   utilities, so classes like px-3 and text-sm still win over it. */
+@layer base {
+  .dd-root button { background: transparent; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: inherit; }
+  .dd-root :where(ul, ol, dl, dd, h2, h3, h4, p) { margin: 0; padding: 0; list-style: none; }
+  .dd-root :where(h2, h3, h4) { font-size: inherit; font-weight: inherit; }
+  .dd-root input { font: inherit; }
+}
+
+@theme inline {
+  --color-ink: var(--text);
+  --color-muted: rgba(var(--tint), 0.68);
+  --color-faint: rgba(var(--tint), 0.5);
+  --color-line: rgba(var(--tint), 0.13);
+  --color-wash: rgba(var(--tint), 0.04);
+  --color-track: rgba(var(--tint), 0.1);
+  --color-accent: var(--st-accent);
+  --color-ok: var(--st-ok);
+  --color-bad: var(--st-bad);
+  --color-info: var(--st-info);
+  --font-metric: "Space Mono", monospace;
+}
