@@ -31,7 +31,7 @@ export function clauseVars(draft, calc) {
     target: rmFull(draft.target),
     scope: draft.kind === "group" ? "all participating outlets, counted together as one total" : "all of its outlets",
     rebate_table: tiers
-      .map((t) => `At ${pct(t.at * 100)} of target (${rmFull(t.sales)}): ${pct(t.pct)} additional sponsorship`)
+      .map((t) => `Net sales of ${rmFull(t.sales)} or more (${pct(t.at * 100)} of target): ${pct(t.pct)} additional sponsorship`)
       .join("\n"),
   };
 }
@@ -114,18 +114,22 @@ function Td({ children, right, bold }) {
 }
 
 export function RebateTable({ draft, hl }) {
-  const rows = tierCosts(draft.target, draft.tiers);
+  const rows = [...tierCosts(draft.target, draft.tiers)].sort((a, b) => a.at - b.at);
+  // Each band runs from its own amount up to just below the next one, as on the signed memoranda.
+  const band = (t, i) => (i < rows.length - 1
+    ? `${rmFull(t.sales)} ~ ${rmFull(Math.max(Math.round(t.sales), Math.round(rows[i + 1].sales) - 1))}`
+    : `${rmFull(t.sales)} & above`);
   if (!rows.length) return <p className="text-sheet-mute">No sponsorship tiers set.</p>;
   return (
     <table className="ct-avoid w-full">
       <thead>
-        <tr><Th>Reach this share of target</Th><Th right>Net sales of</Th><Th right>Additional sponsorship</Th><Th right>Sponsorship value</Th></tr>
+        <tr><Th>Target (net sales)</Th><Th right>Share of target</Th><Th right>Additional sponsorship</Th><Th right>Sponsorship value</Th></tr>
       </thead>
       <tbody>
         {rows.map((t, i) => (
           <tr key={i}>
-            <Td><Mark on={hl}>{pct(t.at * 100)}</Mark></Td>
-            <Td right>{rmFull(t.sales)}</Td>
+            <Td><Mark on={hl}>{band(t, i)}</Mark></Td>
+            <Td right>{pct(t.at * 100)}</Td>
             <Td right><Mark on={hl}>{pct(t.pct)}</Mark></Td>
             <Td right bold>{rmFull(t.cost)}</Td>
           </tr>

@@ -422,12 +422,13 @@ function Editor({ draft, setDraft, rows, customers, template, onBack, onSave, sa
 
       {/* ----- rebate ----- */}
       <Section id="rebate" title="Rebate tiers (additional sponsorship)" summary={summaries.rebate} open={open.rebate} onToggle={() => toggle("rebate")}>
-        <p className="text-xs leading-relaxed text-muted">When a tier is reached, its rate is earned as additional sponsorship on all net sales for the period. Enter the tier as a % of target; the RM it works out to is shown on the paper.</p>
+        <p className="text-xs leading-relaxed text-muted">When a tier is reached, its rate is earned as additional sponsorship on all net sales for the period. Set each tier as a target amount in RM or as a % of the annual target; the other follows. Both are printed on the paper.</p>
         <div className="grid gap-2">
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_1.75rem] gap-2 text-xs text-faint"><span>Reach % of target</span><span>Rebate %</span><span className="text-right">Costs you</span><span /></div>
+          <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_1.75rem] gap-2 text-xs text-faint"><span>Target (RM)</span><span>% of target</span><span>Rebate %</span><span className="text-right">Costs you</span><span /></div>
           {draft.tiers.map((t, i) => (
-            <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_1.75rem] items-center gap-2">
-              <NumField ariaLabel={`Tier ${i + 1} share of target`} suffix="%" value={Math.round(t.at * 1000) / 10} onFocus={focus("tiers")} onCommit={(n) => setTier(i, { at: n / 100 })} />
+            <div key={i} className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_1.75rem] items-center gap-2">
+              <NumField ariaLabel={`Tier ${i + 1} target amount`} prefix="RM" value={Math.round(draft.target * t.at)} onFocus={focus("tiers")} onCommit={(n) => draft.target > 0 && setTier(i, { at: n / draft.target })} />
+              <NumField ariaLabel={`Tier ${i + 1} share of target`} suffix="%" decimals={1} value={Math.round(t.at * 1000) / 10} onFocus={focus("tiers")} onCommit={(n) => setTier(i, { at: n / 100 })} />
               <NumField ariaLabel={`Tier ${i + 1} rebate`} suffix="%" decimals={2} value={t.pct} onFocus={focus("tiers")} onCommit={(n) => setTier(i, { pct: n })} />
               <span className="text-right font-metric text-xs text-muted" title={`${rmFull(costs[i]?.sales)} of purchases`}>{rmShort(costs[i]?.cost)}</span>
               <button type="button" aria-label={`Remove tier ${i + 1}`} onClick={() => setDraft((d) => ({ ...d, touched: true, tiers: d.tiers.filter((_, j) => j !== i) }))} className="rounded text-faint hover:text-bad focus-visible:outline-2 focus-visible:outline-accent">✕</button>
