@@ -20,6 +20,9 @@ const primaryCls =
 
 const KIND_LABEL = { ecp: "Single ECP", group: "Chain group", prospect: "Prospect" };
 const isActive = (r) => r.payload?.active !== false;
+// A salesperson by first name ("DINO LIM" and "Dino" are the same person).
+const repKey = (name) => String(name || "").trim().split(/\s+/)[0].toUpperCase();
+const repLabel = (key) => (key ? key[0] + key.slice(1).toLowerCase() : "Not set");
 const parseNum = (s) => {
   const t = String(s ?? "").replace(/[^0-9.\-]/g, "");
   if (t === "" || t === "-" || t === ".") return null;
@@ -752,18 +755,52 @@ function Home({ customers, baseYear, contractYear, records, listState, template,
   const fileRef = useRef(null);
   // Already covered for the year, or not continuing: neither needs a new proposal.
   const contracted = useMemo(() => new Set(records.filter((r) => r.contractYear === contractYear || !isActive(r)).flatMap((r) => [r.title, ...(r.payload?.customerNames || [])]).map((n) => String(n).toLowerCase())), [records, contractYear]);
-  const suggestions = useMemo(() => customers.filter((c) => c.cur > 0 && !contracted.has(c.name.toLowerCase())).slice(0, 6), [customers, contracted]);
+  const [salesman, setSalesman] = useState("all");
+  const inRep = (keys) => salesman === "all" || keys.includes(salesman);
+  const suggestions = useMemo(
+    () => customers.filter((c) => c.cur > 0 && !contracted.has(c.name.toLowerCase()) && inRep([...(c.reps || [])].map(repKey))).slice(0, 6),
+    [customers, contracted, salesman], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const [filter, setFilter] = useState("all");
   const [activity, setActivity] = useState("active");
-  const nActive = records.filter(isActive).length;
-  const counts = { active: nActive, inactive: records.length - nActive, all: records.length };
-  const shown = records.filter((r) => (filter === "all" || r.kind === filter) && (activity === "all" || (activity === "active") === isActive(r)));
+  // Everyone who has a contract or sells to a customer, busiest first.
+  const salesmen = useMemo(() => {
+    const n = new Map();
+    for (const r of records) { const k = repKey(r.payload?.salesperson); n.set(k, (n.get(k) || 0) + (isActive(r) ? 1 : 0)); }
+    for (const c of customers) for (const x of c.reps || []) if (!n.has(repKey(x))) n.set(repKey(x), 0);
+    return [...n.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [records, customers]);
+  const [yearSel, setYearSel] = useState("all");
+  const ofRep = records.filter((r) => inRep([repKey(r.payload?.salesperson)]));
+  // Contract years that exist for this salesperson, newest first.
+  const years = [...new Set(ofRep.map((r) => r.contractYear))].filter(Boolean).sort((a, b) => b - a);
+  const yearOf = (y) => ofRep.filter((r) => r.contractYear === y).length;
+  const mine = ofRep.filter((r) => yearSel === "all" || r.contractYear === yearSel);
+  const nActive = mine.filter(isActive).length;
+  const counts = { active: nActive, inactive: mine.length - nActive, all: mine.length };
+  const shown = mine
+    .filter((r) => (filter === "all" || r.kind === filter) && (activity === "all" || (activity === "active") === isActive(r)))
+    .sort((a, b) => (b.contractYear || 0) - (a.contractYear || 0) || String(a.title).localeCompare(String(b.title)));
+  const activeTarget = mine.filter(isActive).reduce((t, r) => t + (Number(r.payload?.target) || 0), 0);
   return (
     <div className="grid gap-8">
       <header className="max-w-2xl">
         <h2 className="text-xl font-bold tracking-tight text-ink">Sales contracts</h2>
         <p className="mt-1 text-sm leading-relaxed text-muted">Turn {baseYear} results into a {contractYear} proposal and contract. Pick who it's for; the target and rebate tiers start from the dashboard's numbers, with the reason beside each suggestion, and everything stays editable.</p>
       </header>
+
+      {salesmen.length > 0 && (
+        <section aria-labelledby="ct-by-rep" className="grid gap-2">
+          <h3 id="ct-by-rep" className="text-sm font-semibold text-ink">By salesperson</h3>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by salesperson">
+            <button type="button" aria-pressed={salesman === "all"} onClick={() => setSalesman("all")} className={`rounded-full border px-3 py-1 text-xs font-semibold ${salesman === "all" ? "border-accent bg-accent/15 text-accent" : "border-line text-muted hover:bg-wash"}`}>Everyone</button>
+            {salesmen.map(([k, n]) => (
+              <button key={k || "none"} type="button" aria-pressed={salesman === k} onClick={() => setSalesman(k)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${salesman === k ? "border-accent bg-accent/15 text-accent" : "border-line text-muted hover:bg-wash"}`}>{repLabel(k)} <span className="font-metric font-normal">{n}</span></button>
+            ))}
+          </div>
+          <p className="text-xs text-faint">{salesman === "all" ? "Everyone's" : `${repLabel(salesman)}'s`} contracts: {nActive} active, {counts.inactive} inactive{activeTarget > 0 ? `, ${rmShort(activeTarget)} in active targets` : ""}.</p>
+        </section>
+      )}
 
       <section aria-labelledby="ct-start" className="grid gap-3">
         <h3 id="ct-start" className="text-sm font-semibold text-ink">Start a {contractYear} contract</h3>
@@ -777,7 +814,7 @@ function Home({ customers, baseYear, contractYear, records, listState, template,
 
       {suggestions.length > 0 && (
         <section aria-labelledby="ct-ready" className="grid gap-2">
-          <h3 id="ct-ready" className="text-sm font-semibold text-ink">Biggest accounts without a {contractYear} contract</h3>
+          <h3 id="ct-ready" className="text-sm font-semibold text-ink">Biggest {salesman === "all" ? "" : `${repLabel(salesman)} `}accounts without a {contractYear} contract</h3>
           <ul className="grid gap-px overflow-hidden rounded-md border border-line bg-line sm:grid-cols-2 lg:grid-cols-3">
             {suggestions.map((c) => (
               <li key={c.name} style={{ background: "var(--bg)" }}>
@@ -799,6 +836,14 @@ function Home({ customers, baseYear, contractYear, records, listState, template,
               <button key={k} type="button" aria-pressed={activity === k} onClick={() => setActivity(k)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${activity === k ? "border-accent bg-accent/15 text-accent" : "border-line text-muted hover:bg-wash"}`}>{l} <span className="font-metric font-normal">{counts[k]}</span></button>
             ))}
           </div>
+          {years.length > 0 && (
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by contract year">
+              <button type="button" aria-pressed={yearSel === "all"} onClick={() => setYearSel("all")} className={`rounded-full border px-3 py-1 text-xs font-semibold ${yearSel === "all" ? "border-accent bg-accent/15 text-accent" : "border-line text-muted hover:bg-wash"}`}>All years</button>
+              {years.map((y) => (
+                <button key={y} type="button" aria-pressed={yearSel === y} onClick={() => setYearSel(y)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${yearSel === y ? "border-accent bg-accent/15 text-accent" : "border-line text-muted hover:bg-wash"}`}>{y} <span className="font-metric font-normal">{yearOf(y)}</span></button>
+              ))}
+            </div>
+          )}
           <div className="flex gap-1.5" role="group" aria-label="Filter by type">
             {[["all", "All"], ["ecp", "Single ECP"], ["group", "Chain group"], ["prospect", "Prospect"]].map(([k, l]) => (
               <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${filter === k ? "border-accent bg-accent/15 text-accent" : "border-line text-muted hover:bg-wash"}`}>{l}</button>
@@ -808,19 +853,20 @@ function Home({ customers, baseYear, contractYear, records, listState, template,
         {listState.loading && <p className="text-sm text-faint">Loading saved contracts…</p>}
         {listState.error && <p role="alert" className="rounded-md border border-watch/40 bg-watch/10 px-3 py-2 text-sm text-ink">{listState.error}</p>}
         {!listState.loading && !listState.error && shown.length === 0 && (
-          <p className="rounded-md border border-dashed border-line px-4 py-6 text-center text-sm text-muted">{records.length ? `No ${activity === "all" ? "" : activity + " "}contracts of that type.` : "No saved contracts yet. Start one above and save it as a draft."}</p>
+          <p className="rounded-md border border-dashed border-line px-4 py-6 text-center text-sm text-muted">{records.length ? `No ${activity === "all" ? "" : activity + " "}contracts match those filters.` : "No saved contracts yet. Start one above and save it as a draft."}</p>
         )}
         {shown.length > 0 && (
           <div className="overflow-x-auto rounded-md border border-line">
             <table className="w-full min-w-[40rem] text-sm">
               <thead className="bg-wash text-left text-xs text-muted">
-                <tr><th className="px-3 py-2 font-medium">Customer</th><th className="px-3 py-2 font-medium">Type</th><th className="px-3 py-2 font-medium">Year</th><th className="px-3 py-2 text-right font-medium">Target</th><th className="px-3 py-2 font-medium">Status</th><th className="px-3 py-2 font-medium">Continuing</th><th className="px-3 py-2 font-medium">Updated</th><th className="px-3 py-2"><span className="sr-only">Delete</span></th></tr>
+                <tr><th className="px-3 py-2 font-medium">Customer</th><th className="px-3 py-2 font-medium">Type</th><th className="px-3 py-2 font-medium">Salesperson</th><th className="px-3 py-2 font-medium">Year</th><th className="px-3 py-2 text-right font-medium">Target</th><th className="px-3 py-2 font-medium">Status</th><th className="px-3 py-2 font-medium">Continuing</th><th className="px-3 py-2 font-medium">Updated</th><th className="px-3 py-2"><span className="sr-only">Delete</span></th></tr>
               </thead>
               <tbody>
                 {shown.map((r) => (
                   <tr key={r.id} className={`border-t border-line hover:bg-wash ${isActive(r) ? "" : "opacity-60"}`}>
                     <td className="max-w-[16rem] truncate px-3 py-2"><button type="button" onClick={() => onOpen(r)} className="font-semibold text-ink underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-accent">{r.title}</button></td>
                     <td className="px-3 py-2 text-muted">{KIND_LABEL[r.kind]}</td>
+                    <td className="px-3 py-2 text-muted">{r.payload?.salesperson ? repLabel(repKey(r.payload.salesperson)) : "—"}</td>
                     <td className="px-3 py-2 font-metric text-xs text-muted">{r.contractYear}</td>
                     <td className="px-3 py-2 text-right font-metric text-xs text-ink">{r.payload?.target ? rmShort(r.payload.target) : "—"}</td>
                     <td className="px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${r.status === "final" ? "bg-ok/15 text-ok" : "bg-wash text-muted"}`}>{r.status === "final" ? "Final" : "Draft"}</span></td>
