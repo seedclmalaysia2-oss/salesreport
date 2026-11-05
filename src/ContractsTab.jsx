@@ -7,7 +7,8 @@ import { rmShort, pctText, niceRound } from "./lib/contractPlan.js";
 import {
   newDraft, computeCalc, rebase, setGrowth, setTarget, activeCustomers, recordFromDraft, draftFromRecord,
 } from "./lib/contractDraft.js";
-import { defaultClauses, readTemplateFile, PLACEHOLDERS, newClauseId } from "./lib/contractTemplate.js";
+import { defaultClauses, readTemplateFile, readDocxParagraphs, PLACEHOLDERS, newClauseId } from "./lib/contractTemplate.js";
+import { pickAgreementFiles, parseAgreement, planImport, draftFromAgreement, matchCustomer } from "./lib/agreementImport.js";
 import "./contracts.css";
 
 const inputCls =
@@ -633,9 +634,120 @@ function usePrintRoot() {
   return el;
 }
 
+// ---------- importing the signed agreements ----------
+
+// Reads a folder of existing agreements in the browser, shows what it found, and
+// saves the ones that are ticked. Nothing is saved until "Import" is pressed.
+function ImportPanel({ customers, records, template, onSave, onDone, disabled }) {
+  const inputRef = useRef(null);
+  const [phase, setPhase] = useState("idle"); // idle | reading | review | saving
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [found, setFound] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [error, setError] = useState(null);
+
+  const chooseFolder = async (fileList) => {
+    const all = [...fileList].map((f) => ({ path: f.webkitRelativePath || f.name, name: f.name, modified: f.lastModified, file: f }));
+    if (!all.length) return;
+    setError(null);
+    setPhase("reading");
+    const pick = pickAgreementFiles(all);
+    setProgress({ done: 0, total: pick.chosen.length });
+    const items = [];
+    let unopened = 0;
+    for (let i = 0; i < pick.chosen.length; i++) {
+      const c = pick.chosen[i];
+      try {
+        const paras = await readDocxParagraphs(await c.file.arrayBuffer());
+        items.push({ file: { path: c.path, name: c.name }, parsed: parseAgreement(paras, c.name, c.modified) });
+      } catch { unopened += 1; }
+      if (i % 10 === 0) setProgress({ done: i + 1, total: pick.chosen.length });
+    }
+    const plan = planImport(items, { existing: records });
+    setFound({ ...pick, older: plan.older, unreadable: unopened + plan.unreadable });
+    setRows(plan.rows.map((r) => ({ ...r, pick: !r.alreadySaved })));
+    setPhase("review");
+  };
+
+  const chosen = rows.filter((r) => r.pick);
+  const update = (i, p) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...p } : r)));
+  const reset = () => { setRows([]); setFound(null); setPhase("idle"); };
+
+  const run = async () => {
+    setPhase("saving");
+    setError(null);
+    try {
+      const names = customers.map((c) => c.name);
+      const clauses = (template?.clauses || defaultClauses()).map(({ title, body }) => ({ title, body }));
+      const recs = chosen.map((r) => recordFromDraft(draftFromAgreement(r, { clauses, match: matchCustomer(r.parsed.customer, names) })));
+      await onSave(recs);
+      reset();
+      onDone(`Imported ${recs.length} agreement${recs.length === 1 ? "" : "s"}.`);
+    } catch (e) {
+      setError(e.message || String(e));
+      setPhase("review");
+    }
+  };
+
+  return (
+    <section aria-labelledby="ct-import" className="grid max-w-4xl gap-3 border-t border-line pt-5">
+      <h3 id="ct-import" className="text-sm font-semibold text-ink">Import existing agreements</h3>
+      {phase === "idle" && (
+        <>
+          <p className="max-w-2xl text-sm leading-relaxed text-muted">
+            Choose the SEED ECP AGREEMENT folder. Each agreement is read once: the Word file is used and its PDF copy skipped, and only the newest agreement per customer comes in. Dated 2026 or later means Active, anything older Inactive. You review the list before anything is saved.
+          </p>
+          <div>
+            <input ref={inputRef} type="file" webkitdirectory="" directory="" multiple className="sr-only" aria-label="Choose the agreements folder" onChange={(e) => { const l = e.target.files; if (l?.length) chooseFolder(l); }} onClick={(e) => { e.target.value = ""; }} />
+            <button type="button" className={btnCls} disabled={disabled} onClick={() => inputRef.current?.click()}>Choose the folder</button>
+          </div>
+        </>
+      )}
+      {phase === "reading" && <p role="status" className="text-sm text-muted">Reading agreements… {progress.done} of {progress.total}</p>}
+      {error && <p role="alert" className="rounded-md border border-watch/40 bg-watch/10 px-3 py-2 text-sm text-ink">{error}</p>}
+      {(phase === "review" || phase === "saving") && found && (
+        <>
+          <p className="text-sm leading-relaxed text-muted">
+            <strong className="font-semibold text-ink">{rows.length} customers</strong> from {found.chosen.length} Word files. Left out: {found.skipped.pdfTwins} PDF copies of the same agreement, {found.older} older agreements for the same customer, {found.skipped.proposals} proposals, templates and sheets{found.pdfOnly.length ? `, and ${found.pdfOnly.length} PDF-only files that can't be read here` : ""}{found.unreadable ? `; ${found.unreadable} couldn't be opened` : ""}.
+          </p>
+          <div className="max-h-[28rem] overflow-auto rounded-md border border-line">
+            <table className="w-full min-w-[40rem] text-sm">
+              <thead className="sticky top-0 bg-wash text-left text-xs text-muted">
+                <tr><th className="w-8 px-3 py-2"><span className="sr-only">Import</span></th><th className="px-3 py-2 font-medium">Customer</th><th className="px-3 py-2 font-medium">Year</th><th className="px-3 py-2 font-medium">Salesperson</th><th className="px-3 py-2 font-medium">Read</th><th className="px-3 py-2 font-medium">Continuing</th></tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const read = [r.parsed.tiers.length && `${r.parsed.tiers.length} tiers`, r.parsed.incentives.length && `${r.parsed.incentives.length} incentives`].filter(Boolean).join(", ");
+                  return (
+                    <tr key={r.file.path} className={`border-t border-line ${r.active ? "" : "opacity-70"}`}>
+                      <td className="px-3 py-1.5"><input type="checkbox" aria-label={`Import ${r.parsed.customer}`} checked={r.pick} disabled={phase === "saving"} onChange={(e) => update(i, { pick: e.target.checked })} className="h-4 w-4 accent-accent" /></td>
+                      <td className="max-w-[18rem] px-3 py-1.5"><span className="block truncate text-ink" title={r.file.path}>{r.parsed.customer}</span>{r.alreadySaved && <span className="text-xs text-watch">already saved</span>}</td>
+                      <td className="px-3 py-1.5 font-metric text-xs text-muted">{r.parsed.year}</td>
+                      <td className="px-3 py-1.5 text-muted">{r.rep || "—"}</td>
+                      <td className="px-3 py-1.5 text-xs text-muted">{read || "wording only"}</td>
+                      <td className="px-3 py-1.5">
+                        <button type="button" disabled={phase === "saving"} onClick={() => update(i, { active: !r.active })} className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${r.active ? "border-ok/40 text-ok" : "border-bad/40 text-bad"}`}>{r.active ? "Active" : "Inactive"}</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className={primaryCls} disabled={!chosen.length || phase === "saving"} onClick={run}>{phase === "saving" ? "Importing…" : `Import ${chosen.length} agreement${chosen.length === 1 ? "" : "s"}`}</button>
+            <button type="button" className={btnCls} disabled={phase === "saving"} onClick={reset}>Cancel</button>
+            <span className="text-xs text-faint">Untick any that are the same customer under another name.</span>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 // ---------- home ----------
 
-function Home({ customers, baseYear, contractYear, records, listState, template, onCustomer, onGroup, onProspect, onOpen, onDelete, onSetActive, onTemplate, onResetTemplate, busy }) {
+function Home({ customers, baseYear, contractYear, records, listState, template, onCustomer, onGroup, onProspect, onOpen, onDelete, onSetActive, onTemplate, onResetTemplate, onImportSave, onImportDone, busy }) {
   const fileRef = useRef(null);
   // Already covered for the year, or not continuing: neither needs a new proposal.
   const contracted = useMemo(() => new Set(records.filter((r) => r.contractYear === contractYear || !isActive(r)).flatMap((r) => [r.title, ...(r.payload?.customerNames || [])]).map((n) => String(n).toLowerCase())), [records, contractYear]);
@@ -721,6 +833,8 @@ function Home({ customers, baseYear, contractYear, records, listState, template,
           </div>
         )}
       </section>
+
+      <ImportPanel customers={customers} records={records} template={template} onSave={onImportSave} onDone={onImportDone} disabled={!!listState.setup} />
 
       <section aria-labelledby="ct-wording" className="grid max-w-2xl gap-2 border-t border-line pt-5">
         <h3 id="ct-wording" className="text-sm font-semibold text-ink">Contract wording</h3>
@@ -897,6 +1011,8 @@ export default function ContractsTab({ data, year, user, tk, store = supabaseSto
             onSetActive={setActive}
             onTemplate={uploadTemplate}
             onResetTemplate={resetTemplate}
+            onImportSave={async (recs) => { await store.saveMany(recs); await reload(); }}
+            onImportDone={(text) => setNotice({ tone: "ok", text })}
           />
         </>
       )}

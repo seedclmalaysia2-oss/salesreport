@@ -58,6 +58,25 @@ export const supabaseStore = {
     return toRecord(data);
   },
 
+  // Insert many contracts at once (the agreements import), in chunks.
+  async saveMany(list) {
+    const now = new Date().toISOString();
+    const rows = list.map((c) => ({
+      title: c.title,
+      kind: c.kind,
+      base_year: c.baseYear,
+      contract_year: c.contractYear,
+      status: c.status || "draft",
+      payload: c.payload,
+      updated_at: now,
+    }));
+    for (let i = 0; i < rows.length; i += 50) {
+      const { error } = await supabase.from("sales_contracts").insert(rows.slice(i, i + 50));
+      if (error) throw explain(error);
+    }
+    return rows.length;
+  },
+
   async remove(id) {
     const { error } = await supabase.from("sales_contracts").delete().eq("id", id);
     if (error) throw explain(error);
