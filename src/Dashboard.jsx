@@ -15,6 +15,7 @@ const AdminUsers = lazy(() => import("./AdminUsers.jsx"));
 const ReportTab = lazy(() => import("./ReportTab.jsx"));
 const RoiTab = lazy(() => import("./RoiTab.jsx"));
 const DrilldownTab = lazy(() => import("./DrilldownTab.jsx"));
+const CustomerBrandTab = lazy(() => import("./CustomerBrandTab.jsx"));
 import { groupLabel } from "./lib/groupLabels.js";
 
 // Uploads used to be parsed into these keys while the dashboard ran open to
@@ -116,24 +117,6 @@ function hexLum(hex) {
     c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   });
   return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
-}
-
-// Ink for text sitting on a heat-map cell. The cell is `heatHex` laid over the
-// card at `alpha`, so the contrast that decides legibility is against the
-// composite, not against either colour on its own. A fixed "#fff" is right on
-// Slate, where a faint wash over a dark ground stays dark, and wrong on Crisp,
-// where the same wash over a near-white ground comes out pale. Threshold 0.18
-// is where white and black text draw level on contrast ratio. Pure black and
-// white are deliberate: at the crossover the composite leaves barely 4.5:1 on
-// the table, so a softer ink drops the worst cell below AA.
-function heatInk(heatHex, alpha, bgHex) {
-  const h = parseInt(heatHex.slice(1), 16);
-  const g = parseInt(bgHex.slice(1), 16);
-  const composite = "#" + [16, 8, 0].map(shift => {
-    const fg = (h >> shift) & 255, bg = (g >> shift) & 255;
-    return Math.round(fg * alpha + bg * (1 - alpha)).toString(16).padStart(2, "0");
-  }).join("");
-  return hexLum(composite) > 0.18 ? "#000000" : "#FFFFFF";
 }
 
 // One <pattern> per rep, keyed to SALESPEOPLE_ORDER so the weave is stable per
@@ -1042,35 +1025,6 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
       lostRevenue: lostC.reduce((a, c) => a + c.prevTotal, 0),
     };
   }, [selectedSP, selectedYear, data]);
-
-  const heatmap = useMemo(() => {
-    const scope = dimRows.filter(r => r.year === selectedYear && (selectedSP === "All" || r.sp === selectedSP));
-
-    // Top 12 customers ranked by amount
-    const custMap = new Map();
-    scope.forEach(r => custMap.set(r.customer, (custMap.get(r.customer) || 0) + r.amt));
-    const topCust = [...custMap.entries()].sort((a,b) => b[1]-a[1]).slice(0,12).map(([c]) => c);
-
-    // Top 12 brands ranked by amount
-    const brandMap = new Map();
-    scope.forEach(r => brandMap.set(r.brand, (brandMap.get(r.brand) || 0) + r.amt));
-    const topBrand = [...brandMap.entries()].sort((a,b) => b[1]-a[1]).slice(0,12).map(([b]) => b);
-
-    const gridAmt = topCust.map(() => topBrand.map(() => 0));
-    const gridQty = topCust.map(() => topBrand.map(() => 0));
-    scope.forEach(r => {
-      const ci = topCust.indexOf(r.customer);
-      const bi = topBrand.indexOf(r.brand);
-      if (ci >= 0 && bi >= 0) {
-        gridAmt[ci][bi] += r.amt;
-        gridQty[ci][bi] += r.qty || 0;
-      }
-    });
-    let maxAmt = 0, maxQty = 0;
-    gridAmt.forEach(row => row.forEach(v => { if (v > maxAmt) maxAmt = v; }));
-    gridQty.forEach(row => row.forEach(v => { if (v > maxQty) maxQty = v; }));
-    return { customers: topCust, brands: topBrand, gridAmt, gridQty, maxAmt, maxQty };
-  }, [selectedSP, selectedYear, dimRows]);
 
   // Brand ⇄ Product Group segmented control, shown on the Brand Performance and
   // Customer × Brand tabs when a Stock-Group workbook has been uploaded.
@@ -2355,106 +2309,20 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         )}
 
         {tab === "heatmap" && (
-          <>
-            {dimToggle}
-            <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>SP:</span>
-              <Pill label="All Teams" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
-              {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
-            </div>
-
-            {heatmap.customers.length === 0 ? (
-              <Card>
-                <div style={{padding:"40px 0",textAlign:"center",color:"rgba(var(--tint),0.65)"}}>
-                  No {dimNoun.toLowerCase()}-level data for this scope.
-                </div>
-              </Card>
-            ) : (
-              <>
-                <Card style={{marginBottom:20}}>
-                  <div style={{fontSize:14,fontWeight:600,marginBottom:6,color:STATUS.accent}}>💰 Revenue heatmap — Top 12 × Top 12 — {selectedYear}</div>
-                  <div style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginBottom:16}}>Cell intensity = RM revenue. Hover for exact values (revenue + quantity).</div>
-                  <div style={{overflowX:"auto"}}>
-                    <table style={{borderCollapse:"separate",borderSpacing:2,fontSize:11}}>
-                      <thead>
-                        <tr>
-                          <th style={{padding:"6px 10px",textAlign:"left",color:"rgba(var(--tint),0.65)",fontWeight:500,minWidth:200}}>Customer ↓ / {dimNoun} →</th>
-                          {heatmap.brands.map(b => (
-                            <th key={b} style={{padding:"6px 4px",color:"rgba(var(--tint),0.7)",fontWeight:500,fontSize:10,minWidth:60,textAlign:"center"}}>
-                              <div style={{transform:"rotate(-30deg)",transformOrigin:"left bottom",whiteSpace:"nowrap",height:60,marginTop:30}}>{b}</div>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {heatmap.customers.map((c, ci) => (
-                          <tr key={c}>
-                            <td style={{padding:"6px 10px",color:"rgba(var(--tint),0.85)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:200}}>{c}</td>
-                            {heatmap.brands.map((b, bi) => {
-                              const v = heatmap.gridAmt[ci][bi];
-                              const q = heatmap.gridQty[ci][bi];
-                              const intensity = heatmap.maxAmt > 0 ? v / heatmap.maxAmt : 0;
-                              const bg = v === 0 ? "rgba(var(--tint),0.02)" : `color-mix(in srgb, var(--st-accent) ${(10 + intensity * 85).toFixed(1)}%, transparent)`;
-                              return (
-                                <td key={b} title={`${c} × ${b}\nRevenue: ${fmtFull(v)}\nQuantity: ${q.toLocaleString()} units`} style={{
-                                  padding:"6px 4px",background:bg,borderRadius:4,textAlign:"center",
-                                  fontFamily:"'Space Mono',monospace",fontSize:10,
-                                  color: intensity > 0.4 ? heatInk(STATUS.accent, (10 + intensity * 85) / 100, tk.bg) : "rgba(var(--tint),0.5)",cursor:"default"
-                                }}>
-                                  {v > 0 ? fmt(v) : "·"}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-
-                <Card>
-                  <div style={{fontSize:14,fontWeight:600,marginBottom:6,color:STATUS.qty}}>📦 Quantity heatmap — same Top 12 × Top 12 — {selectedYear}</div>
-                  <div style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginBottom:16}}>Cell intensity = units sold. Same axes as the revenue grid above for direct comparison.</div>
-                  <div style={{overflowX:"auto"}}>
-                    <table style={{borderCollapse:"separate",borderSpacing:2,fontSize:11}}>
-                      <thead>
-                        <tr>
-                          <th style={{padding:"6px 10px",textAlign:"left",color:"rgba(var(--tint),0.65)",fontWeight:500,minWidth:200}}>Customer ↓ / {dimNoun} →</th>
-                          {heatmap.brands.map(b => (
-                            <th key={b} style={{padding:"6px 4px",color:"rgba(var(--tint),0.7)",fontWeight:500,fontSize:10,minWidth:60,textAlign:"center"}}>
-                              <div style={{transform:"rotate(-30deg)",transformOrigin:"left bottom",whiteSpace:"nowrap",height:60,marginTop:30}}>{b}</div>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {heatmap.customers.map((c, ci) => (
-                          <tr key={c}>
-                            <td style={{padding:"6px 10px",color:"rgba(var(--tint),0.85)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:200}}>{c}</td>
-                            {heatmap.brands.map((b, bi) => {
-                              const q = heatmap.gridQty[ci][bi];
-                              const v = heatmap.gridAmt[ci][bi];
-                              const intensity = heatmap.maxQty > 0 ? q / heatmap.maxQty : 0;
-                              const bg = q === 0 ? "rgba(var(--tint),0.02)" : `rgba(16,185,129,${0.1 + intensity * 0.85})`;
-                              return (
-                                <td key={b} title={`${c} × ${b}\nQuantity: ${q.toLocaleString()} units\nRevenue: ${fmtFull(v)}`} style={{
-                                  padding:"6px 4px",background:bg,borderRadius:4,textAlign:"center",
-                                  fontFamily:"'Space Mono',monospace",fontSize:10,
-                                  color: intensity > 0.4 ? heatInk("#10B981", 0.1 + intensity * 0.85, tk.bg) : "rgba(var(--tint),0.5)",cursor:"default"
-                                }}>
-                                  {q > 0 ? q.toLocaleString() : "·"}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              </>
-            )}
-          </>
+          <Suspense fallback={<div style={{padding:40,textAlign:"center",color:"rgba(var(--tint),0.6)"}}>Loading customers and brands…</div>}>
+            <CustomerBrandTab
+              rows={dimRows}
+              year={selectedYear}
+              years={YEARS}
+              setYear={setSelectedYear}
+              selectedSP={selectedSP}
+              setSelectedSP={setSelectedSP}
+              salespeople={SALESPEOPLE}
+              noun={dimNoun}
+              toggle={dimToggle}
+              palette={PIE_COLORS}
+            />
+          </Suspense>
         )}
 
         {tab === "targets" && (
