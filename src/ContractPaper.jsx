@@ -5,6 +5,8 @@
 import { renderText } from "./lib/contractTemplate.js";
 import { rollupByChain, tierCosts } from "./lib/contractPlan.js";
 import { chainOf } from "./lib/chains.js";
+import { LETTERHEAD } from "./lib/letterhead.js";
+import logoUrl from "./assets/seed-logo.png";
 
 export const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 export const rmFull = (v) => `RM ${Math.round(Number(v) || 0).toLocaleString("en-MY")}`;
@@ -37,6 +39,33 @@ export function clauseVars(draft, calc) {
 export const usesRebateTable = (clauses) => (clauses || []).some((c) => /\{\{\s*rebate_table\s*\}\}/i.test(c.body || ""));
 
 // ---------- small pieces ----------
+
+// The company letterhead at the top of each sheet: logo on the left, name and
+// registration details on the right, closed by a brand-coloured rule.
+function Letterhead({ draft }) {
+  return (
+    <div className="ct-letterhead flex items-center justify-between gap-6 border-b-2 border-sheet-brand pb-3">
+      <img src={logoUrl} alt="SEED contact lens" className="h-[17mm] w-auto shrink-0" />
+      <div className="min-w-0 text-right text-[8pt] leading-snug text-sheet-mute">
+        <p className="text-[10.5pt] font-bold tracking-tight text-sheet-brand">{draft.supplier || "SEED CONTACT LENS (M) SDN. BHD."}</p>
+        <p>{LETTERHEAD.address}</p>
+        <p>Tel: {LETTERHEAD.tel}</p>
+        <p>{LETTERHEAD.registrations.map(([k, v]) => `${k} No: ${v}`).join("   ·   ")}</p>
+      </div>
+    </div>
+  );
+}
+
+// Closes the sheet: pushed to the foot of the page on screen, follows the text in print.
+function SheetFooter({ draft }) {
+  return (
+    <footer className="ct-footer mt-auto pt-8">
+      <div className="border-t border-sheet-brand pt-1.5 text-center text-[7.5pt] text-sheet-mute">
+        {draft.supplier || "SEED CONTACT LENS (M) SDN. BHD."}  ·  Tel {LETTERHEAD.tel}
+      </div>
+    </footer>
+  );
+}
 
 function Mark({ on, children }) {
   return <span className={on ? "ct-mark rounded-sm bg-sheet-mark" : ""}>{children}</span>;
@@ -188,12 +217,10 @@ function ProposalSheet({ draft, calc, hl }) {
   const through = m > 0 && m < 12 ? `${MONTH_NAMES[m - 1]} ` : "";
   return (
     <section className="ct-sheet" aria-label="Proposal">
-      <header className="flex items-start justify-between border-b-2 border-sheet-ink pb-3">
-        <p className="text-[13pt] font-bold tracking-tight">{draft.supplier || "Supplier"}</p>
-        <p className="text-right text-[9pt] text-sheet-mute">Sales proposal<br />{fmtDate(draft.issued)}</p>
-      </header>
+      <Letterhead draft={draft} />
+      <p className="mt-3 flex justify-between text-[9pt] text-sheet-mute"><span>Sales proposal</span><span>{fmtDate(draft.issued)}</span></p>
 
-      <h1 className="mt-6 text-[26pt] font-bold leading-[1.08] tracking-tight"><Mark on={hl.customer}>{draft.title || "Customer name"}</Mark></h1>
+      <h1 className="mt-5 text-[26pt] font-bold leading-[1.08] tracking-tight"><Mark on={hl.customer}>{draft.title || "Customer name"}</Mark></h1>
       <p className="mt-1 text-[12pt] text-sheet-mute">Proposal for {draft.contractYear}</p>
 
       {a && a.hasHistory && (
@@ -248,6 +275,7 @@ function ProposalSheet({ draft, calc, hl }) {
           {draft.baseYear} figures run to {through}{draft.baseYear} and are projected to the year end from {a.method === "own" ? "this account's own seasonal pattern" : a.method === "company" ? "the company's seasonal pattern" : "a straight-line run-rate"}. They are estimates, not commitments.
         </p>
       )}
+      <SheetFooter draft={draft} />
     </section>
   );
 }
@@ -267,9 +295,10 @@ function ContractSheet({ draft, calc, hl }) {
   const rebateInClauses = usesRebateTable(draft.clauses);
   return (
     <section className="ct-sheet" aria-label="Contract">
-      <header className="border-b-2 border-sheet-ink pb-3">
+      <Letterhead draft={draft} />
+      <header className="mt-5 text-center">
         <p className="text-[9pt] text-sheet-mute">Memorandum of understanding</p>
-        <h1 className="mt-1 text-[22pt] font-bold leading-tight tracking-tight">{draft.docTitle || "Sales agreement"} {draft.contractYear}</h1>
+        <h1 className="mt-1 text-[20pt] font-bold leading-tight tracking-tight">{draft.docTitle || "Sales agreement"} {draft.contractYear}</h1>
       </header>
 
       <table className="mt-5 w-full text-[10pt]">
@@ -334,6 +363,7 @@ function ContractSheet({ draft, calc, hl }) {
           </div>
         ))}
       </div>
+      <SheetFooter draft={draft} />
     </section>
   );
 }
