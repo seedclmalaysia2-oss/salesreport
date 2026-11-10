@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, lazy, Suspense } from "react";
+import { useState, useMemo, useEffect, useRef, useDeferredValue, lazy, Suspense } from "react";
 import { applyCustCorrections } from "./lib/custCorrections.js";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, ReferenceLine } from "recharts";
 import WeeklySalesCard from "./WeeklySalesCard.jsx";
@@ -479,7 +479,14 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   // reduced-motion reset can't reach them; gate them here instead. No effect
   // for the vast majority without the preference set.
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
-  const [tab, setTab] = useState("overview");
+  // `tabState` is the urgent selection (drives the button highlight + keyboard
+  // nav so a click/arrow responds instantly). `tab` is a DEFERRED copy that
+  // drives the heavy panel content — React renders the new tab's charts off the
+  // interaction's critical path, so the click paints immediately. This is what
+  // cuts the tab-switch INP (Overview was ~114ms of render blocking the paint).
+  const [tabState, setTab] = useState("overview");
+  const tab = useDeferredValue(tabState);
+  const tabPending = tab !== tabState; // true during the brief swap
   // Ordered list of the tab keys actually shown (Data/Users are admin-only),
   // and the arrow-key handler that drives the WAI-ARIA tabs roving focus.
   const visibleTabKeys = [
@@ -491,7 +498,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   ];
   const onTablistKeyDown = (e) => {
     const keys = visibleTabKeys;
-    const i = keys.indexOf(tab);
+    const i = keys.indexOf(tabState);
     if (i < 0) return;
     let next = null;
     if (e.key === "ArrowRight" || e.key === "ArrowDown") next = keys[(i + 1) % keys.length];
@@ -1234,30 +1241,30 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           WebkitOverflowScrolling: "touch",
           paddingBottom: isMobile ? 4 : 0,
         }}>
-          <TabButton tabKey="overview" active={tab==="overview"} onClick={()=>setTab("overview")}>Overview</TabButton>
-          <TabButton tabKey="targets" active={tab==="targets"} onClick={()=>setTab("targets")}>🎯 Targets</TabButton>
-          <TabButton tabKey="monthly" active={tab==="monthly"} onClick={()=>setTab("monthly")}>Monthly Trends</TabButton>
-          <TabButton tabKey="team" active={tab==="team"} onClick={()=>setTab("team")}>Team Analysis</TabButton>
-          <TabButton tabKey="customers" active={tab==="customers"} onClick={()=>setTab("customers")}>Top Customers</TabButton>
-          <TabButton tabKey="yoy" active={tab==="yoy"} onClick={()=>setTab("yoy")}>Year-over-Year</TabButton>
-          <TabButton tabKey="drilldown" active={tab==="drilldown"} onClick={()=>setTab("drilldown")}>Customer Drill-down</TabButton>
-          <TabButton tabKey="brands" active={tab==="brands"} onClick={()=>setTab("brands")}>Brand Performance</TabButton>
-          <TabButton tabKey="products" active={tab==="products"} onClick={()=>setTab("products")}>Product Sales</TabButton>
-          <TabButton tabKey="cohort" active={tab==="cohort"} onClick={()=>setTab("cohort")}>New vs Lost</TabButton>
-          <TabButton tabKey="heatmap" active={tab==="heatmap"} onClick={()=>setTab("heatmap")}>Customer × Brand</TabButton>
-          <TabButton tabKey="roi" active={tab==="roi"} onClick={()=>setTab("roi")}>ROI</TabButton>
-          <TabButton tabKey="consignment" active={tab==="consignment"} onClick={()=>setTab("consignment")}>ECP Consignment</TabButton>
+          <TabButton tabKey="overview" active={tabState==="overview"} onClick={()=>setTab("overview")}>Overview</TabButton>
+          <TabButton tabKey="targets" active={tabState==="targets"} onClick={()=>setTab("targets")}>🎯 Targets</TabButton>
+          <TabButton tabKey="monthly" active={tabState==="monthly"} onClick={()=>setTab("monthly")}>Monthly Trends</TabButton>
+          <TabButton tabKey="team" active={tabState==="team"} onClick={()=>setTab("team")}>Team Analysis</TabButton>
+          <TabButton tabKey="customers" active={tabState==="customers"} onClick={()=>setTab("customers")}>Top Customers</TabButton>
+          <TabButton tabKey="yoy" active={tabState==="yoy"} onClick={()=>setTab("yoy")}>Year-over-Year</TabButton>
+          <TabButton tabKey="drilldown" active={tabState==="drilldown"} onClick={()=>setTab("drilldown")}>Customer Drill-down</TabButton>
+          <TabButton tabKey="brands" active={tabState==="brands"} onClick={()=>setTab("brands")}>Brand Performance</TabButton>
+          <TabButton tabKey="products" active={tabState==="products"} onClick={()=>setTab("products")}>Product Sales</TabButton>
+          <TabButton tabKey="cohort" active={tabState==="cohort"} onClick={()=>setTab("cohort")}>New vs Lost</TabButton>
+          <TabButton tabKey="heatmap" active={tabState==="heatmap"} onClick={()=>setTab("heatmap")}>Customer × Brand</TabButton>
+          <TabButton tabKey="roi" active={tabState==="roi"} onClick={()=>setTab("roi")}>ROI</TabButton>
+          <TabButton tabKey="consignment" active={tabState==="consignment"} onClick={()=>setTab("consignment")}>ECP Consignment</TabButton>
           {user?.isAdmin && (
-            <TabButton tabKey="report" active={tab==="report"} onClick={()=>setTab("report")} accent>📄 HQ Report</TabButton>
+            <TabButton tabKey="report" active={tabState==="report"} onClick={()=>setTab("report")} accent>📄 HQ Report</TabButton>
           )}
           {user?.canUpload && (
-            <TabButton tabKey="contracts" active={tab==="contracts"} onClick={()=>setTab("contracts")} accent>📝 Contracts</TabButton>
+            <TabButton tabKey="contracts" active={tabState==="contracts"} onClick={()=>setTab("contracts")} accent>📝 Contracts</TabButton>
           )}
           {user?.canUpload && (
-            <TabButton tabKey="data" active={tab==="data"} onClick={()=>setTab("data")} accent>Data ⤴</TabButton>
+            <TabButton tabKey="data" active={tabState==="data"} onClick={()=>setTab("data")} accent>Data ⤴</TabButton>
           )}
           {user?.isAdmin && (
-            <TabButton tabKey="users" active={tab==="users"} onClick={()=>setTab("users")}>👤 Users</TabButton>
+            <TabButton tabKey="users" active={tabState==="users"} onClick={()=>setTab("users")}>👤 Users</TabButton>
           )}
         </div>
       </div>
@@ -1266,7 +1273,8 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           tabIndex: every panel holds focusable controls, so per WAI-ARIA the
           panel itself shouldn't be a tab stop (and shouldn't take the ring). */}
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}
-        style={{padding: isMobile ? "16px 12px" : "24px 32px", maxWidth:1280, margin:"0 auto"}}>
+        style={{padding: isMobile ? "16px 12px" : "24px 32px", maxWidth:1280, margin:"0 auto",
+          opacity: tabPending ? 0.55 : 1, transition: "opacity 0.12s ease-out"}}>
 
         {/* The brand rows are ~24k and load after the page is already usable.
             Say so on the tabs that need them rather than showing empty charts. */}
