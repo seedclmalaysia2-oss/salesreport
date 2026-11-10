@@ -912,20 +912,21 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
   const teamTotal = teamRows.reduce((a, b) => a + b.amount, 0);
   const allTotal = allRows.reduce((a, b) => a + b.amount, 0);
   const rangeStart = isMonthView ? monthAgg.firstStart : latestPeriod.start;
-  // The last calendar week runs to the month end (e.g. 30 Sep), but a
-  // month-to-date (or an in-progress week) must never display a date past today
-  // — showing "1 Sep – 30 Sep" on the 29th claims data that doesn't exist yet.
-  // Pull the end back to today ONLY when the period boundary is in the future;
-  // a complete past month keeps its real end (min never drops below the start).
-  const rawEnd = isMonthView ? monthAgg.lastEnd : latestPeriod.end;
   const todayIso = (() => {
     const d = new Date(), p = (n) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   })();
-  // Pull a period end back to today when it's in the future — pure display, the
-  // underlying week bucket is unchanged. The `start <= today` guard keeps the
-  // end from ever landing before its own start (a future week, which shouldn't
-  // occur, is left as-is rather than collapsed).
+  // Month-to-date ends "now". For the CURRENT month the end is TODAY, so the
+  // header advances every day even before this week's sales land — a quiet
+  // Mon–Tue must not leave it stuck on last week's Sunday (e.g. showing
+  // "1 Nov – 7 Nov" on the 10th). A PAST month keeps its real last-data-week
+  // end. The single-week view uses the selected week's own end. In every case a
+  // boundary in the future is pulled back to today by capEnd (e.g. a 29–30 week
+  // shown on the 29th) — pure display, the underlying week buckets are unchanged.
+  const isCurrentMonth = isMonthView && activeMonth === todayIso.slice(0, 7);
+  const rawEnd = isMonthView
+    ? (isCurrentMonth ? todayIso : monthAgg.lastEnd)
+    : latestPeriod.end;
   const capEnd = (endIso, startIso) =>
     endIso && endIso > todayIso && (!startIso || startIso <= todayIso) ? todayIso : endIso;
   const rangeEnd = capEnd(rawEnd, rangeStart);
