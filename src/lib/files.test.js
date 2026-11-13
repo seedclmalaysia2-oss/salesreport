@@ -171,10 +171,13 @@ describe("uploadFile overwrite rule → auto-delete old invoice file per year", 
     expect(hasFilter(s, "eq", "year", 2026)).toBe(false);
   });
 
-  it("customer file (dated daily export): supersedes by (kind, year, sp), never by name", async () => {
-    // "2026 Sales Analysis by customer 13112026.xlsx" is re-exported daily under
-    // a changing date suffix, so keying on the filename never catches yesterday's
-    // copy. Supersede the same (kind, year, sp) scope instead.
+  it("customer file (date-ranged export): keeps same-name replacement, never (kind, year)", async () => {
+    // The "Sales Analysis by Customer" export is DATE-RANGED, not cumulative:
+    // one file may cover "01/11/2026 To 13/11/2026" (November only) while an
+    // earlier upload covered Jan–Sep. They must COEXIST (unioned month-by-month
+    // via mergeMonthlyRowsByMonth), so a new upload must supersede only the
+    // same-NAME copy — never other same-year period files, which would wipe the
+    // months only they carry (this once emptied Jan–Oct 2026).
     const parsed = {
       file: "2026 Sales Analysis by customer 13112026.xlsx",
       kind: "customer",
@@ -185,37 +188,8 @@ describe("uploadFile overwrite rule → auto-delete old invoice file per year", 
     };
     await uploadFile(fakeFile(parsed.file), parsed);
     const s = supersede();
-    expect(hasFilter(s, "eq", "kind", "customer")).toBe(true);
-    expect(hasFilter(s, "eq", "year", 2026)).toBe(true);
-    // Scoped to the salesman-scope so a different rep's file of the same year survives.
-    expect(hasFilter(s, "eq", "sp", "All")).toBe(true);
-    // Crucially NOT keyed on the (daily-changing) filename.
-    expect(s.filters.some(([o, c]) => o === "eq" && c === "name")).toBe(false);
-  });
-
-  it("a per-rep customer file is scoped by its own sp (doesn't touch other reps)", async () => {
-    const parsed = {
-      file: "Alan 2026 Sales Analysis by customer.xlsx",
-      kind: "customer", sp: "Alan", year: 2026, rowCount: 1,
-      rows: [{ sp: "Alan", year: 2026, customer: "ACME", months: Array(12).fill(0), total: 0 }],
-    };
-    await uploadFile(fakeFile(parsed.file), parsed);
-    const s = supersede();
-    expect(hasFilter(s, "eq", "kind", "customer")).toBe(true);
-    expect(hasFilter(s, "eq", "year", 2026)).toBe(true);
-    expect(hasFilter(s, "eq", "sp", "Alan")).toBe(true);
-    expect(hasFilter(s, "eq", "sp", "All")).toBe(false);
-  });
-
-  it("customer file with no parseable year falls back to same-name replacement", async () => {
-    const parsed = {
-      file: "Sales Analysis by customer misc.xlsx",
-      kind: "customer", sp: "All", year: null, rowCount: 1,
-      rows: [{ sp: "Alan", year: null, customer: "ACME", months: Array(12).fill(0), total: 0 }],
-    };
-    await uploadFile(fakeFile(parsed.file), parsed);
-    const s = supersede();
-    expect(hasFilter(s, "eq", "name", "Sales Analysis by customer misc.xlsx")).toBe(true);
+    expect(hasFilter(s, "eq", "name", "2026 Sales Analysis by customer 13112026.xlsx")).toBe(true);
+    // Crucially NOT scoped by kind/year — that would trash other period files.
     expect(s.filters.some(([o, c]) => o === "eq" && (c === "kind" || c === "year"))).toBe(false);
   });
 

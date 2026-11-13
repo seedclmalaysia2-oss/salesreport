@@ -708,23 +708,31 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
         if (v) sa.set(s.sp, (sa.get(s.sp) || 0) + v);
       }
       const board = new Map(monthAgg.rows.map(r => [r.sp, r.amount]));
-      // Never reconcile the CURRENT (in-progress) month. The Sales Analysis
-      // (customer) file is exported periodically and always lags the daily
-      // invoice feed, so reconciling pins the live board to a stale monthly
-      // figure — the numbers stop moving as new invoices arrive (Nov 2026 sat
-      // at RM 140,233 for days while the raw board had grown to ~RM 166k). The
-      // current month shows the raw invoice board so it updates every upload;
-      // only CLOSED (past) months reconcile to Sales Analysis.
-      // For a past month, still require the customer total to have caught up —
-      // within a sane band of the board — so a half-filled late export can't
-      // wipe the month out (Oct 2026 once showed a −RM 269,992 adj, board ~287k
-      // vs a catching-up customer file ~17k, driving the month negative).
+      // Reconcile the board to the Sales Analysis (customer) total, but only
+      // when that export has CAUGHT UP to the board — never pin a live total
+      // DOWN to a lagging file.
+      //   • Past (closed) months: the file is final; require it to be within a
+      //     sane band (>=50% of the board) so a half-filled late export can't
+      //     wipe the month out (Oct 2026 once showed a −RM 269,992 adj, board
+      //     ~287k vs a catching-up customer file ~17k, driving it negative).
+      //   • Current (in-progress) month: reconcile ONLY when the Sales Analysis
+      //     total has reached the live invoice board (saTotal >= boardTotal). If
+      //     it lags, show the raw invoice board so the number keeps moving as
+      //     invoices arrive (Nov 2026 once sat at RM 140,233 for days while the
+      //     board had grown to ~RM 166k). When it's caught up, tie out to it so
+      //     the month matches the official Sales Analysis figure — e.g. 13 Nov
+      //     2026: board RM 186,951, Sales Analysis RM 187,050 → board shows
+      //     187,050, the ~RM 100 landing on the non-retail reps.
       const now = new Date();
       const curMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
       const isCurrentMonth = activeMonth === curMonthKey;
       const saTotal = [...sa.values()].reduce((a, b) => a + b, 0);
       const boardTotal = [...board.values()].reduce((a, b) => a + b, 0);
-      const caughtUp = !isCurrentMonth && sa.size > 0 && (boardTotal <= 0 || saTotal >= boardTotal * 0.5);
+      // Current month needs SA to have essentially reached the board (0.1%
+      // tolerance for rounding); a closed month only needs to be in band.
+      const caughtUp =
+        sa.size > 0 &&
+        (boardTotal <= 0 || saTotal >= boardTotal * (isCurrentMonth ? 0.999 : 0.5));
       if (caughtUp) {
         for (const rep of new Set([...sa.keys(), ...board.keys()])) {
           const adj = Math.round(((sa.get(rep) || 0) - (board.get(rep) || 0)) * 100) / 100;

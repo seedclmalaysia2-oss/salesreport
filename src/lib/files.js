@@ -191,14 +191,16 @@ export async function uploadFile(file, parsed, { visibility = VISIBILITY.PRIVATE
   //     invoice file for the SAME year — newest upload wins, name-independent.
   //     This also keeps the weekly sync light (it hydrates one file, not ~24),
   //     which is what kept the board from updating.
-  //   • Customer files ("… Sales Analysis by customer …") are the same story:
-  //     a full-year export re-uploaded under a changing date suffix
-  //     ("… 11112026.xlsx", then "… 13112026.xlsx"). Supersede by
-  //     (kind='customer', year, sp) so each day's upload replaces the prior
-  //     one for the SAME salesman-scope — while a different rep's file of the
-  //     same year (sp='Alan' vs the year-only sp='All') is left untouched.
-  //   • Everything else (brand / group) has a stable, uniquely-named workbook,
-  //     so the classic same-name replacement is right.
+  //   • Everything else (customer / brand / group) keeps the classic same-name
+  //     replacement. Do NOT supersede customer files by (kind, year): the
+  //     "Sales Analysis by Customer" export is DATE-RANGED, not cumulative —
+  //     one file may cover "01/11/2026 To 13/11/2026" (November only) while an
+  //     earlier upload covered Jan–Sep. recomputeFromFiles / the customer sync
+  //     UNION these month-by-month (newest file wins per month, see
+  //     mergeMonthlyRowsByMonth), so several period files must coexist.
+  //     Trashing the older ones by year would wipe the months only they carry
+  //     (this is exactly what emptied Jan–Oct 2026 once). Different-named daily
+  //     customer uploads are meant to accumulate.
   // Non-fatal: the new row is already saved, so a supersede hiccup just leaves a
   // duplicate to tidy on the Data tab.
   let supersede = supabase
@@ -206,16 +208,10 @@ export async function uploadFile(file, parsed, { visibility = VISIBILITY.PRIVATE
     .update({ deleted_at: new Date().toISOString() })
     .is("deleted_at", null)
     .neq("id", data.id);
-  if (row.kind === "invoice" && Number.isFinite(row.year)) {
-    supersede = supersede.eq("kind", "invoice").eq("year", row.year);
-  } else if (row.kind === "customer" && Number.isFinite(row.year) && row.sp) {
-    supersede = supersede
-      .eq("kind", "customer")
-      .eq("year", row.year)
-      .eq("sp", row.sp);
-  } else {
-    supersede = supersede.eq("name", row.name);
-  }
+  supersede =
+    row.kind === "invoice" && Number.isFinite(row.year)
+      ? supersede.eq("kind", "invoice").eq("year", row.year)
+      : supersede.eq("name", row.name);
   const { error: supErr } = await supersede;
   if (supErr) console.warn(`Could not supersede prior copies of ${row.name}:`, supErr.message);
 
