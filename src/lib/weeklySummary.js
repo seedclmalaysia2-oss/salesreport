@@ -42,6 +42,58 @@ export function buildWeeklyShareText(summary) {
   return lines.join("\n");
 }
 
+// Label for Sales Analysis rows whose Salesman cell is blank in the export.
+// They are stored under sp="All" (see parseXlsx / syncCustomersFromFiles).
+export const UNASSIGNED_SP = "Unassigned";
+const isAggSp = (sp) => {
+  const s = String(sp ?? "").trim().toLowerCase();
+  return s === "" || s === "all";
+};
+
+// Per-rep "Cust Adj" that ties the weekly invoice board to the Sales Analysis
+// by customer total for one month. Shared by WeeklySalesCard and the digest so
+// both apply the SAME "caught up" rule.
+//   board:          Map(sp -> month-to-date amount from the invoice board)
+//   custSummary:    [{ sp, year, months[12] }]
+//   year, month:    the month being reconciled (month is 1–12)
+//   isCurrentMonth: in-progress month → SA must have reached the board (0.1%
+//                   tolerance); a closed month only needs to be >= 50% of it.
+// Rows with sp "All"/blank are customers the export left without a salesman
+// (e.g. 13 Nov 2026: XIN MIN OPTICAL RM 100). They are real sales and count
+// toward the company total as an "Unassigned" line — dropping them is what
+// kept the board at RM 186,951 instead of tying to RM 187,050. Guard: if they
+// are more than 5% of the assigned total they're a stale company-wide
+// aggregate that would double-count, so they're ignored.
+// Returns { caughtUp, adj: Map(sp -> amount), saTotal, boardTotal }.
+export function reconcileToSalesAnalysis({ board, custSummary = [], year, month, isCurrentMonth }) {
+  const sa = new Map();
+  let unassigned = 0;
+  for (const s of custSummary || []) {
+    if (Number(s.year) !== year) continue;
+    const v = Number(s.months?.[month - 1]) || 0;
+    if (!v) continue;
+    if (isAggSp(s.sp)) unassigned += v;
+    else sa.set(s.sp, (sa.get(s.sp) || 0) + v);
+  }
+  const assigned = [...sa.values()].reduce((a, b) => a + b, 0);
+  if (unassigned && Math.abs(unassigned) <= Math.abs(assigned) * 0.05) {
+    sa.set(UNASSIGNED_SP, (sa.get(UNASSIGNED_SP) || 0) + unassigned);
+  }
+  const saTotal = [...sa.values()].reduce((a, b) => a + b, 0);
+  const boardTotal = [...board.values()].reduce((a, b) => a + b, 0);
+  const caughtUp =
+    sa.size > 0 &&
+    (boardTotal <= 0 || saTotal >= boardTotal * (isCurrentMonth ? 0.999 : 0.5));
+  const adj = new Map();
+  if (caughtUp) {
+    for (const rep of new Set([...sa.keys(), ...board.keys()])) {
+      const d = Math.round(((sa.get(rep) || 0) - (board.get(rep) || 0)) * 100) / 100;
+      if (Math.abs(d) >= 0.005) adj.set(rep, d);
+    }
+  }
+  return { caughtUp, adj, saTotal, boardTotal };
+}
+
 // Month-to-date summary for the latest month on the weekly board.
 //   weeklySales: [{ periodStart, periodEnd, sp, amount }]
 //   targets:     [{ year, month, sp, target }]      (_TEAM row is the company target)
@@ -63,24 +115,12 @@ export function monthToDateSummary({ weeklySales, targets = [], custSummary = []
     board.set(w.sp, (board.get(w.sp) || 0) + (Number(w.amount) || 0));
   }
 
-  // Cust Adj — same "caught up" guard as the card: a lagging customer file must
-  // never drag the month down.
-  const sa = new Map();
-  for (const s of custSummary) {
-    if (s.year !== year || String(s.sp).trim().toLowerCase() === "all") continue;
-    const v = Number(s.months?.[month - 1]) || 0;
-    if (v) sa.set(s.sp, (sa.get(s.sp) || 0) + v);
-  }
-  const saTotal = [...sa.values()].reduce((a, b) => a + b, 0);
-  const boardTotal = [...board.values()].reduce((a, b) => a + b, 0);
-  const caughtUp = sa.size > 0 && (boardTotal <= 0 || saTotal >= boardTotal * 0.5);
+  // Cust Adj — same "caught up" rule as the card (shared function): a lagging
+  // customer file must never drag the month down.
+  const isCurrentMonth = !!todayIso && todayIso.slice(0, 7) === monthKey;
+  const { adj } = reconcileToSalesAnalysis({ board, custSummary, year, month, isCurrentMonth });
   const byRep = new Map(board);
-  if (caughtUp) {
-    for (const rep of new Set([...sa.keys(), ...board.keys()])) {
-      const adj = Math.round(((sa.get(rep) || 0) - (board.get(rep) || 0)) * 100) / 100;
-      if (Math.abs(adj) >= 0.005) byRep.set(rep, (byRep.get(rep) || 0) + adj);
-    }
-  }
+  for (const [rep, a] of adj) byRep.set(rep, (byRep.get(rep) || 0) + a);
 
   const rows = [...byRep.entries()].map(([sp, amount]) => ({ sp, amount }));
   const teamRows = rows.filter((r) => RETAIL_TEAM.includes(r.sp) && r.amount > 0).sort((a, b) => b.amount - a.amount);
