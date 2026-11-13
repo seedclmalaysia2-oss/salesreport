@@ -1300,7 +1300,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
             <WeeklySalesCard
               weeklySales={data.weeklySales || []}
               invoiceFiles={data.invoiceFiles || []}
-              custSummary={applyCustCorrections(SUMMARY)}
+              custSummary={[...applyCustCorrections(SUMMARY), ...(data.custUnassigned || [])]}
               targets={TARGETS}
               isAdmin={!!user?.isAdmin}
               canUpload={!!user?.canUpload}

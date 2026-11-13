@@ -10,7 +10,7 @@ import { supabase } from "./lib/supabase.js";
 import { weekBounds, REP_ORDER, syncWeeklyFromFiles, productSyncWarning } from "./lib/weekly.js";
 import WeeklyAlertsButton from "./WeeklyAlerts.jsx";
 import { sendWeeklyPush, pushConfigured } from "./lib/push.js";
-import { buildWeeklyShareText } from "./lib/weeklySummary.js";
+import { buildWeeklyShareText, reconcileToSalesAnalysis } from "./lib/weeklySummary.js";
 import { isStaleChunkError, reloadForNewBuild } from "./lib/staleChunk.js";
 
 // Retail Sales Team = the three reps who count toward the "Sales Team" column.
@@ -701,12 +701,6 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
     // exactly what the admin sees.
     if (canViewAll && activeMonth && custSummary && custSummary.length) {
       const [saY, saM] = activeMonth.split("-").map(Number);
-      const sa = new Map();
-      for (const s of custSummary) {
-        if (s.year !== saY) continue;
-        const v = Number(s.months?.[saM - 1]) || 0;
-        if (v) sa.set(s.sp, (sa.get(s.sp) || 0) + v);
-      }
       const board = new Map(monthAgg.rows.map(r => [r.sp, r.amount]));
       // Reconcile the board to the Sales Analysis (customer) total, but only
       // when that export has CAUGHT UP to the board — never pin a live total
@@ -722,23 +716,14 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
       //     board had grown to ~RM 166k). When it's caught up, tie out to it so
       //     the month matches the official Sales Analysis figure — e.g. 13 Nov
       //     2026: board RM 186,951, Sales Analysis RM 187,050 → board shows
-      //     187,050, the ~RM 100 landing on the non-retail reps.
+      //     187,050. That ~RM 100 is a customer with NO salesman in the export
+      //     (XIN MIN OPTICAL, stored as sp "All") — it lands as "Unassigned".
+      // Logic lives in reconcileToSalesAnalysis, shared with the weekly digest.
       const now = new Date();
       const curMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
       const isCurrentMonth = activeMonth === curMonthKey;
-      const saTotal = [...sa.values()].reduce((a, b) => a + b, 0);
-      const boardTotal = [...board.values()].reduce((a, b) => a + b, 0);
-      // Current month needs SA to have essentially reached the board (0.1%
-      // tolerance for rounding); a closed month only needs to be in band.
-      const caughtUp =
-        sa.size > 0 &&
-        (boardTotal <= 0 || saTotal >= boardTotal * (isCurrentMonth ? 0.999 : 0.5));
-      if (caughtUp) {
-        for (const rep of new Set([...sa.keys(), ...board.keys()])) {
-          const adj = Math.round(((sa.get(rep) || 0) - (board.get(rep) || 0)) * 100) / 100;
-          if (Math.abs(adj) >= 0.005) m.set(rep, adj);
-        }
-      }
+      const { adj } = reconcileToSalesAnalysis({ board, custSummary, year: saY, month: saM, isCurrentMonth });
+      for (const [rep, a] of adj) m.set(rep, a);
     }
     return { custAdjByRep: m, custAdjTotal: [...m.values()].reduce((a, b) => a + b, 0) };
   }, [custSummary, activeMonth, monthAgg, canViewAll]);

@@ -267,6 +267,19 @@ export default function App() {
             customers.filter(r => !isAggScope(r.sp)),
             (brandSales || []).filter(r => !isAggScope(r.sp)),
           );
+          // Customers the Sales Analysis export left WITHOUT a salesman are
+          // stored under sp "All" and stripped above. They're still real
+          // sales, so hand their per-year monthly totals to the Weekly card
+          // separately — it reconciles them as an "Unassigned" line so the
+          // month ties to the full Sales Analysis total.
+          const unassigned = new Map(); // year -> { sp, year, months }
+          for (const r of customers) {
+            if (!isAggScope(r.sp)) continue;
+            const u = unassigned.get(r.year) || { sp: "All", year: r.year, months: new Array(12).fill(0) };
+            for (let i = 0; i < 12; i++) u.months[i] += Number(r.months?.[i]) || 0;
+            unassigned.set(r.year, u);
+          }
+          aggregated.custUnassigned = [...unassigned.values()];
           aggregated.targets = targets.map(t => ({
             year: t.year, month: t.month, sp: t.sp, target: Number(t.target_amt),
           }));
