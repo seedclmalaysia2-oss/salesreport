@@ -191,8 +191,14 @@ export async function uploadFile(file, parsed, { visibility = VISIBILITY.PRIVATE
   //     invoice file for the SAME year — newest upload wins, name-independent.
   //     This also keeps the weekly sync light (it hydrates one file, not ~24),
   //     which is what kept the board from updating.
-  //   • Everything else (customer / brand / group) has a stable, year-bearing
-  //     name, so the classic same-name replacement is right.
+  //   • Customer files ("… Sales Analysis by customer …") are the same story:
+  //     a full-year export re-uploaded under a changing date suffix
+  //     ("… 11112026.xlsx", then "… 13112026.xlsx"). Supersede by
+  //     (kind='customer', year, sp) so each day's upload replaces the prior
+  //     one for the SAME salesman-scope — while a different rep's file of the
+  //     same year (sp='Alan' vs the year-only sp='All') is left untouched.
+  //   • Everything else (brand / group) has a stable, uniquely-named workbook,
+  //     so the classic same-name replacement is right.
   // Non-fatal: the new row is already saved, so a supersede hiccup just leaves a
   // duplicate to tidy on the Data tab.
   let supersede = supabase
@@ -200,10 +206,16 @@ export async function uploadFile(file, parsed, { visibility = VISIBILITY.PRIVATE
     .update({ deleted_at: new Date().toISOString() })
     .is("deleted_at", null)
     .neq("id", data.id);
-  supersede =
-    row.kind === "invoice" && Number.isFinite(row.year)
-      ? supersede.eq("kind", "invoice").eq("year", row.year)
-      : supersede.eq("name", row.name);
+  if (row.kind === "invoice" && Number.isFinite(row.year)) {
+    supersede = supersede.eq("kind", "invoice").eq("year", row.year);
+  } else if (row.kind === "customer" && Number.isFinite(row.year) && row.sp) {
+    supersede = supersede
+      .eq("kind", "customer")
+      .eq("year", row.year)
+      .eq("sp", row.sp);
+  } else {
+    supersede = supersede.eq("name", row.name);
+  }
   const { error: supErr } = await supersede;
   if (supErr) console.warn(`Could not supersede prior copies of ${row.name}:`, supErr.message);
 

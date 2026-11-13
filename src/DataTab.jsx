@@ -832,6 +832,21 @@ export default function DataTab({ data, onRefresh }) {
   const validNames = selectedFiles.filter(f => parseFilename(f.name));
   const invalidNames = selectedFiles.filter(f => !parseFilename(f.name));
 
+  // The Weekly board is fed ONLY by the invoice export ("Stock Sales Analysis -
+  // Detail" / "Customer Invoice Listing"). Selecting a "Sales Analysis by
+  // customer" (or brand) file without one of those is the #1 "the weekly board
+  // didn't update" trap — so warn BEFORE the upload, not just after.
+  const selectedKinds = new Set(
+    validNames.map(f => {
+      const k = parseFilename(f.name)?.kind || "";
+      if (/Sales Analysis by customer/i.test(k)) return "customer";
+      if (/Summary by brand/i.test(k)) return "brand";
+      if (/Customer Invoice Listing/i.test(k) || /Stock Sales Analysis - Detail/i.test(k)) return "invoice";
+      return null;
+    }).filter(Boolean)
+  );
+  const weeklyWontMove = selectedKinds.has("customer") && !selectedKinds.has("invoice");
+
   const SortHeader = ({ label, k }) => {
     const on = sort.key === k;
     const nextDir = on && sort.dir === "asc" ? "Z–A" : "A–Z";
@@ -1306,6 +1321,21 @@ export default function DataTab({ data, onRefresh }) {
                   cursor: uploading ? "not-allowed" : "pointer",fontFamily:"'DM Sans',sans-serif",
                 }}>Clear</button>
             </div>
+
+            {weeklyWontMove && (
+              <div style={{
+                marginTop:10,padding:"10px 12px",borderRadius:8,fontSize:12,lineHeight:1.55,
+                background:"color-mix(in srgb, var(--st-watch) 12%, transparent)",
+                border:"1px solid color-mix(in srgb, var(--st-watch) 36%, transparent)",
+                color:"var(--text)",
+              }}>
+                <strong>⚠ This won't move the Weekly board.</strong>{" "}
+                A “Sales Analysis by customer” file updates the Sales Analysis &amp; Customer
+                views only. The Weekly board is fed by the{" "}
+                <strong>“Stock Sales Analysis&nbsp;-&nbsp;Detail”</strong> export — upload that
+                to refresh the weekly numbers.
+              </div>
+            )}
 
             {progress && (
               <div style={{marginTop:12}}>
