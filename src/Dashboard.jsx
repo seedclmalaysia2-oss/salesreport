@@ -3,6 +3,7 @@ import { applyCustCorrections } from "./lib/custCorrections.js";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, ReferenceLine } from "recharts";
 import WeeklySalesCard from "./WeeklySalesCard.jsx";
 import InstallApp from "./InstallApp.jsx";
+import BuildLabel from "./BuildLabel.jsx";
 import { aggregateProductSales, CATEGORY_COLORS_DARK, CATEGORY_COLORS_LIGHT, CATEGORY_ORDER } from "./lib/productCategories.js";
 // The light/dark mode decision is shared with the pre-auth screens (App /
 // LoginScreen) so they agree on the active mode. THEMES below keeps the full
@@ -1121,6 +1122,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                 ? `All teams · ${SALESPEOPLE.length} salespeople`
                 : `Restricted to ${user?.sp ?? "your data"}`}
             </div>
+            <BuildLabel />
           </div>
           <div style={{display:"flex",alignItems:"flex-start",gap:14,flexWrap:"wrap"}}>
             {/* Install as a phone / desktop app — same control as the HR dashboard.
