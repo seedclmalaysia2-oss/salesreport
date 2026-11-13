@@ -297,3 +297,18 @@ describe("recalcAllFacts — one press rebuilds every fact table from the newest
     expect(H.state.upserts).toHaveLength(0);
   });
 });
+
+describe("syncCustomersFromFiles — unrecognised salesman", () => {
+  it("writes NA-salesman customers to an Unassigned scope, not the dropped 'All'", async () => {
+    const months = (v) => { const a = new Array(12).fill(0); a[10] = v; return a; };
+    await syncCustomersFromFiles([{
+      id: 9, kind: "customer", sp: "All", year: 2026, uploadedAt: 1,
+      rows: [
+        { sp: "Alan", customer: "A", months: months(1000), total: 1000 },
+        { sp: "All", customer: "NA Cust", months: months(100), total: 100 },
+      ],
+    }]);
+    const scopes = H.state.rpcs.filter(r => r.name === "replace_customers_data").map(r => r.args.p_sp);
+    expect(scopes.sort()).toEqual(["Alan", "Unassigned"]);
+  });
+});

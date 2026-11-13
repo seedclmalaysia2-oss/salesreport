@@ -8,7 +8,7 @@
 // into Mon–Sun weeks per rep and upserts the totals, so one upload feeds both
 // the file library and the weekly board.
 
-import { mergeDatedRowsByMonth, mergeMonthlyRowsByMonth } from "./periods.js";
+import { mergeDatedRowsByMonth, mergeMonthlyRowsByMonth, withUnassignedCustomers } from "./periods.js";
 import { aggregateProductMonthlyBySp } from "./reportProducts.js";
 import { supabase } from "./supabase.js";
 
@@ -286,7 +286,10 @@ function latestFilePerScope(files, kind) {
 // one wiping out the earlier months. Returns one synthetic file per scope.
 function mergedCustomerFilesPerScope(files) {
   const groups = new Map(); // "sp|year" -> [file]
-  for (const f of eligibleFactFiles(files, "customer")) {
+  for (const f0 of eligibleFactFiles(files, "customer")) {
+    // Customers with an unrecognised salesman ("NA") → "Unassigned", not the
+    // dropped "All" sentinel, so they still count in every company total.
+    const f = withUnassignedCustomers(f0);
     const key = `${f.sp}|${f.year}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(f);

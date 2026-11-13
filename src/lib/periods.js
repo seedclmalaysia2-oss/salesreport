@@ -85,3 +85,20 @@ export function mergeMonthlyRowsByMonth(files, fallbackSp = "All") {
   for (const r of rows) r.total = r.months.reduce((s, v) => s + v, 0);
   return rows;
 }
+
+// A year-only "Sales Analysis by customer" export carries a Salesman column.
+// Rows whose salesman the parser doesn't recognise (e.g. "NA") come through
+// with no rep and fall back to sp "All" — which the dashboard drops as the
+// aggregate sentinel, silently losing that customer's sales from every company
+// total (13 Nov 2026: RM 186,950.83 shown vs RM 187,050.83 in the file).
+// When a file mixes real reps with rep-less rows, those rows are customers with
+// an unrecognised salesman: keep them, under "Unassigned". A file with NO rep on
+// any row is a whole-company/per-SP export and is left untouched.
+export const UNASSIGNED_SP = "Unassigned";
+export function withUnassignedCustomers(f) {
+  const isRep = (sp) => !!sp && sp !== "All";
+  if (!f || !Array.isArray(f.rows) || isRep(f.sp)) return f;
+  if (!f.rows.some((r) => isRep(r?.sp))) return f;
+  if (f.rows.every((r) => isRep(r?.sp))) return f;
+  return { ...f, rows: f.rows.map((r) => (r && !isRep(r.sp) ? { ...r, sp: UNASSIGNED_SP } : r)) };
+}

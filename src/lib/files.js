@@ -9,7 +9,8 @@
 
 import { supabase, fetchAll } from "./supabase.js";
 import { aggregate } from "./parseXlsx.js";
-import { mergeMonthlyRowsByMonth } from "./periods.js";
+import { mergeMonthlyRowsByMonth, withUnassignedCustomers } from "./periods.js";
+export { withUnassignedCustomers, UNASSIGNED_SP } from "./periods.js";
 
 const BUCKET = "data-files";
 
@@ -323,7 +324,8 @@ export function recomputeFromFiles(files) {
   const customerRows = [];
   const brandRows = [];
   const custGroups = new Map(); // "sp|year" -> [file], merged month by month
-  for (const f of active) {
+  for (const f0 of active) {
+    const f = f0.kind === "customer" ? withUnassignedCustomers(f0) : f0;
     if (f.kind === "customer") {
       const key = `${f.sp}|${f.year}`;
       if (!custGroups.has(key)) custGroups.set(key, []);
