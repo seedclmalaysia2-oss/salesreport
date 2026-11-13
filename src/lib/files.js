@@ -181,21 +181,29 @@ export async function uploadFile(file, parsed, { visibility = VISIBILITY.PRIVATE
     throw new Error(`Saving ${file.name} failed: ${error.message}`);
   }
 
-  // Supersede only an earlier upload with the SAME name (a re-upload of the
-  // same export). Date-stamped period files ("… Detail 31082026.xlsx", then
-  // "… 27092026.xlsx") all stay live: a later file may cover only the new
-  // period, so soft-deleting older same-year files used to wipe out months.
-  // Double counting is prevented downstream instead — every consumer takes each
-  // calendar month from the newest file that has data in it (lib/periods.js),
-  // so a full year-to-date re-export still overrides every older copy.
+  // Auto-delete the files this upload replaces (soft-delete → trash). Owner's
+  // rule (2026-11-11): a new upload should supersede the old one so the library
+  // keeps one live file, not a growing pile of date-stamped daily exports.
+  //   • Invoice files (Stock Sales Analysis - Detail / Customer Invoice Listing)
+  //     are a CUMULATIVE year-to-date export re-uploaded daily under a changing
+  //     name ("… Detail 10112026.xlsx", then "… 11112026.xlsx"). The newest one
+  //     already contains every earlier day, so soft-delete every other live
+  //     invoice file for the SAME year — newest upload wins, name-independent.
+  //     This also keeps the weekly sync light (it hydrates one file, not ~24),
+  //     which is what kept the board from updating.
+  //   • Everything else (customer / brand / group) has a stable, year-bearing
+  //     name, so the classic same-name replacement is right.
   // Non-fatal: the new row is already saved, so a supersede hiccup just leaves a
   // duplicate to tidy on the Data tab.
-  const supersede = supabase
+  let supersede = supabase
     .from("data_files")
     .update({ deleted_at: new Date().toISOString() })
     .is("deleted_at", null)
-    .neq("id", data.id)
-    .eq("name", row.name);
+    .neq("id", data.id);
+  supersede =
+    row.kind === "invoice" && Number.isFinite(row.year)
+      ? supersede.eq("kind", "invoice").eq("year", row.year)
+      : supersede.eq("name", row.name);
   const { error: supErr } = await supersede;
   if (supErr) console.warn(`Could not supersede prior copies of ${row.name}:`, supErr.message);
 

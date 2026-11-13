@@ -123,8 +123,8 @@ const supersede = () => {
 const hasFilter = (rec, op, col, val) =>
   rec.filters.some(([o, c, v]) => o === op && c === col && v === val);
 
-describe("uploadFile overwrite rule → same-name re-uploads only", () => {
-  it("invoice (Stock-Detail): supersedes only a same-name re-upload", async () => {
+describe("uploadFile overwrite rule → auto-delete old invoice file per year", () => {
+  it("invoice (Stock-Detail): supersedes by (kind, year), never by name", async () => {
     const parsed = {
       file: "Stock Sales Analysis - Detail 31082026.xlsx",
       kind: "invoice",
@@ -135,24 +135,40 @@ describe("uploadFile overwrite rule → same-name re-uploads only", () => {
     };
     await uploadFile(fakeFile(parsed.file), parsed);
     const s = supersede();
-    expect(hasFilter(s, "eq", "name", "Stock Sales Analysis - Detail 31082026.xlsx")).toBe(true);
+    expect(hasFilter(s, "eq", "kind", "invoice")).toBe(true);
+    expect(hasFilter(s, "eq", "year", 2026)).toBe(true);
     expect(hasFilter(s, "is", "deleted_at", null)).toBe(true);
     expect(hasFilter(s, "neq", "id", "new-id")).toBe(true);
+    // Crucially NOT keyed on the (daily-changing) filename.
+    expect(s.filters.some(([o, c]) => o === "eq" && c === "name")).toBe(false);
     expect(s.patch.deleted_at).toBeTruthy();
   });
 
-  it("a split-period invoice file does NOT wipe the earlier period's file", async () => {
-    // "… 27092026.xlsx" may hold only September; the 31082026 file (Jan–Aug)
-    // must stay live. Consumers merge month by month (periods.js) instead.
+  it("a differently-named next-day invoice upload supersedes the same year", async () => {
+    // Owner's cumulative daily workflow: "… 11112026.xlsx" supersedes
+    // "… 10112026.xlsx" (same year) so only one live invoice file remains.
     const parsed = {
-      file: "Stock Sales Analysis - Detail 27092026.xlsx",
+      file: "Stock Sales Analysis - Detail 11112026.xlsx",
       kind: "invoice", sp: null, year: 2026, rowCount: 1,
-      rows: [{ date: "2026-09-11", invoice: "INV-9", amount: 5, sp: "Dino" }],
+      rows: [{ date: "2026-11-11", invoice: "INV-9", amount: 5, sp: "Dino" }],
     };
     await uploadFile(fakeFile(parsed.file), parsed);
     const s = supersede();
-    expect(s.filters.some(([o, c]) => o === "eq" && (c === "kind" || c === "year"))).toBe(false);
-    expect(hasFilter(s, "eq", "name", "Stock Sales Analysis - Detail 31082026.xlsx")).toBe(false);
+    expect(hasFilter(s, "eq", "year", 2026)).toBe(true);
+    expect(hasFilter(s, "eq", "kind", "invoice")).toBe(true);
+    expect(s.filters.some(([o, c]) => o === "eq" && c === "name")).toBe(false);
+  });
+
+  it("invoice files of DIFFERENT years don't supersede each other", async () => {
+    const parsed = {
+      file: "Stock Sales Analysis - Detail 31122025.xlsx",
+      kind: "invoice", sp: null, year: 2025, rowCount: 1,
+      rows: [{ date: "2025-12-31", invoice: "INV-Y", amount: 7, sp: "Khen" }],
+    };
+    await uploadFile(fakeFile(parsed.file), parsed);
+    const s = supersede();
+    expect(hasFilter(s, "eq", "year", 2025)).toBe(true);
+    expect(hasFilter(s, "eq", "year", 2026)).toBe(false);
   });
 
   it("customer file: keeps the classic same-name replacement", async () => {

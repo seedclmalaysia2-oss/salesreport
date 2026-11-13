@@ -708,19 +708,23 @@ export default function WeeklySalesCard({ weeklySales, invoiceFiles = [], target
         if (v) sa.set(s.sp, (sa.get(s.sp) || 0) + v);
       }
       const board = new Map(monthAgg.rows.map(r => [r.sp, r.amount]));
-      // The Sales Analysis (customer) file is exported periodically and lags the
-      // invoice feed, so for the current month it is usually missing or only
-      // partially filled. Reconciling the board DOWN to a half-empty customer
-      // total wipes the month out — e.g. Oct 2026 showed a −RM 269,992 "Cust
-      // Adj" because the board was ~RM 287k but the still-catching-up customer
-      // file read ~RM 17k, which drove Week 4 (and the whole month) negative.
-      // So only reconcile when the customer total has actually caught up to this
-      // month — within a sane band of the board total. Below that, show the raw
-      // invoice board (no adjustment); credit-note drift, the only thing this is
-      // meant to correct, never removes half a month of sales.
+      // Never reconcile the CURRENT (in-progress) month. The Sales Analysis
+      // (customer) file is exported periodically and always lags the daily
+      // invoice feed, so reconciling pins the live board to a stale monthly
+      // figure — the numbers stop moving as new invoices arrive (Nov 2026 sat
+      // at RM 140,233 for days while the raw board had grown to ~RM 166k). The
+      // current month shows the raw invoice board so it updates every upload;
+      // only CLOSED (past) months reconcile to Sales Analysis.
+      // For a past month, still require the customer total to have caught up —
+      // within a sane band of the board — so a half-filled late export can't
+      // wipe the month out (Oct 2026 once showed a −RM 269,992 adj, board ~287k
+      // vs a catching-up customer file ~17k, driving the month negative).
+      const now = new Date();
+      const curMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const isCurrentMonth = activeMonth === curMonthKey;
       const saTotal = [...sa.values()].reduce((a, b) => a + b, 0);
       const boardTotal = [...board.values()].reduce((a, b) => a + b, 0);
-      const caughtUp = sa.size > 0 && (boardTotal <= 0 || saTotal >= boardTotal * 0.5);
+      const caughtUp = !isCurrentMonth && sa.size > 0 && (boardTotal <= 0 || saTotal >= boardTotal * 0.5);
       if (caughtUp) {
         for (const rep of new Set([...sa.keys(), ...board.keys()])) {
           const adj = Math.round(((sa.get(rep) || 0) - (board.get(rep) || 0)) * 100) / 100;
