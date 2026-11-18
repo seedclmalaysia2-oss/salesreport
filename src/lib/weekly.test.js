@@ -209,7 +209,7 @@ describe("syncProductMonthlyFromFiles", () => {
 });
 
 describe("syncCustomersFromFiles", () => {
-  it("replaces only the newest file per (sp, year) and skips empty files", async () => {
+  it("replaces the whole YEAR in one call; newest file wins per month, empty files contribute nothing", async () => {
     const custFiles = [
       { id: "c1", kind: "customer", sp: "Alan", year: 2026, deletedAt: null, uploadedAt: 1000,
         rows: [{ customer: "A", months: months12(100), total: 100 }] },
@@ -220,23 +220,25 @@ describe("syncCustomersFromFiles", () => {
           { customer: "B", months: months12(50),  total: 50 },
         ] },
       { id: "c3", kind: "customer", sp: "Dino", year: 2026, deletedAt: null, uploadedAt: 1500,
-        rows: [] }, // empty -> skipped, never wipes the scope
+        rows: [] }, // empty -> owns no months, contributes nothing, wipes nothing
     ];
     const res = await syncCustomersFromFiles(custFiles);
 
+    // ONE whole-year replace (not one per sp) — that is what clears ghost scopes.
     expect(H.state.rpcs).toHaveLength(1);
-    expect(H.state.rpcs[0].name).toBe("replace_customers_data");
-    expect(H.state.rpcs[0].args.p_sp).toBe("Alan");
+    expect(H.state.rpcs[0].name).toBe("replace_customers_year");
     expect(H.state.rpcs[0].args.p_year).toBe(2026);
-    expect(H.state.rpcs[0].args.p_rows).toHaveLength(2); // c2 (newest) won
-    expect(res.skipped).toEqual(["Dino 2026 (0 rows)"]);
+    const rows = H.state.rpcs[0].args.p_rows;
+    expect(rows).toHaveLength(2); // c2 (newest) won: A=150 + B=50
+    expect(rows.every(r => r.sp === "Alan")).toBe(true);
+    expect(res.scopes).toBe(1);
+    expect(res.skipped).toEqual([]);
   });
 
-  it("splits a year-only file by its per-row salesperson (the Salesman column)", async () => {
+  it("replaces a year in ONE call, each customer keeping its per-row salesperson", async () => {
     // "2026 Sales Analysis by customer.xlsx" is sp="All" at the file level but
-    // carries a Salesman column per row. It must fan out into one scope per rep,
-    // never a single "All" bucket — the bug that made the per-salesperson
-    // customer analysis silently disappear.
+    // carries a Salesman column per row. Each customer keeps its own rep in the
+    // single year payload — never collapsed into one "All" bucket.
     const yearFile = [{
       id: "y1", kind: "customer", sp: "All", year: 2026, deletedAt: null, uploadedAt: 3000,
       rows: [
@@ -247,11 +249,35 @@ describe("syncCustomersFromFiles", () => {
       ],
     }];
     const res = await syncCustomersFromFiles(yearFile);
-    const bySp = Object.fromEntries(H.state.rpcs.map(c => [c.args.p_sp, c.args.p_rows.length]));
+    expect(H.state.rpcs).toHaveLength(1);
+    expect(H.state.rpcs[0].name).toBe("replace_customers_year");
+    expect(H.state.rpcs[0].args.p_year).toBe(2026);
+    const rows = H.state.rpcs[0].args.p_rows;
+    expect(rows).toHaveLength(4);
+    const bySp = {};
+    for (const r of rows) bySp[r.sp] = (bySp[r.sp] || 0) + 1;
     expect(bySp).toEqual({ Alan: 2, Dino: 1, Khen: 1 });
-    expect(H.state.rpcs.every(c => c.args.p_year === 2026)).toBe(true);
-    expect(H.state.rpcs.some(c => c.args.p_sp === "All")).toBe(false);
-    expect(res.scopes).toBe(3);
+    expect(rows.some(r => r.sp === "All")).toBe(false);
+    expect(res.scopes).toBe(1);
+  });
+
+  it("a customer that changed salesman appears ONCE under the new rep (no ghost scope)", async () => {
+    // The whole bug: an older file had the customer under a blank salesman ("All")
+    // and the newest file assigns it to Simon. The year-replace payload must carry
+    // it once, under Simon — and because the RPC clears the whole year, the old
+    // "All" row is deleted instead of lingering as a double-counting ghost.
+    const files = [
+      { id: "old", kind: "customer", sp: "All", year: 2026, deletedAt: null, uploadedAt: 1000,
+        rows: [{ sp: "All", customer: "XIN", months: months12(100), total: 100 }] },
+      { id: "new", kind: "customer", sp: "All", year: 2026, deletedAt: null, uploadedAt: 2000,
+        rows: [{ sp: "Simon", customer: "XIN", months: months12(100), total: 100 }] },
+    ];
+    await syncCustomersFromFiles(files);
+    expect(H.state.rpcs).toHaveLength(1);
+    expect(H.state.rpcs[0].name).toBe("replace_customers_year");
+    const xin = H.state.rpcs[0].args.p_rows.filter(r => r.customer === "XIN");
+    expect(xin).toHaveLength(1);
+    expect(xin[0].sp).toBe("Simon");
   });
 
   it("surfaces an RPC error instead of silently losing data", async () => {
@@ -277,7 +303,7 @@ describe("recalcAllFacts — one press rebuilds every fact table from the newest
 
     // Customers first, then brands (recalcAllFacts order).
     expect(H.state.rpcs.map(r => r.name)).toEqual([
-      "replace_customers_data",
+      "replace_customers_year",
       "replace_brand_sales_data",
     ]);
     // Weekly board upserted from the deduped invoice files.
@@ -299,7 +325,7 @@ describe("recalcAllFacts — one press rebuilds every fact table from the newest
 });
 
 describe("syncCustomersFromFiles — unrecognised salesman", () => {
-  it("writes NA-salesman customers to an Unassigned scope, not the dropped 'All'", async () => {
+  it("writes NA-salesman customers under Unassigned (not the dropped 'All'), in the year payload", async () => {
     const months = (v) => { const a = new Array(12).fill(0); a[10] = v; return a; };
     await syncCustomersFromFiles([{
       id: 9, kind: "customer", sp: "All", year: 2026, uploadedAt: 1,
@@ -308,7 +334,9 @@ describe("syncCustomersFromFiles — unrecognised salesman", () => {
         { sp: "All", customer: "NA Cust", months: months(100), total: 100 },
       ],
     }]);
-    const scopes = H.state.rpcs.filter(r => r.name === "replace_customers_data").map(r => r.args.p_sp);
-    expect(scopes.sort()).toEqual(["Alan", "Unassigned"]);
+    expect(H.state.rpcs).toHaveLength(1);
+    expect(H.state.rpcs[0].name).toBe("replace_customers_year");
+    const sps = H.state.rpcs[0].args.p_rows.map(r => r.sp).sort();
+    expect(sps).toEqual(["Alan", "Unassigned"]);
   });
 });

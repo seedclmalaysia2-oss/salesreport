@@ -280,60 +280,57 @@ function latestFilePerScope(files, kind) {
   return [...winners.values()];
 }
 
-// Customer files for the same (sp, year) are combined month by month rather
-// than newest-file-wins, so split-period exports ("2026 Sales Analysis by
-// customer 31082026.xlsx" then "… 27092026.xlsx") add up instead of the later
-// one wiping out the earlier months. Returns one synthetic file per scope.
-function mergedCustomerFilesPerScope(files) {
-  const groups = new Map(); // "sp|year" -> [file]
+// All customer files for a YEAR are merged into one authoritative row set
+// (each row keeping its per-row salesperson) via mergeMonthlyRowsByMonth: the
+// newest file owns each month, so split-period exports ("… 31082026.xlsx" then
+// "… 27092026.xlsx") add up and a re-upload supersedes. Grouping by YEAR rather
+// than by file-level sp is what lets the sync replace the whole year at once —
+// the fix for ghost scopes (see syncCustomersFromFiles).
+function mergedCustomerFilesPerYear(files) {
+  const groups = new Map(); // year -> [file]
   for (const f0 of eligibleFactFiles(files, "customer")) {
-    // Customers with an unrecognised salesman ("NA") → "Unassigned", not the
-    // dropped "All" sentinel, so they still count in every company total.
+    // Customers with an unrecognised salesman ("NA"/blank) → "Unassigned", not
+    // the dropped "All" sentinel, so they still count in every company total.
     const f = withUnassignedCustomers(f0);
-    const key = `${f.sp}|${f.year}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(f);
+    if (!groups.has(f.year)) groups.set(f.year, []);
+    groups.get(f.year).push(f);
   }
-  return [...groups.values()].map((grp) => {
+  return [...groups.entries()].map(([year, grp]) => {
     const newest = grp.reduce((a, b) => ((b.uploadedAt || 0) > (a.uploadedAt || 0) ? b : a));
-    return { ...newest, rows: mergeMonthlyRowsByMonth(grp, newest.sp || "All") };
+    return { year, rows: mergeMonthlyRowsByMonth(grp, newest.sp || "All") };
   });
 }
 
-// Replay every "latest per (sp, year)" customer file into customers_data via
-// the replace_customers_data RPC. The RPC does DELETE-then-INSERT atomically
-// as SECURITY DEFINER, matches sp case- and whitespace-insensitively (so
-// legacy 'SEED Malaysia' rows get cleared alongside the canonical 'Seed
-// Malaysia'), and refuses to overwrite a scope with an empty payload — which
-// stops a stray zero-row file from wiping the charts.
+// Replay the latest customer files into customers_data, ONE WHOLE YEAR at a
+// time, via the replace_customers_year RPC (migration 0025). The RPC DELETEs
+// every row for the year then re-inserts the merged rows (each with its own sp),
+// as SECURITY DEFINER, refusing an empty payload so a stray zero-row sync can't
+// wipe a year.
 //
-// The client mirrors that guard: files that parsed to zero rows are skipped
-// so we never even call the RPC for them, and the checklist reports how many
-// files were skipped so the admin sees the coverage gap.
+// Why by year, not per (sp, year): the "Sales Analysis by Customer" export is a
+// single year file that fans out into one scope per rep via its Salesman column.
+// Replacing per (sp, year) only ever touches the reps PRESENT in the current
+// file, so when a customer's salesman changes between uploads (e.g. the admin
+// fills in a blank Salesman cell, moving it from "Unassigned"/"All" to "Simon"),
+// the old scope is never cleared and the customer is double-counted (once under
+// the real rep, once under the ghost). Clearing the whole year each sync makes
+// that impossible: customers_data always reflects exactly the current files.
+// An empty merge still skips the RPC, so a year with no rows is left untouched.
 export async function syncCustomersFromFiles(files) {
-  const winners = mergedCustomerFilesPerScope(files);
-  if (!winners.length) {
+  const perYear = mergedCustomerFilesPerYear(files);
+  if (!perYear.length) {
     return { files: 0, scopes: 0, rows: 0, scopeLabels: [], skipped: [] };
   }
   let totalInserted = 0;
   const scopeLabels = [];
   const skipped = [];
-  for (const f of winners) {
-    // Split the file's rows by their per-row salesperson. The year-only exports
-    // ("2026 Sales Analysis by customer.xlsx") carry a Salesman column, so ONE
-    // file feeds several (sp, year) scopes — attributing each customer to their
-    // rep is the whole reason that column exists. Rows with no recognised
-    // salesman fall back to the file's own sp: legacy per-SP exports set that
-    // from the filename ("Alan 2025 …"), and a year-only file with an unreadable
-    // salesman lands in "All". Before this, the per-row sp was dropped and every
-    // customer was written under a single f.sp bucket ("All" for year-only
-    // files), so the per-salesperson customer analysis silently went missing.
-    const groups = new Map(); // sp -> [{customer, months, total}]
-    for (const r of f.rows || []) {
+  for (const { year, rows } of perYear) {
+    // One payload for the whole year, each row keeping its per-row salesperson.
+    const payload = [];
+    for (const r of rows || []) {
       if (!r || !r.customer) continue;
-      const sp = r.sp || f.sp || "All";
-      if (!groups.has(sp)) groups.set(sp, []);
-      groups.get(sp).push({
+      payload.push({
+        sp: r.sp || "Unassigned",
         customer: r.customer,
         months:
           Array.isArray(r.months) && r.months.length === 12
@@ -342,25 +339,23 @@ export async function syncCustomersFromFiles(files) {
         total: Number(r.total) || 0,
       });
     }
-    if (groups.size === 0) {
-      skipped.push(`${f.sp} ${f.year} (0 rows)`);
+    if (payload.length === 0) {
+      skipped.push(`${year} (0 rows)`);
       continue;
     }
-    for (const [sp, rows] of groups) {
-      const { data, error } = await supabase.rpc("replace_customers_data", {
-        p_sp: sp,
-        p_year: f.year,
-        p_rows: rows,
-      });
-      if (error) {
-        throw new Error(`Replacing ${sp} ${f.year} failed: ${error.message}`);
-      }
-      totalInserted += data?.[0]?.inserted ?? rows.length;
-      scopeLabels.push(`${sp} ${f.year}`);
+    const { data, error } = await supabase.rpc("replace_customers_year", {
+      p_year: year,
+      p_rows: payload,
+    });
+    if (error) {
+      throw new Error(`Replacing ${year} failed: ${error.message}`);
     }
+    totalInserted += data?.[0]?.inserted ?? payload.length;
+    const reps = new Set(payload.map((p) => p.sp)).size;
+    scopeLabels.push(`${year} (${reps} rep${reps === 1 ? "" : "s"})`);
   }
   return {
-    files: winners.length,
+    files: perYear.length,
     scopes: scopeLabels.length,
     rows: totalInserted,
     scopeLabels,
