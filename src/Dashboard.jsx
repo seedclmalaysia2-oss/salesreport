@@ -163,7 +163,7 @@ function ChartPatterns({ colors, order }) {
 // is split. The bright dark-theme values (#34D399 etc.) sit at ~2.3–3:1 on the
 // light "sunlight" themes, so a headline number or a trend arrow was failing
 // contrast exactly where daylight legibility matters most. The light variants
-// are darkened to clear 4.5:1 on the soft-blue light background (#DCE9F7) while
+// are darkened to clear 4.5:1 on the old soft-blue light background (#DCE9F7; now white) while
 // holding their hue, and still give white text ≥5:1 so button fills work.
 // ok=ahead, bad=behind, watch=near-target, info=neutral, accent=Signal Orange,
 // qty=quantity charts, alt=incidental purple.
@@ -373,19 +373,18 @@ const THEMES = {
     status: STATUS_LIGHT,
     categories: CATEGORY_COLORS_LIGHT,
     axisRef: "#54657A",
-    // Soft blue, not stark white: the near-white #F1F5F9 read as glary in
-    // daylight. A calmer blue (L≈0.80) cuts the glare; the ink stays near-black
-    // (14.6:1) and the tint is a darker navy so muted labels/borders read
-    // stronger. The status/series palettes above were re-darkened to hold AA on
-    // this background (all ≥4.58:1; series min ΔE 38).
-    name: "Light", subtitle: "Soft blue · daylight", mode: "light",
-    bg: "#DCE9F7",
+    // White (owner's preference, 2026-11-18), replacing the soft blue #DCE9F7.
+    // The status/series palettes above were tuned to hold AA on that darker
+    // blue, so they clear it with more room on white. The navy tint keeps
+    // muted labels and card borders visible against white.
+    name: "Light", subtitle: "White · daylight", mode: "light",
+    bg: "#FFFFFF",
     text: "#0F172A",
     tintRgb: "15, 26, 50",
     chartTickFill: "rgba(15, 26, 50, 0.72)",
     chartTickFillDim: "rgba(15, 26, 50, 0.88)",
     chartGrid: "rgba(15, 26, 50, 0.12)",
-    tooltipBg: "rgba(247, 250, 254, 0.98)",
+    tooltipBg: "rgba(255, 255, 255, 0.98)",
     tooltipBorder: "rgba(15, 26, 50, 0.22)",
     tooltipText: "#0F172A",
     cellTrack: "rgba(15, 26, 50, 0.07)",

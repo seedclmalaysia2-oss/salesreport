@@ -67,7 +67,7 @@ export const SCREEN_THEME = {
   },
   [LIGHT_KEY]: {
     mode: "light",
-    bg: "#F1F5F9",
+    bg: "#FFFFFF",
     ink: "#0F172A",
     sub: "rgba(15,23,42,0.65)",
     label: "rgba(15,23,42,0.6)",
