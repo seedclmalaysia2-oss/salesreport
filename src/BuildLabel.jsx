@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 // with a refresh button beside it. "test build" on a preview deployment, under
 // `vite dev`, or when the lookup fails. The refresh is a full reload, so a phone
 // that has kept the dashboard open picks up a newer build as well as fresh figures.
-export default function BuildLabel() {
+// The label alone, for the top bar's build badge (TopBar.jsx).
+export function useBuildLabel() {
   const [label, setLabel] = useState(null);
-
   useEffect(() => {
     if (import.meta.env.DEV) return;
     let live = true;
@@ -16,7 +16,11 @@ export default function BuildLabel() {
       .catch(() => {});
     return () => { live = false; };
   }, []);
+  return label;
+}
 
+export default function BuildLabel() {
+  const label = useBuildLabel();
   return (
     <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,minWidth:0}}>
       <span style={{

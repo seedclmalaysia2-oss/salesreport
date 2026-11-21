@@ -16,7 +16,7 @@ function detectPlatform() {
   return "other";
 }
 
-export default function InstallApp({ style }) {
+export default function InstallApp({ style, className }) {
   const [installed, setInstalled] = useState(isStandalone);
   const [open, setOpen] = useState(false);
   const platform = useRef(detectPlatform()).current;
@@ -55,9 +55,9 @@ export default function InstallApp({ style }) {
 
   return (
     <>
-      <button type="button" onClick={click} title="Install the Sales dashboard as an app on this device" style={style}
-        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(var(--tint),0.09)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(var(--tint),0.05)"; }}>
+      <button type="button" onClick={click} title="Install the Sales dashboard as an app on this device" style={style} className={className}
+        onMouseEnter={style ? (e) => { e.currentTarget.style.background = "rgba(var(--tint),0.09)"; } : undefined}
+        onMouseLeave={style ? (e) => { e.currentTarget.style.background = "rgba(var(--tint),0.05)"; } : undefined}>
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M12 3v12" /><path d="m7 11 5 5 5-5" /><path d="M5 21h14" />
         </svg>

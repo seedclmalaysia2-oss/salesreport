@@ -2,8 +2,7 @@ import { useState, useMemo, useEffect, useRef, useDeferredValue, lazy, Suspense 
 import { applyCustCorrections } from "./lib/custCorrections.js";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList, ComposedChart, ReferenceLine } from "recharts";
 import WeeklySalesCard from "./WeeklySalesCard.jsx";
-import InstallApp from "./InstallApp.jsx";
-import BuildLabel from "./BuildLabel.jsx";
+import TopBar from "./TopBar.jsx";
 import { aggregateProductSales, CATEGORY_COLORS_DARK, CATEGORY_COLORS_LIGHT, CATEGORY_ORDER } from "./lib/productCategories.js";
 // The light/dark mode decision is shared with the pre-auth screens (App /
 // LoginScreen) so they agree on the active mode. THEMES below keeps the full
@@ -65,7 +64,7 @@ function useMediaQuery(q) {
 // sideways on a phone, let wide tables scroll inside themselves, and keep
 // tap targets from being cramped.
 const RESPONSIVE_CSS = `
-  html, body { max-width: 100%; overflow-x: hidden; }
+  html, body { max-width: 100%; overflow-x: hidden; overflow-x: clip; }
   * { -webkit-tap-highlight-color: transparent; }
   .seed-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .seed-tabs { scrollbar-width: none; }
@@ -1096,6 +1095,19 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           theme so the pattern base colours track the active series palette. */}
       <ChartPatterns colors={COLORS} order={SALESPEOPLE_ORDER} />
 
+      {/* SEED top navigation (house standard): brand, build, refresh and theme on the
+          left; the year and app-wide links in the middle; who is signed in and the exit
+          icon at the right end. Sticky above everything else. */}
+      <TopBar
+        user={user}
+        years={YEARS}
+        selectedYear={selectedYear}
+        onYear={setSelectedYear}
+        themeMode={tk.mode}
+        onToggleTheme={toggleTheme}
+        onLogout={onLogout}
+      />
+
       <div style={{
         // Flat 2% tint, not a gradient. This band sits on every screen; a
         // resting surface in this system is separated by tint and a hairline,
@@ -1104,14 +1116,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         borderBottom:"1px solid rgba(var(--tint),0.06)",
         padding: isMobile ? "18px 14px 14px" : "28px 32px 20px",
       }}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:16}}>
-          <div>
-            <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:2,color:"rgba(var(--tint),0.62)",marginBottom:6,display:"flex",alignItems:"center",gap:10}}>
-              <span>SEED Malaysia</span>
-              {user?.isAdmin && (
-                <span style={{padding:"2px 8px",background:"color-mix(in srgb, var(--st-accent) 15%, transparent)",color:STATUS.accent,borderRadius:10,fontSize:10,letterSpacing:0.5}}>ADMIN</span>
-              )}
-            </div>
+        {/* The title only: build, refresh, theme, year, install, hub and sign out
+            live in the top bar above. */}
+        <div>
             <h1 style={{fontSize:26,fontWeight:700,margin:0,letterSpacing:-0.5,color:"var(--text)"}}>
               Sales Performance Dashboard
             </h1>
@@ -1121,115 +1128,6 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                 ? `All teams · ${SALESPEOPLE.length} salespeople`
                 : `Restricted to ${user?.sp ?? "your data"}`}
             </div>
-            <BuildLabel />
-          </div>
-          <div style={{display:"flex",alignItems:"flex-start",gap:14,flexWrap:"wrap"}}>
-            {/* Install as a phone / desktop app — same control as the HR dashboard.
-                Hidden when already running as the installed app. */}
-            <InstallApp style={{
-              background:"rgba(var(--tint),0.05)",
-              border:"1px solid rgba(var(--tint),0.12)",
-              color:"var(--text)",
-              borderRadius:20,
-              padding:"6px 14px",
-              fontSize:13,
-              fontWeight:600,
-              cursor:"pointer",
-              fontFamily:"'Inter',sans-serif",
-              display:"flex",
-              alignItems:"center",
-              gap:8,
-              whiteSpace:"nowrap",
-              transition:"background 200ms",
-            }} />
-            {/* Back to the SEED CL HUB portal home — same tab, it's the parent site. */}
-            <a
-              href="https://seedclmalaysiastore.com"
-              title="Back to SEED CL HUB home"
-              style={{
-                background:"rgba(var(--tint),0.05)",
-                border:"1px solid rgba(var(--tint),0.12)",
-                color:"var(--text)",
-                borderRadius:20,
-                padding:"6px 14px",
-                fontSize:13,
-                fontWeight:600,
-                textDecoration:"none",
-                fontFamily:"'Inter',sans-serif",
-                display:"flex",
-                alignItems:"center",
-                gap:8,
-                whiteSpace:"nowrap",
-                transition:"background 200ms",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(var(--tint),0.09)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(var(--tint),0.05)"; }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M3 10.5 12 3l9 7.5" />
-                <path d="M5 9.5V21h14V9.5" />
-              </svg>
-              SEED CL HUB
-            </a>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {YEARS.map(y => <Pill key={y} label={y} active={y===selectedYear} onClick={()=>setSelectedYear(y)} />)}
-            </div>
-            <button
-              onClick={toggleTheme}
-              title={tk.mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              aria-label={tk.mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-              style={{
-                background:"rgba(var(--tint),0.05)",
-                border:"1px solid rgba(var(--tint),0.12)",
-                color:"var(--text)",
-                borderRadius:20,
-                padding:"6px 14px",
-                fontSize:13,
-                fontWeight:600,
-                cursor:"pointer",
-                fontFamily:"'Inter',sans-serif",
-                display:"flex",
-                alignItems:"center",
-                gap:8,
-                transition:"background 200ms",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(var(--tint),0.09)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(var(--tint),0.05)"; }}>
-              {tk.mode === "dark" ? (
-                // Sun — the button switches to light mode.
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="4" />
-                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-                </svg>
-              ) : (
-                // Moon — the button switches to dark mode.
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                </svg>
-              )}
-              {tk.mode === "dark" ? "Light" : "Dark"}
-            </button>
-            {user && (
-              <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 12px 6px 8px",background:"rgba(var(--tint),0.04)",border:"1px solid rgba(var(--tint),0.08)",borderRadius:20}}>
-                <div style={{
-                  width:26,height:26,borderRadius:"50%",
-                  background: user.isAdmin ? STATUS.accent : (COLORS[user.sp] || STATUS.info),
-                  color:"var(--text)",display:"flex",alignItems:"center",justifyContent:"center",
-                  fontSize:11,fontWeight:700,fontFamily:"'Space Mono',monospace"
-                }}>{(user.sp || "?")[0]?.toUpperCase()}</div>
-                <div style={{display:"flex",flexDirection:"column",gap:0,lineHeight:1.1}}>
-                  <div style={{fontSize:12,fontWeight:600}}>{user.isAdmin ? "Admin" : user.sp}</div>
-                  {user.email && <div style={{fontSize:10,color:"rgba(var(--tint),0.65)"}}>{user.email}</div>}
-                </div>
-                {onLogout && (
-                  <button onClick={onLogout} style={{
-                    marginLeft:4,padding:"4px 10px",fontSize:11,fontWeight:600,
-                    background:"transparent",border:"1px solid rgba(var(--tint),0.1)",
-                    color:"rgba(var(--tint),0.7)",borderRadius:14,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"
-                  }}>Sign out</button>
-                )}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* On a phone these 11 tabs wrapped into a wall of buttons that pushed
