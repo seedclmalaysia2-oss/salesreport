@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase, fetchAll, aggregateFromRaw } from "./lib/supabase.js";
 import LoginScreen from "./LoginScreen.jsx";
+import WelcomeScreen from "./WelcomeScreen.jsx";
 import Dashboard from "./Dashboard.jsx";
 // Pre-auth full screens follow the same saved/system light-dark mode as the app.
 import { resolveScreenTheme } from "./lib/theme.js";
@@ -195,6 +196,8 @@ export default function App() {
       setUserLive({
         email: session.user.email,
         sp: profile.sp,
+        // Display name for the welcome screen; falls back to the rep code / email.
+        name: profile.name || profile.full_name || profile.display_name || null,
         isAdmin: !!profile.is_admin,
         // Uploaders (warehouse@, cs@) get the Data tab and the weekly rebuild
         // but none of the admin panels. RLS enforces it (0022).
@@ -365,7 +368,14 @@ export default function App() {
     );
   }
 
-  if (!data || !user) return <LoadingScreen stage={loadStage} />;
+  // Once we know who the user is, greet them by name on the HR-standard welcome
+  // screen while the dashboard data loads. Before the profile resolves (no user
+  // yet) keep the neutral loader.
+  if (!data || !user) {
+    return user
+      ? <WelcomeScreen name={user.name || user.sp} stage={loadStage} />
+      : <LoadingScreen stage={loadStage} />;
+  }
 
   return (
     <>
