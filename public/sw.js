@@ -15,11 +15,11 @@ self.addEventListener("push", (event) => {
   } catch {
     data = { body: event.data ? event.data.text() : "" };
   }
-  const title = data.title || "SEED Weekly Sales";
+  const title = data.title || "SEED MY SALES";
   const options = {
     body: data.body || "",
-    icon: "/icon.svg",
-    badge: "/icon.svg",
+    icon: "/icons/seed-my-sales-v1-192.png",
+    badge: "/icons/seed-my-sales-v1-192.png",
     // Same tag so a re-send replaces the previous alert instead of stacking.
     tag: data.tag || "seed-weekly-sales",
     renotify: true,

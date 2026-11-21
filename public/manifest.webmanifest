@@ -1,28 +1,28 @@
 {
-  "name": "SEED Sales Dashboard",
-  "short_name": "SEED Sales",
+  "name": "SEED MY SALES",
+  "short_name": "SEED MY SALES",
   "description": "Weekly sales, targets and alerts for the SEED Malaysia team.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0D1F4A",
-  "theme_color": "#0D1F4A",
+  "background_color": "#13245A",
+  "theme_color": "#13245A",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "/icons/seed-my-sales-v1-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/icons/seed-my-sales-v1-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icon-maskable-512.png",
+      "src": "/icons/seed-my-sales-v1-512-maskable.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

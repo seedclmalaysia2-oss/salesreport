@@ -1,14 +1,11 @@
 import { useEffect, useState } from "react";
-import markUrl from "./assets/seed-mark.png";
+import logoUrl from "./assets/seed-logo.png";
 
-// HR-standard welcome / loading screen: the SEED lens badge spinning inside a
-// turning ring, greeting the signed-in user by name while their data loads.
-// Shown post-auth (we already know who they are) in place of the generic
-// LoadingScreen. Mirrors the house standard used across SEED's dashboards.
-//
-// Brand: deep navy field (#0D1F4A), white lens badge, SEED blue (#006FBA).
-// `name` is the person; `stage` is the current load step (kept subtle).
-const NAVY = "#0D1F4A";
+// SEED house-standard welcome screen (seed-app-icon skill), shown post-auth while
+// the dashboard loads: the SEED logo (resized only — never cropped or redrawn) in
+// a white disc with a turning blue arc, greeting the signed-in user by name.
+// Navy #13245A matches the app-icon tile and the manifest launch screen.
+const NAVY = "#13245A";
 const BLUE = "#006FBA";
 const COMPANY = "SEED CONTACT LENS (M) SDN BHD";
 
@@ -24,11 +21,12 @@ export default function WelcomeScreen({ name, stage }) {
   return (
     <div style={{
       minHeight: "100vh", width: "100%",
-      background: `radial-gradient(120% 90% at 50% 18%, #163163 0%, ${NAVY} 46%, #081635 100%)`,
+      background: `radial-gradient(120% 90% at 50% 16%, #1c3270 0%, ${NAVY} 48%, #0b1838 100%)`,
       color: "#fff", display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
       fontFamily: "'DM Sans','Inter',system-ui,sans-serif", textAlign: "center",
-      padding: "40px 24px", boxSizing: "border-box",
+      padding: "40px 24px calc(40px + env(safe-area-inset-bottom))", boxSizing: "border-box",
+      overflowX: "hidden",
     }}>
       <style>{`
         @keyframes seedring { to { transform: rotate(360deg); } }
@@ -36,7 +34,7 @@ export default function WelcomeScreen({ name, stage }) {
         @keyframes seeddim { 0%,100% { opacity:.45 } 50% { opacity:.9 } }
       `}</style>
 
-      {/* Lens loader: white SEED badge inside a turning ring */}
+      {/* Lens loader: the SEED logo in a white disc with a turning blue arc */}
       <div style={{ position: "relative", width: 168, height: 168, marginBottom: 30 }}>
         <svg width="168" height="168" viewBox="0 0 168 168"
           style={{ position: "absolute", inset: 0, animation: "seedring 1.15s linear infinite" }}>
@@ -46,19 +44,17 @@ export default function WelcomeScreen({ name, stage }) {
               <stop offset="1" stopColor="#4FA8E0" stopOpacity="1" />
             </linearGradient>
           </defs>
-          <circle cx="84" cy="84" r="79" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="4" />
-          <circle cx="84" cy="84" r="79" fill="none" stroke="url(#seedArc)" strokeWidth="4"
+          <circle cx="84" cy="84" r="80" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="4" />
+          <circle cx="84" cy="84" r="80" fill="none" stroke="url(#seedArc)" strokeWidth="4"
             strokeLinecap="round" strokeDasharray="150 500" />
         </svg>
-        {/* White lens badge with the stacked SEED logo */}
+        {/* White disc holding the company logo (resized only) */}
         <div style={{
-          position: "absolute", inset: 14, borderRadius: "50%", background: "#fff",
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          boxShadow: "0 10px 40px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(13,31,74,0.05)", gap: 3,
+          position: "absolute", inset: 11, borderRadius: "50%", background: "#fff",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 10px 40px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(19,36,90,0.05)",
         }}>
-          <img src={markUrl} alt="" width="40" height="64" style={{ marginBottom: 4 }} />
-          <div style={{ fontSize: 26, fontWeight: 800, color: NAVY, letterSpacing: 1.5, lineHeight: 1 }}>SEED</div>
-          <div style={{ fontSize: 8.5, fontWeight: 700, color: BLUE, letterSpacing: 3, textTransform: "lowercase" }}>contact lens</div>
+          <img src={logoUrl} alt="SEED contact lens" style={{ width: "72%", height: "auto" }} />
         </div>
       </div>
 
@@ -69,12 +65,11 @@ export default function WelcomeScreen({ name, stage }) {
         <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: 0.4, lineHeight: 1.15, marginBottom: 10, color: "#fff" }}>
           {display}
         </div>
-        <div style={{ fontSize: 12.5, fontWeight: 600, letterSpacing: 1.2, color: "#7FB6E6", marginBottom: 2 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, letterSpacing: 1.2, color: "#7FB6E6" }}>
           {COMPANY}
         </div>
       </div>
 
-      {/* subtle loading line */}
       <div style={{ marginTop: 26, minHeight: 18, fontSize: 12, color: "rgba(255,255,255,0.5)", animation: "seeddim 1.8s ease-in-out infinite" }}>
         {stage || "Loading your dashboard…"}
       </div>
@@ -84,8 +79,7 @@ export default function WelcomeScreen({ name, stage }) {
         </div>
       )}
 
-      {/* Powered-by footer */}
-      <div style={{ position: "absolute", bottom: 26, display: "flex", alignItems: "center", gap: 7,
+      <div style={{ position: "absolute", bottom: "calc(24px + env(safe-area-inset-bottom))", display: "flex", alignItems: "center", gap: 7,
         fontSize: 10.5, letterSpacing: 1.5, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" }}>
         <span style={{ width: 5, height: 5, borderRadius: "50%", background: BLUE }} />
         Powered by SEEDCLMALAYSIA
