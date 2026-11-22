@@ -31,7 +31,8 @@ Sales Target/
 # Local plan files
 plans/
 
-# Claude Code session files
-.claude/
+# Claude Code session files (local), except shared skills
+.claude/*
+!.claude/skills/
 
 .vercel
