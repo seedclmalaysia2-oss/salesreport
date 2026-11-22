@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { TIERS, buildTierRanking } from "./lib/customerTiers.js";
+import { TIERS, buildTierRanking, ALL_EX_HOUSE, HOUSE_SP } from "./lib/customerTiers.js";
 import "./drilldown.css";
 
 // Customer drill-down: who the yearly revenue comes from, grouped into the
@@ -72,11 +72,13 @@ function TierRung({ tier, scale, active, onPick, reduceMotion }) {
   );
 }
 
+const inSpScope = (sp, scope) => scope === "All" || (scope === ALL_EX_HOUSE ? sp !== HOUSE_SP : sp === scope);
+
 function Detail({ c, year, scopeLabel, data, scopeSp, brandsLoading, tk, colors, reduceMotion }) {
   // This customer's months (this year vs last) and yearly totals, within the same
   // salesperson scope as the ranking so every figure on screen agrees.
   const { monthly, yearly, brands } = useMemo(() => {
-    const rows = (data.customers || []).filter((r) => r.customer === c.customer && (scopeSp === "All" || r.sp === scopeSp));
+    const rows = (data.customers || []).filter((r) => r.customer === c.customer && inSpScope(r.sp, scopeSp));
     const thisYear = new Array(12).fill(0);
     const lastYear = new Array(12).fill(0);
     const perYear = new Map();
@@ -87,7 +89,7 @@ function Detail({ c, year, scopeLabel, data, scopeSp, brandsLoading, tk, colors,
     }
     const brandMap = new Map();
     for (const r of data.brandSales || []) {
-      if (r.customer !== c.customer || r.year !== year || (scopeSp !== "All" && r.sp !== scopeSp)) continue;
+      if (r.customer !== c.customer || r.year !== year || !inSpScope(r.sp, scopeSp)) continue;
       const e = brandMap.get(r.brand) || { brand: r.brand, amt: 0, qty: 0 };
       e.amt += Number(r.amt) || 0;
       e.qty += Number(r.qty) || 0;
@@ -198,9 +200,14 @@ export default function DrilldownTab({ data, year, years, setYear, selectedSP, s
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(null); // expanded customer name
   const [shown, setShown] = useState(PAGE);
+  // "All Teams except Seed Malaysia" lives here, not in the shared selectedSP, so
+  // other tabs (which only know "All" or a rep) never see an unknown scope.
+  const [exHouse, setExHouse] = useState(false);
+  const excluding = exHouse && selectedSP === "All";
+  const scope = excluding ? ALL_EX_HOUSE : selectedSP;
 
-  const ranking = useMemo(() => buildTierRanking(data.customers, year, selectedSP), [data, year, selectedSP]);
-  const scopeLabel = selectedSP === "All" ? "All Teams" : selectedSP;
+  const ranking = useMemo(() => buildTierRanking(data.customers, year, scope), [data, year, scope]);
+  const scopeLabel = excluding ? `All Teams except ${HOUSE_SP}` : selectedSP === "All" ? "All Teams" : selectedSP;
   const maxShare = Math.max(0, ...ranking.tiers.map((t) => t.share));
 
   const list = useMemo(() => {
@@ -214,7 +221,15 @@ export default function DrilldownTab({ data, year, years, setYear, selectedSP, s
 
   const pickTier = (idx) => { setTier((cur) => (cur === idx ? null : idx)); setShown(PAGE); setOpen(null); };
   const pickYear = (y) => { setYear(y); setTier(null); setShown(PAGE); setOpen(null); };
-  const pickSP = (sp) => { setSelectedSP(sp); setTier(null); setShown(PAGE); setOpen(null); };
+  const pickSP = (sp) => {
+    setExHouse(sp === ALL_EX_HOUSE);
+    setSelectedSP(sp === ALL_EX_HOUSE ? "All" : sp);
+    setTier(null); setShown(PAGE); setOpen(null);
+  };
+  const pillCls = (active) =>
+    `cursor-pointer rounded-full px-4 py-1.5 font-metric text-xs font-semibold outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent ${
+      active ? "bg-accent text-white" : "bg-wash text-muted hover:text-ink"
+    }`;
 
   return (
     <div className="dd-root space-y-6 text-ink">
@@ -240,19 +255,29 @@ export default function DrilldownTab({ data, year, years, setYear, selectedSP, s
 
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Salesperson">
         <span className="w-24 text-sm text-muted">Salesperson</span>
-        {["All", ...salespeople].map((sp) => {
+        <button type="button" aria-pressed={selectedSP === "All" && !excluding} onClick={() => pickSP("All")} className={pillCls(selectedSP === "All" && !excluding)}>
+          All Teams
+        </button>
+        {salespeople.includes(HOUSE_SP) && (
+          <button
+            type="button"
+            aria-pressed={excluding}
+            onClick={() => pickSP(ALL_EX_HOUSE)}
+            title={`Every team except ${HOUSE_SP} (house / overseas accounts)`}
+            className={`${pillCls(excluding)} inline-flex items-center gap-1.5`}
+          >
+            All Teams
+            <span className={`rounded-full px-1.5 py-px text-[10px] leading-4 ${excluding ? "bg-white/20 text-white" : "bg-track text-muted"}`}>
+              <span aria-hidden="true">− </span><span className="sr-only">except </span>{HOUSE_SP}
+            </span>
+          </button>
+        )}
+        <span aria-hidden="true" className="mx-1 h-5 w-px bg-line" />
+        {salespeople.map((sp) => {
           const active = selectedSP === sp;
           return (
-            <button
-              key={sp}
-              type="button"
-              aria-pressed={active}
-              onClick={() => pickSP(sp)}
-              className={`cursor-pointer rounded-full px-4 py-1.5 font-metric text-xs font-semibold outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent ${
-                active ? "bg-accent text-white" : "bg-wash text-muted hover:text-ink"
-              }`}
-            >
-              {sp === "All" ? "All Teams" : sp}
+            <button key={sp} type="button" aria-pressed={active} onClick={() => pickSP(sp)} className={pillCls(active)}>
+              {sp}
             </button>
           );
         })}
@@ -267,7 +292,7 @@ export default function DrilldownTab({ data, year, years, setYear, selectedSP, s
         {ranking.customers.length > 0 && (
           <p className="mt-1 text-sm leading-relaxed text-muted">
             {top.count > 0
-              ? `${plural(top.count, "customer")} at RM 100K or more bring ${pct(top.share)} of ${scopeLabel === "All Teams" ? "all sales" : `${scopeLabel}'s sales`}. `
+              ? `${plural(top.count, "customer")} at RM 100K or more bring ${pct(top.share)} of ${selectedSP === "All" ? (excluding ? `sales outside ${HOUSE_SP}` : "all sales") : `${scopeLabel}'s sales`}. `
               : `No customer reached RM 100K; the largest is ${biggest.customer} at ${money(biggest.total)}. `}
             Pick a band to see who is in it.
             {ranking.unranked > 0 && ` ${plural(ranking.unranked, "customer")} netted zero or less after credit notes and are not ranked.`}
@@ -342,7 +367,7 @@ export default function DrilldownTab({ data, year, years, setYear, selectedSP, s
                         </span>
                       </button>
                       {expanded && (
-                        <Detail c={c} year={year} scopeLabel={scopeLabel} scopeSp={selectedSP} data={data} brandsLoading={brandsLoading} tk={tk} colors={colors} reduceMotion={reduceMotion} />
+                        <Detail c={c} year={year} scopeLabel={scopeLabel} scopeSp={scope} data={data} brandsLoading={brandsLoading} tk={tk} colors={colors} reduceMotion={reduceMotion} />
                       )}
                     </li>
                   );

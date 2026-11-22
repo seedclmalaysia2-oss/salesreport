@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TIERS, tierIndex, buildTierRanking } from "./customerTiers.js";
+import { TIERS, tierIndex, buildTierRanking, ALL_EX_HOUSE } from "./customerTiers.js";
 
 const row = (sp, year, customer, total, month = 0) => {
   const months = new Array(12).fill(0);
@@ -48,6 +48,19 @@ describe("buildTierRanking", () => {
     expect(r.total).toBe(176500);
     expect(r.unranked).toBe(1); // the credit-only customer
     expect(r.customers[0].sps.sort()).toEqual(["Alan", "Dino"]);
+  });
+
+  it("All Teams except Seed Malaysia drops only the house account's sales", () => {
+    const withHouse = [...rows, row("Seed Malaysia", 2026, "GLODISA", 189000), row("Seed Malaysia", 2026, "MID OPTICS", 10000)];
+    const all = buildTierRanking(withHouse, 2026, "All");
+    expect(all.customers[0].customer).toBe("GLODISA");
+    const ex = buildTierRanking(withHouse, 2026, ALL_EX_HOUSE);
+    expect(ex.customers.map((c) => [c.customer, c.total])).toEqual([
+      ["BIG OPTICS", 120000],
+      ["MID OPTICS", 55000],
+      ["SMALL OPTICS", 1500],
+    ]);
+    expect(ex.total).toBe(176500);
   });
 
   it("counts every ringgit once: tier revenue and shares add up", () => {

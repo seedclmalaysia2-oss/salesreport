@@ -27,13 +27,17 @@ export function tierIndex(revenue) {
 const round2 = (v) => Math.round(v * 100) / 100;
 
 // Customer rows { sp, year, customer, months[12], total } -> yearly ranking for
-// one scope. `sp` is a salesperson or "All". Returns
+// one scope. `sp` is a salesperson, "All", or ALL_EX_HOUSE (every rep except the
+// "Seed Malaysia" house/overseas account). Returns
 //   customers: ranked list { rank, customer, total, months, sps, tier, share, prev }
 //   tiers:     one entry per band { idx, label, count, revenue, share, cumulative }
 //   total:     revenue of the ranked customers
 //   unranked:  customers whose net revenue for the year is zero or negative
+export const HOUSE_SP = "Seed Malaysia";
+export const ALL_EX_HOUSE = "All-ex-house";
+
 export function buildTierRanking(rows, year, sp) {
-  const inScope = (r) => sp === "All" || r.sp === sp;
+  const inScope = (r) => sp === "All" || (sp === ALL_EX_HOUSE ? r.sp !== HOUSE_SP : r.sp === sp);
   const byCustomer = new Map();
   const prev = new Map();
   for (const r of rows || []) {
