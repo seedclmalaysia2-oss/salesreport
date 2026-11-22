@@ -1,0 +1,36 @@
+/* Tailwind for the Customer Analysis tab only. Same arrangement as
+   customerbrand.css: no preflight, utilities generated from
+   CustomerAnalysisTab.jsx alone, colours mapped to the dashboard's theme
+   variables so Slate and Light both work. */
+@layer theme, base, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./CustomerAnalysisTab.jsx";
+
+@layer base {
+  .ca-root button { background: transparent; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: inherit; }
+  .ca-root :where(ul, ol, dl, dd, h2, h3, h4, p, table) { margin: 0; padding: 0; list-style: none; }
+  .ca-root :where(h2, h3, h4) { font-size: inherit; font-weight: inherit; }
+  .ca-root table { border-collapse: collapse; }
+  .ca-root input, .ca-root select { font: inherit; color: inherit; }
+  /* Account cells in the portfolio map. Plain CSS so 800 of them stay cheap. */
+  .ca-root .ca-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .ca-root .ca-dot[data-dim="1"] { opacity: 0.16; }
+  @media (max-width: 640px) { .ca-root .ca-dot { width: 8px; height: 8px; } }
+}
+
+@theme inline {
+  --color-ink: var(--text);
+  --color-muted: rgba(var(--tint), 0.68);
+  --color-faint: rgba(var(--tint), 0.5);
+  --color-line: rgba(var(--tint), 0.13);
+  --color-hair: rgba(var(--tint), 0.07);
+  --color-wash: rgba(var(--tint), 0.04);
+  --color-track: rgba(var(--tint), 0.1);
+  --color-accent: var(--st-accent);
+  --color-ok: var(--st-ok);
+  --color-bad: var(--st-bad);
+  --color-watch: var(--st-watch);
+  --color-info: var(--st-info);
+  --font-metric: "Space Mono", monospace;
+}

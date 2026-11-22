@@ -7,6 +7,8 @@
 // Loading it on demand keeps it out of the initial bundle, so a normal user
 // never downloads it. parseFilename()/isSalesBrand() below stay synchronous
 // because they are pure string work and the upload UI calls them per keystroke.
+import { parseMasterRows } from "./customerAnalysis.js";
+
 let _xlsxPromise = null;
 function loadXlsx() {
   if (!_xlsxPromise) _xlsxPromise = import("xlsx");
@@ -48,6 +50,11 @@ const STOCK_DETAIL_FNAME_RE = /^Stock Sales Analysis - Detail\s+(.+?)\.xlsx$/i;
 // Customer × Product-Group cross-tab: "Stock Sales Analysis - Summary <year>.xlsx"
 // (no salesman prefix, no "by Brand"). One workbook per year; columns are Autocount
 // Stock-Group codes, each with an Amt and a Qty sub-column.
+// Customer master list: "Customer Data 2026.xlsx" (also "Customer Data.xlsx",
+// "Customer List 2026.xlsx"). One row per account with its type, town, state,
+// owner and open date — feeds the Customer Analysis tab, not the sales charts.
+const CUSTOMER_MASTER_FNAME_RE = /^Customer (?:Data|List|Master)(?:\s+(\d{4}))?(?:\s+\d{6,8})?\.xlsx$/i;
+
 const GROUP_SUMMARY_FNAME_RE = new RegExp(`^Stock Sales Analysis - Summary\\s+(\\d{4})${STAMP}\\.xlsx$`, "i");
 
 // Brand IDs ending in FC (Free of Charge / boxes), T or TR (Trial Lens / pieces)
@@ -105,6 +112,10 @@ export function parseFilename(name) {
       kind: "Stock Sales Analysis - Detail",
       periodLabel: suffix.trim(),
     };
+  }
+  const cm = name.match(CUSTOMER_MASTER_FNAME_RE);
+  if (cm) {
+    return { sp: null, year: cm[1] ? parseInt(cm[1], 10) : null, kind: "Customer Data", periodLabel: null };
   }
   const gm = name.match(GROUP_SUMMARY_FNAME_RE);
   if (gm) {
@@ -627,6 +638,20 @@ export async function parseFile(file) {
       kind: "invoice",
       sp: null,
       year: yearFromRows ?? fnameInfo.year,
+      rowCount: parsed.length,
+      rows: parsed,
+    };
+  } else if (fnameInfo.kind === "Customer Data") {
+    const parsed = parseMasterRows(rows);
+    if (!parsed.length) {
+      return { ok: false, file: file.name, error: "No 'Customer ID' + 'Type' header row found" };
+    }
+    return {
+      ok: true,
+      file: file.name,
+      kind: "master",
+      sp: null,
+      year: fnameInfo.year,
       rowCount: parsed.length,
       rows: parsed,
     };

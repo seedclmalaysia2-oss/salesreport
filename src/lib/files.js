@@ -175,8 +175,11 @@ export async function uploadFile(file, parsed, { visibility = VISIBILITY.PRIVATE
       /data_files_kind_check|violates check constraint.*kind/i.test(error.message || "");
     if (isKindCheck) {
       throw new Error(
-        `Saving ${file.name} failed: the database is on an older migration that only allows kind='customer' or 'brand'. ` +
-        `Apply supabase/migrations/0009_add_invoice_kind.sql in the SQL Editor, then try the upload again.`
+        row.kind === "master"
+          ? `Saving ${file.name} failed: the database does not accept customer-list files yet. ` +
+            `Run supabase/migrations/0026_customer_master_kind.sql in the Supabase SQL Editor, then upload again.`
+          : `Saving ${file.name} failed: the database is on an older migration that only allows kind='customer' or 'brand'. ` +
+            `Apply supabase/migrations/0009_add_invoice_kind.sql in the SQL Editor, then try the upload again.`
       );
     }
     throw new Error(`Saving ${file.name} failed: ${error.message}`);
@@ -209,10 +212,15 @@ export async function uploadFile(file, parsed, { visibility = VISIBILITY.PRIVATE
     .update({ deleted_at: new Date().toISOString() })
     .is("deleted_at", null)
     .neq("id", data.id);
+  //   • The customer master list ("Customer Data <year>.xlsx") is a full
+  //     snapshot of every account, so the newest upload replaces every other
+  //     live master file whatever its name.
   supersede =
     row.kind === "invoice" && Number.isFinite(row.year)
       ? supersede.eq("kind", "invoice").eq("year", row.year)
-      : supersede.eq("name", row.name);
+      : row.kind === "master"
+        ? supersede.eq("kind", "master")
+        : supersede.eq("name", row.name);
   const { error: supErr } = await supersede;
   if (supErr) console.warn(`Could not supersede prior copies of ${row.name}:`, supErr.message);
 

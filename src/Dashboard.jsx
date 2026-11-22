@@ -17,6 +17,7 @@ const RoiTab = lazy(() => import("./RoiTab.jsx"));
 const ContractsTab = lazy(() => import("./ContractsTab.jsx"));
 const DrilldownTab = lazy(() => import("./DrilldownTab.jsx"));
 const CustomerBrandTab = lazy(() => import("./CustomerBrandTab.jsx"));
+const CustomerAnalysisTab = lazy(() => import("./CustomerAnalysisTab.jsx"));
 const ConsignmentTab = lazy(() => import("./ConsignmentTab.jsx"));
 import { groupLabel } from "./lib/groupLabels.js";
 import { ALL_EX_HOUSE, HOUSE_SP, isTeamScope, spInScope, scopeName, targetFor } from "./lib/teamScope.js";
@@ -518,7 +519,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   // Ordered list of the tab keys actually shown (Data/Users are admin-only),
   // and the arrow-key handler that drives the WAI-ARIA tabs roving focus.
   const visibleTabKeys = [
-    "overview","monthly","team","customers","yoy","drilldown",
+    "overview","monthly","team","customers","analysis","yoy","drilldown",
     "brands","products","cohort","heatmap","roi","consignment","targets",
     ...(user?.isAdmin ? ["report"] : []),
     ...(user?.canUpload ? ["contracts", "data"] : []),
@@ -1168,6 +1169,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
           <TabButton tabKey="monthly" active={tabState==="monthly"} onClick={()=>setTab("monthly")}>Monthly Trends</TabButton>
           <TabButton tabKey="team" active={tabState==="team"} onClick={()=>setTab("team")}>Team Analysis</TabButton>
           <TabButton tabKey="customers" active={tabState==="customers"} onClick={()=>setTab("customers")}>Top Customers</TabButton>
+          <TabButton tabKey="analysis" active={tabState==="analysis"} onClick={()=>setTab("analysis")}>Customer Analysis</TabButton>
           <TabButton tabKey="yoy" active={tabState==="yoy"} onClick={()=>setTab("yoy")}>Year-over-Year</TabButton>
           <TabButton tabKey="drilldown" active={tabState==="drilldown"} onClick={()=>setTab("drilldown")}>Customer Drill-down</TabButton>
           <TabButton tabKey="brands" active={tabState==="brands"} onClick={()=>setTab("brands")}>Brand Performance</TabButton>
@@ -2237,6 +2239,21 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         {tab === "contracts" && user?.canUpload && (
           <Suspense fallback={<div style={{padding:40,textAlign:"center",color:"rgba(var(--tint),0.6)"}}>Loading contracts…</div>}>
             <ContractsTab data={data} year={selectedYear} user={user} tk={tk} />
+          </Suspense>
+        )}
+
+        {tab === "analysis" && (
+          <Suspense fallback={<div style={{padding:40,textAlign:"center",color:"rgba(var(--tint),0.6)"}}>Loading customer analysis…</div>}>
+            <CustomerAnalysisTab
+              sales={CUSTOMERS}
+              years={YEARS}
+              year={selectedYear}
+              setYear={setSelectedYear}
+              selectedSP={selectedSP}
+              setSelectedSP={setSelectedSP}
+              salespeople={SALESPEOPLE}
+              user={user}
+            />
           </Suspense>
         )}
 

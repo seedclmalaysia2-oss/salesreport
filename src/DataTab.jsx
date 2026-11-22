@@ -41,10 +41,12 @@ function detectedLabel(entryOrKind) {
     if (/^Customer Invoice Listing\b/i.test(name))            return "Customer Invoice Listing";
     if (/Sales Analysis by customer\b/i.test(name) || /^Sales Analysis\s+\d{4}\b/i.test(name)) return "Sales Analysis · Customer";
     if (/Stock Sales Analysis - Summary by [Bb]rand\b/i.test(name)) return "Stock Sales · Brand";
+    if (/^Customer (Data|List|Master)\b/i.test(name))          return "Customer List";
   }
   if (kind === "customer") return "Sales Analysis · Customer";
   if (kind === "brand") return "Stock Sales · Brand";
   if (kind === "invoice") return "Customer Invoice Listing"; // legacy fallback
+  if (kind === "master") return "Customer List";
   return kind || "Unknown";
 }
 
@@ -52,6 +54,7 @@ function kindColor(kind) {
   if (kind === "customer") return "var(--st-ok)";
   if (kind === "brand") return "var(--st-alt)";
   if (kind === "invoice") return "var(--st-info)";
+  if (kind === "master") return "var(--st-watch)";
   return "rgba(var(--tint),0.55)";
 }
 
@@ -1365,7 +1368,9 @@ export default function DataTab({ data, onRefresh }) {
                       {info && <span style={{color:"rgba(var(--tint),0.65)",fontSize:10,fontFamily:"'Space Mono',monospace",flexShrink:0}}>
                         {info.kind === "Customer Invoice Listing"
                           ? `Invoice · ${info.periodLabel || (info.year ?? "—")}`
-                          : `${info.sp} · ${info.year}`}
+                          : info.kind === "Customer Data"
+                            ? "Customer list · replaces the previous one"
+                            : `${info.sp} · ${info.year}`}
                       </span>}
                     </div>
                     <button onClick={() => setSelectedFiles(prev => prev.filter(x => x.name !== f.name))} disabled={uploading} style={{background:"transparent",border:"none",color:"rgba(var(--tint),0.58)",cursor: uploading ? "not-allowed" : "pointer",fontSize:14,padding:"0 0 0 8px"}}>✕</button>
