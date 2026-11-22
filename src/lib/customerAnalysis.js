@@ -21,6 +21,13 @@ export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "
 // space ("TRUE VISION BAHAU" vs "TRUEVISION BAHAU" are two different accounts),
 // so matching tries this first and only falls back to the loose keyOf.
 export const exactOf = (s) => String(s ?? "").toUpperCase().replace(/\s+/g, " ").trim();
+// Known typos in the Autocount customer-type field, folded into the real code.
+const TYPE_FIX = { "SIO-OPTOM-MY": "SIO-OPTM-MY" };
+export const normType = (t) => {
+  const u = String(t ?? "").trim().toUpperCase();
+  return TYPE_FIX[u] || u || "UNTYPED";
+};
+
 export const keyOf = (s) => String(s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 // Owner names on the master list are full names ("ALAN LOH"); the dashboard
@@ -164,7 +171,7 @@ export function parseMasterRows(rows) {
       sp: canonSp(at(row, col.sp)),
       created: excelDate(at(row, col.created)),
       chain: str(at(row, col.chain)).toUpperCase(),
-      type: str(at(row, col.type)).toUpperCase() || "UNTYPED",
+      type: normType(at(row, col.type)),
       town: str(at(row, col.town)).toUpperCase(),
       state: str(at(row, col.state)),
     });
@@ -308,7 +315,7 @@ export function buildAccounts({ master = [], sales = [], year, lapseMonths = 6 }
         name: m.name,
         code: m.code,
         sp: m.sp || topSp || "Unassigned",
-        type: m.type || "UNTYPED",
+        type: normType(m.type),
         chain: m.chain || "",
         town: m.town || "",
         state: area.state,

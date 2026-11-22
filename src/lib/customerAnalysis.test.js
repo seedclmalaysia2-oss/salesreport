@@ -95,3 +95,12 @@ describe("matching", () => {
     expect(new Set(accounts.map((a) => a.id)).size).toBe(2);
   });
 });
+
+describe("type typos", () => {
+  it("folds SIO-OPTOM-MY into SIO-OPTM-MY, including already-stored rows", () => {
+    const master = [{ code: "A", name: "A", sp: "Alan", created: null, chain: "", type: "SIO-OPTOM-MY", town: "", state: "" }];
+    expect(buildAccounts({ master, sales: [], year: 2026 }).accounts[0].type).toBe("SIO-OPTM-MY");
+    const rows = [["Customer ID", "Type"], ["A", "sio-optom-my"]];
+    expect(parseMasterRows(rows)[0].type).toBe("SIO-OPTM-MY");
+  });
+});
