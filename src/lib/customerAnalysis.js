@@ -235,6 +235,39 @@ export function buildAccounts({ master = [], sales = [], year, lapseMonths = 6 }
     if (!ms) e.years.set(r.year, (ms = new Array(12).fill(0)));
     for (let i = 0; i < 12; i++) ms[i] += r.months[i] || 0;
     e.sp.set(r.sp, (e.sp.get(r.sp) || 0) + (r.total || 0));
+    if (r.months.some((v) => v) && !(e.lastYear >= r.year)) { e.lastYear = r.year; e.lastSp = r.sp; }
+  }
+
+  // The customer list sometimes carries one account twice: the same Customer ID
+  // under two owners ("TRUE VISION [BAHAU]" for Dino and Simon) or the code
+  // with and without a space ("EYE PRO EYEWEAR" / "EYEPRO EYEWEAR"). Codes that
+  // are equal once spaces and punctuation are ignored are one account; keep the
+  // row owned by whoever booked its latest sales, then the row whose code is
+  // spelt as in the uploaded sales files, then the newest row.
+  const salesFor = (code) => byKey.get(exactOf(code)) || (loose.get(keyOf(code)) || []).map((k) => byKey.get(k))[0] || null;
+  const groups = new Map();
+  master.forEach((m) => {
+    const k = keyOf(m.code) || `#${groups.size}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(m);
+  });
+  const list = [];
+  const merged = [];
+  for (const rows of groups.values()) {
+    if (rows.length === 1) { list.push(rows[0]); continue; }
+    const e = salesFor(rows[0].code);
+    const score = (m) => [
+      e && e.lastSp && canonSp(m.sp) === e.lastSp ? 1 : 0,
+      byKey.has(exactOf(m.code)) ? 1 : 0,
+      m.created || "",
+    ];
+    const best = [...rows].sort((a, b) => {
+      const x = score(a), y = score(b);
+      for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] > y[i] ? -1 : 1;
+      return 0;
+    })[0];
+    list.push(best);
+    merged.push({ kept: best, dropped: rows.filter((r) => r !== best) });
   }
 
   const used = new Set();
@@ -290,13 +323,13 @@ export function buildAccounts({ master = [], sales = [], year, lapseMonths = 6 }
 
   // Each sales customer is claimed by at most one account: exact code/name
   // matches first (for every account), then the loose fallback for the rest.
-  const hit = new Array(master.length).fill(null);
-  master.forEach((m, i) => {
+  const hit = new Array(list.length).fill(null);
+  list.forEach((m, i) => {
     for (const k of [exactOf(m.code), exactOf(m.name)]) {
       if (k && byKey.has(k) && !used.has(k)) { hit[i] = k; used.add(k); break; }
     }
   });
-  master.forEach((m, i) => {
+  list.forEach((m, i) => {
     if (hit[i]) return;
     for (const lk of [keyOf(m.code), keyOf(m.name)]) {
       const k = (loose.get(lk) || []).find((x) => !used.has(x));
@@ -304,9 +337,31 @@ export function buildAccounts({ master = [], sales = [], year, lapseMonths = 6 }
     }
   });
 
-  for (let i = 0; i < master.length; i++) {
-    const m = master[i];
-    const e = hit[i] ? byKey.get(hit[i]) : null;
+  // Spelling variants of the matched code in the sales files ("EYE PRO
+  // EYEWEAR" vs "EYEPRO EYEWEAR") are the same account: fold them in too.
+  const mergeEntries = (keys) => {
+    if (keys.length === 1) return byKey.get(keys[0]);
+    const out = { name: byKey.get(keys[0]).name, years: new Map(), sp: new Map() };
+    for (const k of keys) {
+      const e = byKey.get(k);
+      for (const [y, ms] of e.years) {
+        const t = out.years.get(y) || new Array(12).fill(0);
+        for (let i = 0; i < 12; i++) t[i] += ms[i];
+        out.years.set(y, t);
+      }
+      for (const [sp, v] of e.sp) out.sp.set(sp, (out.sp.get(sp) || 0) + v);
+    }
+    return out;
+  };
+
+  for (let i = 0; i < list.length; i++) {
+    const m = list[i];
+    let e = null;
+    if (hit[i]) {
+      const keys = [hit[i], ...(loose.get(keyOf(hit[i])) || []).filter((k) => k !== hit[i] && !used.has(k))];
+      keys.forEach((k) => used.add(k));
+      e = mergeEntries(keys);
+    }
     const area = normaliseArea(m.state, m.type);
     const topSp = e ? [...e.sp.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] : null;
     const acc = finish(
@@ -354,7 +409,7 @@ export function buildAccounts({ master = [], sales = [], year, lapseMonths = 6 }
     if (acc) accounts.push(acc);
   }
 
-  return { accounts, asOf: M, hasData: asOf >= 0 };
+  return { accounts, asOf: M, hasData: asOf >= 0, merged };
 }
 
 export const filterAccounts = (accounts, { scope = "All", type = null, region = null, state = null } = {}) =>

@@ -80,19 +80,37 @@ describe("buildAccounts", () => {
   });
 });
 
-describe("matching", () => {
-  it("never gives two accounts the same sales when codes differ only by spacing", () => {
-    const master = [
-      { code: "TRUE VISION BAHAU", name: "True Vision (Bahau)", sp: "Dino", created: "2021-01-01", chain: "", type: "A", town: "", state: "" },
-      { code: "TRUEVISION BAHAU", name: "Truevision Sdn Bhd", sp: "Simon", created: "2016-01-01", chain: "", type: "A", town: "", state: "" },
+describe("duplicate list entries", () => {
+  const row = (code, name, sp, created) => ({ code, name, sp, created, chain: "", type: "A", town: "", state: "" });
+  it("keeps the row owned by whoever booked the latest sales (same Customer ID twice)", () => {
+    const master = [row("TRUE VISION [BAHAU]", "True Vision (Bahau)", "Dino", "2021-10-20"), row("TRUE VISION [BAHAU]", "Truevision Sdn Bhd", "Simon", "2016-09-07")];
+    const sales = [
+      { sp: "Khen", year: 2023, customer: "TRUE VISION [BAHAU]", months: mo({ 0: 430 }), total: 430 },
+      { sp: "Dino", year: 2025, customer: "TRUE VISION [BAHAU]", months: mo({ 0: 114 }), total: 114 },
     ];
+    const r = buildAccounts({ master, sales, year: 2025 });
+    expect(r.accounts).toHaveLength(1);
+    expect(r.accounts[0].sp).toBe("Dino");
+    expect(r.accounts[0].ytd).toBe(114);
+    expect(r.merged).toHaveLength(1);
+  });
+  it("keeps the code spelt as in the sales upload when spacing differs", () => {
+    const master = [row("EYE PRO EYEWEAR", "Eye Pro (Bentong)", "Alan", "2017-06-14"), row("EYEPRO EYEWEAR", "Eyepro Sdn Bhd", "Alan", "2023-01-30")];
+    const sales = [{ sp: "Alan", year: 2026, customer: "EYEPRO EYEWEAR", months: mo({ 0: 246 }), total: 246 }];
+    const { accounts } = buildAccounts({ master, sales, year: 2026 });
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0].code).toBe("EYEPRO EYEWEAR");
+    expect(accounts[0].ytd).toBe(246);
+  });
+  it("folds sales spelling variants into the one account", () => {
+    const master = [row("TRUE VISION BAHAU", "True Vision", "Dino", "2021-01-01")];
     const sales = [
       { sp: "Dino", year: 2026, customer: "TRUE VISION BAHAU", months: mo({ 0: 100 }), total: 100 },
       { sp: "Simon", year: 2026, customer: "TRUEVISION BAHAU", months: mo({ 0: 7 }), total: 7 },
     ];
     const { accounts } = buildAccounts({ master, sales, year: 2026 });
-    expect(accounts.map((a) => a.ytd)).toEqual([100, 7]);
-    expect(new Set(accounts.map((a) => a.id)).size).toBe(2);
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0].ytd).toBe(107);
   });
 });
 

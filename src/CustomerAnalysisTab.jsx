@@ -223,7 +223,7 @@ export default function CustomerAnalysisTab({ sales, years, year, setYear, selec
     );
   }
 
-  const { asOf, hasData } = built;
+  const { asOf, hasData, merged = [] } = built;
   const period = asOf === 11 ? String(year) : `Jan–${MONTHS[asOf]} ${year}`;
   const lyPeriod = asOf === 11 ? String(year - 1) : `Jan–${MONTHS[asOf]} ${year - 1}`;
   const sinceIdx = year * 12 + asOf - lapse + 1;
@@ -582,7 +582,7 @@ export default function CustomerAnalysisTab({ sales, years, year, setYear, selec
         </Section>
       )}
 
-      {(unlisted.length > 0 || noArea > 0) && (
+      {(unlisted.length > 0 || noArea > 0 || merged.length > 0) && (
         <Section title="Tidy the customer list" note="Fixing these in Autocount and re-exporting the list makes the type and area figures complete.">
           <ul className="space-y-1 text-sm text-muted">
             {unlisted.length > 0 && (
@@ -594,6 +594,23 @@ export default function CustomerAnalysisTab({ sales, years, year, setYear, selec
                   <p className="mt-2 columns-1 text-xs sm:columns-2 xl:columns-3">
                     {unlisted.sort((a, b) => b.ytd - a.ytd).map((a) => <span key={a.id} className="block truncate">{a.name} <span className="text-faint">· {a.sp}</span></span>)}
                   </p>
+                </details>
+              </li>
+            )}
+            {merged.length > 0 && (
+              <li>
+                <details>
+                  <summary className="cursor-pointer">
+                    <strong className="text-ink">{plural(merged.length, "account")}</strong> {merged.length === 1 ? "is" : "are"} on the list more than once and counted once here.
+                  </summary>
+                  <ul className="mt-2 space-y-1 text-xs">
+                    {merged.map((g) => (
+                      <li key={g.kept.code + g.kept.name}>
+                        Kept <span className="font-metric text-ink">{g.kept.code}</span> ({g.kept.name}, {g.kept.sp}); merged{" "}
+                        {g.dropped.map((d) => `${d.code} (${d.name}, ${d.sp})`).join(", ")}
+                      </li>
+                    ))}
+                  </ul>
                 </details>
               </li>
             )}
