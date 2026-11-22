@@ -136,6 +136,18 @@ describe("sales aliases", () => {
     expect(accounts[0].ly).toBe(190);
     expect(accounts[0].ytd).toBe(600);
   });
+
+  it("folds a code changed mid-year into the new list code (Forsight)", () => {
+    const master = [{ code: "FORSIGHT OPT", name: "FORSIGHT OPTOMETRIST", sp: "Khen", created: "2026-07-10", chain: "", type: "A", town: "", state: "" }];
+    const sales = [
+      { sp: "Khen", year: 2026, customer: "FORSIGHT OPTOMETRIST", months: mo({ 0: 200 }), total: 200 },
+      { sp: "Khen", year: 2026, customer: "FORSIGHT OPT", months: mo({ 7: 300 }), total: 300 },
+    ];
+    const { accounts } = buildAccounts({ master, sales, year: 2026 });
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0].listed).toBe(true);
+    expect(accounts[0].ytd).toBe(500);
+  });
 });
 
 describe("re-coded accounts opened later", () => {

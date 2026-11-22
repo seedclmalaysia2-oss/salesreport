@@ -33,6 +33,12 @@ export const SALES_ALIASES = {
   // Registered company vs store signboard: Pro Eye Optique PLT trades as 1.0 Provision.
   "PRO EYE OPTIQUE PLT": "1.0 PROVISION",
   "PRO EYE OPTIQUE-ADV": "1.0 PROVISION",
+  // Old codes that stopped the month the new list code opened (2026).
+  // Take A Look pairing is a best guess (both Selangor, SIO-OPTC, Dino); swap if wrong.
+  "TAKE A LOOK OPTICAL": "TAKE A LOOK - KEPONG",
+  "TAKE A LOOK OPTOM": "TAKE A LOOK - KD",
+  "FORSIGHT OPTOMETRIST": "FORSIGHT OPT",
+  "I LOOK OPTIC": "I LOOK GALLERY",
 };
 
 // Known typos in the Autocount customer-type field, folded into the real code.
