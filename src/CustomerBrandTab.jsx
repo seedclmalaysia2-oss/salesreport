@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { buildCustomerBrand, pairKey, TOP_BRAND_COLOURS } from "./lib/customerBrand.js";
 import "./customerbrand.css";
+import { ALL_EX_HOUSE, HOUSE_SP, scopeName } from "./lib/teamScope.js";
 
 // Customer x Brand, rebuilt around the two questions people actually ask:
 //   "What does each customer buy?"  -> one stacked bar per customer, split by brand
@@ -27,11 +28,23 @@ const pct = (v) => {
 };
 const plural = (n, word) => `${n.toLocaleString("en-MY")} ${word}${n === 1 ? "" : "s"}`;
 
-function Pills({ label, value, options, onPick }) {
+// "All Teams − Seed Malaysia": same pill, with the excluded account as an inset tag.
+function ExHouseLabel({ active }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      All Teams
+      <span className={`rounded-full px-1.5 py-px text-[10px] leading-4 ${active ? "bg-white/20 text-white" : "bg-track text-muted"}`}>
+        <span aria-hidden="true">− </span><span className="sr-only">except </span>{HOUSE_SP}
+      </span>
+    </span>
+  );
+}
+
+function Pills({ label, value, options, onPick, divideAfter }) {
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label={label}>
       <span className="w-24 shrink-0 text-sm text-muted">{label}</span>
-      {options.map(([key, text]) => (
+      {options.map(([key, text]) => [
         <button
           key={key}
           type="button"
@@ -42,8 +55,9 @@ function Pills({ label, value, options, onPick }) {
           }`}
         >
           {text}
-        </button>
-      ))}
+        </button>,
+        key === divideAfter && <span key={`${key}-div`} aria-hidden="true" className="mx-1 h-5 w-px bg-line" />,
+      ])}
     </div>
   );
 }
@@ -79,7 +93,7 @@ export default function CustomerBrandTab({ rows, year, years, setYear, selectedS
   const fmtFull = isAmt ? money : (v) => `${units(v)} units`;
 
   const rollup = useMemo(() => buildCustomerBrand(rows, year, selectedSP, metric), [rows, year, selectedSP, metric]);
-  const scopeLabel = selectedSP === "All" ? "All Teams" : selectedSP;
+  const scopeLabel = scopeName(selectedSP);
 
   const colourOf = useMemo(() => {
     const m = new Map(rollup.topBrands.map((b, i) => [b, palette[i % palette.length]]));
@@ -115,7 +129,17 @@ export default function CustomerBrandTab({ rows, year, years, setYear, selectedS
     <div className="cb-root space-y-6 text-ink">
       <div className="space-y-3">
         <Pills label="Year" value={year} options={years.map((y) => [y, String(y)])} onPick={(y) => { setYear(y); reset(); }} />
-        <Pills label="Salesperson" value={selectedSP} options={[["All", "All Teams"], ...salespeople.map((s) => [s, s])]} onPick={set(setSelectedSP)} />
+        <Pills
+          label="Salesperson"
+          value={selectedSP}
+          options={[
+            ["All", "All Teams"],
+            ...(salespeople.includes(HOUSE_SP) ? [[ALL_EX_HOUSE, <ExHouseLabel key="x" active={selectedSP === ALL_EX_HOUSE} />]] : []),
+            ...salespeople.map((s) => [s, s]),
+          ]}
+          divideAfter={salespeople.includes(HOUSE_SP) ? ALL_EX_HOUSE : "All"}
+          onPick={set(setSelectedSP)}
+        />
         <Pills label="Show" value={metric} options={[["amt", "Revenue"], ["qty", "Quantity"]]} onPick={set(setMetric)} />
         {toggle}
       </div>

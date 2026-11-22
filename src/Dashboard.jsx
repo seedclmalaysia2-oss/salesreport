@@ -19,6 +19,7 @@ const DrilldownTab = lazy(() => import("./DrilldownTab.jsx"));
 const CustomerBrandTab = lazy(() => import("./CustomerBrandTab.jsx"));
 const ConsignmentTab = lazy(() => import("./ConsignmentTab.jsx"));
 import { groupLabel } from "./lib/groupLabels.js";
+import { ALL_EX_HOUSE, HOUSE_SP, isTeamScope, spInScope, scopeName, targetFor } from "./lib/teamScope.js";
 
 // Uploads used to be parsed into these keys while the dashboard ran open to
 // everyone, and the cache took priority over the server's response. With
@@ -323,13 +324,41 @@ const TabButton = ({active, children, onClick, onKeyDown, accent, tabKey}) => (
     }}>{children}</button>
 );
 
-const Pill = ({label, active, onClick}) => (
-  <button onClick={onClick} style={{
+const Pill = ({label, active, onClick, title}) => (
+  <button type="button" aria-pressed={active} title={title} onClick={onClick} style={{
     background: active ? "var(--st-accent)" : "rgba(var(--tint),0.05)",
     color: active ? "#fff" : "rgba(var(--tint),0.5)",
     border: "none", borderRadius: 20, padding: "6px 16px", fontSize: 12, fontWeight: 600,
     cursor: "pointer", transition: "all 0.2s", fontFamily: "'Space Mono',monospace"
   }}>{label}</button>
+);
+
+// Salesperson filter row shared by every tab: the two team-wide scopes ("All
+// Teams" and "All Teams - Seed Malaysia"), a hairline divider, then each rep.
+const ExHouseTag = ({active}) => (
+  <span style={{
+    marginLeft: 6, padding: "1px 7px", borderRadius: 10, fontSize: 10, fontWeight: 600,
+    background: active ? "rgba(255,255,255,0.22)" : "rgba(var(--tint),0.08)",
+    color: active ? "#fff" : "rgba(var(--tint),0.55)",
+  }}>
+    <span aria-hidden="true">− </span><span style={{position:"absolute",width:1,height:1,overflow:"hidden",clip:"rect(0 0 0 0)"}}>except </span>{HOUSE_SP}
+  </span>
+);
+const TeamPills = ({label, allLabel = "All Teams", reps, value, onPick}) => (
+  <div role="group" aria-label="Salesperson" style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
+    <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>{label}</span>
+    <Pill label={allLabel} active={value==="All"} onClick={()=>onPick("All")} />
+    {reps.includes(HOUSE_SP) && (
+      <Pill
+        label={<span style={{display:"inline-flex",alignItems:"center"}}>{allLabel}<ExHouseTag active={value===ALL_EX_HOUSE} /></span>}
+        active={value===ALL_EX_HOUSE}
+        title={`Every team except ${HOUSE_SP} (house / overseas accounts)`}
+        onClick={()=>onPick(ALL_EX_HOUSE)}
+      />
+    )}
+    <span aria-hidden="true" style={{width:1,height:20,background:"rgba(var(--tint),0.13)",margin:"0 4px"}} />
+    {reps.map(sp => <Pill key={sp} label={sp} active={value===sp} onClick={()=>onPick(sp)} />)}
+  </div>
 );
 
 const Card = ({children, style}) => (
@@ -610,7 +639,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
     TARGETS.some(t => t.sp === sp && t.year === selectedYear && t.target > 0));
 
   useEffect(() => {
-    if (selectedSP !== "All" && !SALESPEOPLE.includes(selectedSP)) setSelectedSP("All");
+    if (selectedSP === ALL_EX_HOUSE ? !SALESPEOPLE.includes(HOUSE_SP) : (selectedSP !== "All" && !SALESPEOPLE.includes(selectedSP))) setSelectedSP("All");
   }, [selectedYear, data]);
 
   // Brand ⇄ Product Group dimension. The Brand Performance and Customer × Brand
@@ -659,22 +688,16 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   const monthlyTrendAcrossYears = useMemo(() => MONTH_NAMES.map((m, i) => {
     const row = { month: m };
     YEARS.forEach(y => {
-      const filtered = selectedSP === "All"
-        ? SUMMARY.filter(s => s.year === y)
-        : SUMMARY.filter(s => s.sp === selectedSP && s.year === y);
+      const filtered = SUMMARY.filter(s => s.year === y && spInScope(s.sp, selectedSP));
       row[y] = filtered.reduce((acc, s) => acc + s.months[i], 0);
     });
     return row;
   }), [data, selectedSP]);
 
   const monthlyActualVsTarget = useMemo(() => MONTH_NAMES.map((m, i) => {
-    const targetSp = selectedSP === "All" ? "_TEAM" : selectedSP;
-    const t = TARGETS.find(x => x.year === selectedYear && x.month === i + 1 && x.sp === targetSp);
-    const target = t ? t.target : 0;
+    const target = targetFor(TARGETS, selectedSP, selectedYear, i + 1);
     let actual = 0;
-    const summary = SUMMARY.filter(s => s.year === selectedYear);
-    if (selectedSP === "All") summary.forEach(s => actual += s.months[i]);
-    else { const s = summary.find(d => d.sp === selectedSP); if (s) actual = s.months[i]; }
+    SUMMARY.filter(s => s.year === selectedYear && spInScope(s.sp, selectedSP)).forEach(s => actual += s.months[i]);
     return { month: m, actual, target, gap: actual - target };
   }), [data, selectedSP, selectedYear]);
   const prevYearTotal = yearTotals[selectedYear - 1] || 0;
@@ -692,7 +715,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   const monthlyQtyData = useMemo(() => {
     return MONTH_NAMES.map((m, i) => {
       const row = { month: m };
-      const filtered = selectedSP === "All" ? SUMMARY : SUMMARY.filter(s => s.sp === selectedSP);
+      const filtered = SUMMARY.filter(s => spInScope(s.sp, selectedSP));
       const inYear = filtered.filter(s => s.year === selectedYear);
       let total = 0;
       inYear.forEach(s => {
@@ -729,7 +752,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   );
   const productTrend = useMemo(() => {
     const rows = PRODUCT_MONTHLY.filter(
-      r => r.year === selectedYear && (selectedSP === "All" || r.sp === selectedSP)
+      r => r.year === selectedYear && spInScope(r.sp, selectedSP)
     );
     const byProduct = new Map(); // product -> { product, months[12], total, bySp: Map }
     const repSet = new Set();
@@ -765,16 +788,14 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   }, [data, selectedYear, selectedSP, productMetric]);
 
   const monthlyData = useMemo(() => {
-    const targetSp = selectedSP === "All" ? "_TEAM" : selectedSP;
     return MONTH_NAMES.map((m, i) => {
       const row = { month: m };
-      const filtered = selectedSP === "All" ? SUMMARY : SUMMARY.filter(s => s.sp === selectedSP);
+      const filtered = SUMMARY.filter(s => spInScope(s.sp, selectedSP));
       filtered.filter(s => s.year === selectedYear).forEach(s => {
         row[s.sp] = s.months[i];
       });
       row.total = filtered.filter(s => s.year === selectedYear).reduce((acc, s) => acc + s.months[i], 0);
-      const t = TARGETS.find(t => t.year === selectedYear && t.month === i + 1 && t.sp === targetSp);
-      row.target = t ? t.target : 0;
+      row.target = targetFor(TARGETS, selectedSP, selectedYear, i + 1);
       return row;
     }).filter((_, i) => {
       const allMonthsThisYear = SUMMARY.filter(s => s.year === selectedYear);
@@ -789,6 +810,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   }, [selectedYear, selectedSP, data]);
 
   const annualTarget = useMemo(() => {
+    if (selectedSP === ALL_EX_HOUSE) return MONTH_NAMES.reduce((a, _, i) => a + targetFor(TARGETS, selectedSP, selectedYear, i + 1), 0);
     const targetSp = selectedSP === "All" ? "_TEAM" : selectedSP;
     return TARGETS
       .filter(t => t.year === selectedYear && t.sp === targetSp)
@@ -803,16 +825,16 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
       if (summary.some(s => s.months[i] > 0)) { lastMonth = i + 1; break; }
     }
     let actual = 0;
-    if (selectedSP === "All") {
-      summary.forEach(s => { for (let i = 0; i < lastMonth; i++) actual += s.months[i]; });
-    } else {
-      const s = summary.find(d => d.sp === selectedSP);
-      if (s) for (let i = 0; i < lastMonth; i++) actual += s.months[i];
-    }
-    const targetSp = selectedSP === "All" ? "_TEAM" : selectedSP;
+    summary.filter(s => spInScope(s.sp, selectedSP))
+      .forEach(s => { for (let i = 0; i < lastMonth; i++) actual += s.months[i]; });
     let target = 0;
-    TARGETS.filter(t => t.year === selectedYear && t.sp === targetSp && t.month <= lastMonth)
-      .forEach(t => { target += t.target; });
+    if (selectedSP === ALL_EX_HOUSE) {
+      for (let m = 1; m <= lastMonth; m++) target += targetFor(TARGETS, selectedSP, selectedYear, m);
+    } else {
+      const targetSp = selectedSP === "All" ? "_TEAM" : selectedSP;
+      TARGETS.filter(t => t.year === selectedYear && t.sp === targetSp && t.month <= lastMonth)
+        .forEach(t => { target += t.target; });
+    }
     return { actual, target, lastMonth };
   }, [selectedYear, selectedSP, data]);
 
@@ -827,6 +849,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         row[sp] = s ? s.total : 0;
       });
       row.total = SALESPEOPLE_ALL.reduce((acc, sp) => acc + (row[sp] || 0), 0);
+      row[ALL_EX_HOUSE] = row.total - (row[HOUSE_SP] || 0);
       return row;
     });
   }, [data]);
@@ -908,7 +931,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
   const brandYearTotals = useMemo(() => {
     const m = new Map();
-    dimRows.filter(r => r.year === selectedYear && (selectedSP === "All" || r.sp === selectedSP)).forEach(r => {
+    dimRows.filter(r => r.year === selectedYear && spInScope(r.sp, selectedSP)).forEach(r => {
       const e = m.get(r.brand) || { amt: 0, qty: 0 };
       e.amt += r.amt; e.qty += r.qty || 0;
       m.set(r.brand, e);
@@ -926,7 +949,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   // Follows the "Filter by SP" pills. dimYears stays unscoped so the chart's year
   // axis doesn't jump around between reps.
   const itemRows = useMemo(
-    () => (selectedSP === "All" ? dimRows : dimRows.filter(r => r.sp === selectedSP)),
+    () => (selectedSP === "All" ? dimRows : dimRows.filter(r => spInScope(r.sp, selectedSP))),
     [dimRows, selectedSP],
   );
   const dimAgg = useMemo(() => {
@@ -1007,7 +1030,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
   const cohort = useMemo(() => {
     const inSet = (sp, year) => {
       const set = new Map();
-      CUSTOMERS.filter(r => r.year === year && r.total > 0 && (sp === "All" || r.sp === sp))
+      CUSTOMERS.filter(r => r.year === year && r.total > 0 && spInScope(r.sp, sp))
         .forEach(r => set.set(r.customer, (set.get(r.customer) || 0) + r.total));
       return set;
     };
@@ -1359,11 +1382,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
         {tab === "monthly" && (
           <>
-            <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>Filter:</span>
-              <Pill label="All Teams" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
-              {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
-            </div>
+            <TeamPills label="Filter:" reps={SALESPEOPLE} value={selectedSP} onPick={setSelectedSP} />
 
             <Card style={{marginBottom:20}}>
               <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>💰 Monthly Revenue Breakdown — {selectedYear}</div>
@@ -1374,9 +1393,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />
-                  {selectedSP === "All" ? (
+                  {isTeamScope(selectedSP) ? (
                     <>
-                      {SALESPEOPLE.filter(sp => SUMMARY.some(s => s.sp === sp && s.year === selectedYear && s.total > 0)).map((sp, idx, arr) => (
+                      {SALESPEOPLE.filter(sp => spInScope(sp, selectedSP) && SUMMARY.some(s => s.sp === sp && s.year === selectedYear && s.total > 0)).map((sp, idx, arr) => (
                         <Bar isAnimationActive={!reduceMotion} key={sp} dataKey={sp} stackId="a" fill={seriesFill(COLORS, sp)} radius={idx === arr.length - 1 ? [3,3,0,0] : [0,0,0,0]}>
                           {idx === arr.length - 1 && (
                             <LabelList
@@ -1424,9 +1443,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                     formatter={(v, name) => [`${v.toLocaleString()} units`, name]}
                   />
                   <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />
-                  {selectedSP === "All" ? (
+                  {isTeamScope(selectedSP) ? (
                     <>
-                      {SALESPEOPLE.filter(sp => SUMMARY.some(s => s.sp === sp && s.year === selectedYear && s.total > 0)).map((sp, idx, arr) => (
+                      {SALESPEOPLE.filter(sp => spInScope(sp, selectedSP) && SUMMARY.some(s => s.sp === sp && s.year === selectedYear && s.total > 0)).map((sp, idx, arr) => (
                         <Bar isAnimationActive={!reduceMotion} key={sp} dataKey={sp} stackId="qty" fill={seriesFill(COLORS, sp)} radius={idx === arr.length - 1 ? [3,3,0,0] : [0,0,0,0]}>
                           {idx === arr.length - 1 && (
                             <LabelList dataKey="total" position="top" formatter={(v) => v > 0 ? v.toLocaleString() : ""} fill={tk.text} fontSize={11} fontFamily="'Space Mono',monospace" />
@@ -1445,7 +1464,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
             <Card>
               <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>
-                Monthly Trend Across Years {selectedSP !== "All" ? `— ${selectedSP}` : "— All Teams"}
+                Monthly Trend Across Years — {scopeName(selectedSP)}
               </div>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={monthlyTrendAcrossYears}>
@@ -1463,7 +1482,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
             {(() => {
               const isAmt = productMetric === "amount";
-              const scopeLabel = selectedSP === "All" ? "All Teams" : selectedSP;
+              const scopeLabel = scopeName(selectedSP);
               const fmtCell = (v) => {
                 if (!v) return "–";
                 return isAmt
@@ -1562,7 +1581,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                         </div>
                       </Card>
 
-                      {selectedSP === "All" && reps.length > 1 && (
+                      {isTeamScope(selectedSP) && reps.length > 1 && (
                         <Card>
                           <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>
                             Product mix by salesperson — {selectedYear}, {isAmt ? "RM" : "units"}
@@ -1826,15 +1845,11 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
         {tab === "yoy" && (
           <>
-            <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>View:</span>
-              <Pill label="All Teams" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
-              {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
-            </div>
+            <TeamPills label="View:" reps={SALESPEOPLE} value={selectedSP} onPick={setSelectedSP} />
 
             <Card style={{marginBottom:20}}>
               <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>
-                {selectedSP === "All" ? "Annual Revenue by Team" : `Annual Revenue — ${selectedSP}`}
+                {selectedSP === "All" ? "Annual Revenue by Team" : selectedSP === ALL_EX_HOUSE ? `Annual Revenue by Team — except ${HOUSE_SP}` : `Annual Revenue — ${selectedSP}`}
               </div>
               <ResponsiveContainer width="100%" height={360}>
                 <BarChart data={yearCompData}>
@@ -1842,9 +1857,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   <XAxis dataKey="year" tick={{fill:tk.chartTickFill,fontSize:12}} axisLine={false} />
                   <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                   <Tooltip content={<CustomTooltip />} />
-                  {selectedSP === "All" && <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />}
-                  {selectedSP === "All" ? (
-                    SALESPEOPLE_ALL.map(sp => (
+                  {isTeamScope(selectedSP) && <Legend formatter={(v) => <span style={{color:"rgba(var(--tint),0.7)",fontSize:11}}>{v}</span>} />}
+                  {isTeamScope(selectedSP) ? (
+                    SALESPEOPLE_ALL.filter(sp => spInScope(sp, selectedSP)).map(sp => (
                       <Bar isAnimationActive={!reduceMotion} key={sp} dataKey={sp} fill={COLORS[sp] || "#888"} radius={[2,2,0,0]} />
                     ))
                   ) : (
@@ -1865,7 +1880,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
             <Card style={{marginBottom:20}}>
               <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>
-                {selectedSP === "All" ? "Total Company Revenue Trend" : `Revenue Trend — ${selectedSP}`}
+                {selectedSP === "All" ? "Total Company Revenue Trend" : `Revenue Trend — ${scopeName(selectedSP)}`}
               </div>
               <ResponsiveContainer width="100%" height={280}>
                 <LineChart data={yearCompData}>
@@ -1873,10 +1888,10 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   <XAxis dataKey="year" tick={{fill:tk.chartTickFill,fontSize:12}} axisLine={false} />
                   <YAxis tick={{fill:tk.chartTickFill,fontSize:11}} axisLine={false} tickFormatter={fmt} />
                   <Tooltip content={<CustomTooltip />} />
-                  {selectedSP === "All" ? (
-                    <Line isAnimationActive={!reduceMotion} type="monotone" dataKey="total" stroke={STATUS.accent} strokeWidth={3} dot={{r:5,fill:STATUS.accent}} name="Total Revenue">
+                  {isTeamScope(selectedSP) ? (
+                    <Line isAnimationActive={!reduceMotion} type="monotone" dataKey={selectedSP === "All" ? "total" : ALL_EX_HOUSE} stroke={STATUS.accent} strokeWidth={3} dot={{r:5,fill:STATUS.accent}} name="Total Revenue">
                       <LabelList
-                        dataKey="total"
+                        dataKey={selectedSP === "All" ? "total" : ALL_EX_HOUSE}
                         position="top"
                         offset={12}
                         formatter={(v) => v > 0 ? fmt(v) : ""}
@@ -1905,11 +1920,11 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               </div>
             </Card>
 
-            {selectedSP === "All" && (
+            {isTeamScope(selectedSP) && (
               <>
                 <div style={{marginTop:24,marginBottom:14,fontSize:14,fontWeight:600}}>YoY by Sales Team</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(min(280px,100%), 1fr))",gap:16}}>
-                  {SALESPEOPLE_ALL.map(sp => {
+                  {SALESPEOPLE_ALL.filter(sp => spInScope(sp, selectedSP)).map(sp => {
                     const spYears = YEARS.map(y => {
                       const s = SUMMARY.find(d => d.sp === sp && d.year === y);
                       return { year: y.toString(), total: s?.total || 0 };
@@ -1978,17 +1993,13 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
         {tab === "brands" && (
           <>
             {dimToggle}
-            <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>Filter by SP:</span>
-              <Pill label="All Teams" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
-              {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
-            </div>
+            <TeamPills label="Filter by SP:" reps={SALESPEOPLE} value={selectedSP} onPick={setSelectedSP} />
 
             <Card style={{marginBottom:20}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:16,flexWrap:"wrap",marginBottom:16}}>
                 <div>
                   <div style={{fontSize:14,fontWeight:600}}>🔍 {dimNoun} Explorer</div>
-                  <div style={{fontSize:12,color:"rgba(var(--tint),0.6)",marginTop:2}}>Pick one {dimNoun.toLowerCase()} to see its revenue &amp; quantity across the years — {selectedSP === "All" ? "all teams" : selectedSP}.</div>
+                  <div style={{fontSize:12,color:"rgba(var(--tint),0.6)",marginTop:2}}>Pick one {dimNoun.toLowerCase()} to see its revenue &amp; quantity across the years — {scopeName(selectedSP)}.</div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:4}}>
                   <label style={{fontSize:11,color:"rgba(var(--tint),0.55)",fontWeight:600,letterSpacing:0.3}}>{dimNoun.toUpperCase()} <span style={{color:"rgba(var(--tint),0.4)",fontWeight:400}}>· {dimOptions.length}</span></label>
@@ -2055,12 +2066,12 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   )}
                 </>
               ) : (
-                <div style={{padding:"30px 0",textAlign:"center",color:"rgba(var(--tint),0.6)"}}>No {dimNoun.toLowerCase()} data for {selectedSP === "All" ? "this scope" : selectedSP}.</div>
+                <div style={{padding:"30px 0",textAlign:"center",color:"rgba(var(--tint),0.6)"}}>No {dimNoun.toLowerCase()} data for {selectedSP === "All" ? "this scope" : scopeName(selectedSP)}.</div>
               )}
             </Card>
 
             <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
-              <KPI label={`Total ${dimNoun}s`} value={brandYearTotals.length} sub={`${selectedYear} · ${selectedSP === "All" ? "all teams" : selectedSP}`} color={STATUS.accent} />
+              <KPI label={`Total ${dimNoun}s`} value={brandYearTotals.length} sub={`${selectedYear} · ${scopeName(selectedSP)}`} color={STATUS.accent} />
               <KPI label={`Top ${dimNoun} (Revenue)`} value={brandYearTotals[0]?.brand || "—"} sub={`RM ${fmt(brandYearTotals[0]?.amt || 0)}`} color={STATUS.info} />
               <KPI label={`Top ${dimNoun} (Qty)`} value={brandYearTotalsByQty[0]?.brand || "—"} sub={`${(brandYearTotalsByQty[0]?.qty || 0).toLocaleString()} pcs/boxes`} color={STATUS.qty} />
               <KPI label={`Total ${dimNoun} Revenue`} value={`RM ${fmt(brandYearTotals.reduce((a,b) => a+b.amt, 0))}`} sub={`${selectedYear}`} color={STATUS.alt} />
@@ -2127,7 +2138,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
               </Card>
 
               <Card>
-                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Top 8 {dimNoun}s — Year over Year{selectedSP === "All" ? "" : ` · ${selectedSP}`}</div>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Top 8 {dimNoun}s — Year over Year{selectedSP === "All" ? "" : ` · ${scopeName(selectedSP)}`}</div>
                 <ResponsiveContainer width="100%" height={380}>
                   <LineChart data={brandYoY}>
                     <CartesianGrid strokeDasharray="3 3" stroke={tk.chartGrid} />
@@ -2160,15 +2171,11 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
         {tab === "cohort" && (
           <>
-            <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>SP:</span>
-              <Pill label="All Teams" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
-              {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
-            </div>
+            <TeamPills label="SP:" reps={SALESPEOPLE} value={selectedSP} onPick={setSelectedSP} />
 
             <div style={{fontSize:13,color:"rgba(var(--tint),0.67)",marginBottom:16}}>
               Comparing <strong style={{color:"var(--text)"}}>{selectedYear}</strong> vs <strong style={{color:"var(--text)"}}>{selectedYear-1}</strong>
-              {" "} · scope: <strong style={{color:"var(--text)"}}>{selectedSP === "All" ? "all teams" : selectedSP}</strong>
+              {" "} · scope: <strong style={{color:"var(--text)"}}>{scopeName(selectedSP)}</strong>
             </div>
 
             <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
@@ -2252,22 +2259,18 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
 
         {tab === "targets" && (
           <>
-            <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:12,color:"rgba(var(--tint),0.65)",marginRight:8}}>Scope:</span>
-              <Pill label="Team total" active={selectedSP==="All"} onClick={()=>setSelectedSP("All")} />
-              {SALESPEOPLE.map(sp => <Pill key={sp} label={sp} active={selectedSP===sp} onClick={()=>setSelectedSP(sp)} />)}
-            </div>
+            <TeamPills label="Scope:" allLabel="Team total" reps={SALESPEOPLE} value={selectedSP} onPick={setSelectedSP} />
 
             {annualTarget === 0 ? (
               <Card>
                 <div style={{padding:"40px 0",textAlign:"center",color:"rgba(var(--tint),0.67)"}}>
-                  No target set for {selectedSP === "All" ? "team" : selectedSP} in {selectedYear}.
+                  No target set for {selectedSP === "All" ? "team" : selectedSP === ALL_EX_HOUSE ? `team except ${HOUSE_SP}` : selectedSP} in {selectedYear}.
                 </div>
               </Card>
             ) : (
               <>
                 <div style={{display:"flex",gap:16,marginBottom:24,flexWrap:"wrap"}}>
-                  <KPI label="Annual Target" value={`RM ${fmt(annualTarget)}`} sub={`${selectedSP === "All" ? "team" : selectedSP} · ${selectedYear}`} color={STATUS.info} />
+                  <KPI label="Annual Target" value={`RM ${fmt(annualTarget)}`} sub={`${selectedSP === "All" ? "team" : selectedSP === ALL_EX_HOUSE ? `team except ${HOUSE_SP}` : selectedSP} · ${selectedYear}`} color={STATUS.info} />
                   <KPI label="YTD Actual" value={`RM ${fmt(ytd.actual)}`} sub={ytd.lastMonth ? `Jan–${MONTH_NAMES[ytd.lastMonth-1]}` : "no data"} color={STATUS.accent} />
                   <KPI label="YTD Target" value={`RM ${fmt(ytd.target)}`} sub={ytd.lastMonth ? `Jan–${MONTH_NAMES[ytd.lastMonth-1]}` : "—"} color={tk.axisRef} />
                   <KPI
@@ -2310,13 +2313,9 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                       </thead>
                       <tbody>
                         {MONTH_NAMES.map((m, i) => {
-                          const targetSp = selectedSP === "All" ? "_TEAM" : selectedSP;
-                          const t = TARGETS.find(x => x.year === selectedYear && x.month === i + 1 && x.sp === targetSp);
-                          const target = t ? t.target : 0;
+                          const target = targetFor(TARGETS, selectedSP, selectedYear, i + 1);
                           let actual = 0;
-                          const summary = SUMMARY.filter(s => s.year === selectedYear);
-                          if (selectedSP === "All") summary.forEach(s => actual += s.months[i]);
-                          else { const s = summary.find(d => d.sp === selectedSP); if (s) actual = s.months[i]; }
+                          SUMMARY.filter(s => s.year === selectedYear && spInScope(s.sp, selectedSP)).forEach(s => actual += s.months[i]);
                           if (target === 0 && actual === 0) return null;
                           const gap = actual - target;
                           const pct = target > 0 ? (actual / target) * 100 : 0;
@@ -2347,7 +2346,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                   </div>
                 </Card>
 
-                {selectedSP === "All" && user?.canViewAll && (
+                {isTeamScope(selectedSP) && user?.canViewAll && (
                   <Card style={{marginTop:20}}>
                     <div style={{fontSize:14,fontWeight:600,marginBottom:16}}>Per-Rep Achievement — {selectedYear}</div>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
@@ -2359,7 +2358,7 @@ export default function Dashboard({ data: incomingData, user, brandsLoading, onL
                         </tr>
                       </thead>
                       <tbody>
-                        {SALESPEOPLE.map(sp => {
+                        {SALESPEOPLE.filter(sp => spInScope(sp, selectedSP)).map(sp => {
                           const repTargets = TARGETS.filter(t => t.year === selectedYear && t.sp === sp);
                           const annT = repTargets.reduce((a, t) => a + t.target, 0);
                           if (annT === 0) return null;

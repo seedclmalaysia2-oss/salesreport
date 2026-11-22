@@ -33,11 +33,11 @@ const round2 = (v) => Math.round(v * 100) / 100;
 //   tiers:     one entry per band { idx, label, count, revenue, share, cumulative }
 //   total:     revenue of the ranked customers
 //   unranked:  customers whose net revenue for the year is zero or negative
-export const HOUSE_SP = "Seed Malaysia";
-export const ALL_EX_HOUSE = "All-ex-house";
+import { spInScope } from "./teamScope.js";
+export { HOUSE_SP, ALL_EX_HOUSE } from "./teamScope.js";
 
 export function buildTierRanking(rows, year, sp) {
-  const inScope = (r) => sp === "All" || (sp === ALL_EX_HOUSE ? r.sp !== HOUSE_SP : r.sp === sp);
+  const inScope = (r) => spInScope(r.sp, sp);
   const byCustomer = new Map();
   const prev = new Map();
   for (const r of rows || []) {

@@ -1,3 +1,4 @@
+import { spInScope } from "./teamScope.js";
 // Customer x Brand roll-up for one year and salesperson scope.
 //
 // rows: { year, sp, customer, brand, amt, qty } (brand may be a Product Group
@@ -21,7 +22,7 @@ export function buildCustomerBrand(rows, year, sp, metric) {
   const pair = new Map();
   for (const r of rows || []) {
     if (!r || r.year !== year || !r.customer || !r.brand) continue;
-    if (sp !== "All" && r.sp !== sp) continue;
+    if (!spInScope(r.sp, sp)) continue;
     const k = pairKey(r.customer, r.brand);
     const e = pair.get(k) || { customer: r.customer, brand: r.brand, amt: 0, qty: 0 };
     e.amt += Number(r.amt) || 0;

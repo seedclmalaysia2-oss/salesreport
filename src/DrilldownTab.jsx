@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { TIERS, buildTierRanking, ALL_EX_HOUSE, HOUSE_SP } from "./lib/customerTiers.js";
+import { TIERS, buildTierRanking } from "./lib/customerTiers.js";
+import { ALL_EX_HOUSE, HOUSE_SP, isTeamScope, spInScope, scopeName } from "./lib/teamScope.js";
 import "./drilldown.css";
 
 // Customer drill-down: who the yearly revenue comes from, grouped into the
@@ -72,13 +73,11 @@ function TierRung({ tier, scale, active, onPick, reduceMotion }) {
   );
 }
 
-const inSpScope = (sp, scope) => scope === "All" || (scope === ALL_EX_HOUSE ? sp !== HOUSE_SP : sp === scope);
-
 function Detail({ c, year, scopeLabel, data, scopeSp, brandsLoading, tk, colors, reduceMotion }) {
   // This customer's months (this year vs last) and yearly totals, within the same
   // salesperson scope as the ranking so every figure on screen agrees.
   const { monthly, yearly, brands } = useMemo(() => {
-    const rows = (data.customers || []).filter((r) => r.customer === c.customer && inSpScope(r.sp, scopeSp));
+    const rows = (data.customers || []).filter((r) => r.customer === c.customer && spInScope(r.sp, scopeSp));
     const thisYear = new Array(12).fill(0);
     const lastYear = new Array(12).fill(0);
     const perYear = new Map();
@@ -89,7 +88,7 @@ function Detail({ c, year, scopeLabel, data, scopeSp, brandsLoading, tk, colors,
     }
     const brandMap = new Map();
     for (const r of data.brandSales || []) {
-      if (r.customer !== c.customer || r.year !== year || !inSpScope(r.sp, scopeSp)) continue;
+      if (r.customer !== c.customer || r.year !== year || !spInScope(r.sp, scopeSp)) continue;
       const e = brandMap.get(r.brand) || { brand: r.brand, amt: 0, qty: 0 };
       e.amt += Number(r.amt) || 0;
       e.qty += Number(r.qty) || 0;
@@ -109,7 +108,7 @@ function Detail({ c, year, scopeLabel, data, scopeSp, brandsLoading, tk, colors,
     <div className="space-y-6 bg-wash px-3 py-5 sm:px-5">
       <dl className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
         <div>
-          <dt className="text-muted">Rank {scopeLabel === "All Teams" ? "overall" : `for ${scopeLabel}`}</dt>
+          <dt className="text-muted">Rank {scopeSp === "All" ? "overall" : `for ${scopeLabel}`}</dt>
           <dd className="font-metric tabular-nums text-ink">#{c.rank}</dd>
         </div>
         <div>
@@ -200,14 +199,11 @@ export default function DrilldownTab({ data, year, years, setYear, selectedSP, s
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(null); // expanded customer name
   const [shown, setShown] = useState(PAGE);
-  // "All Teams except Seed Malaysia" lives here, not in the shared selectedSP, so
-  // other tabs (which only know "All" or a rep) never see an unknown scope.
-  const [exHouse, setExHouse] = useState(false);
-  const excluding = exHouse && selectedSP === "All";
-  const scope = excluding ? ALL_EX_HOUSE : selectedSP;
+  const scope = selectedSP;
+  const excluding = scope === ALL_EX_HOUSE;
 
   const ranking = useMemo(() => buildTierRanking(data.customers, year, scope), [data, year, scope]);
-  const scopeLabel = excluding ? `All Teams except ${HOUSE_SP}` : selectedSP === "All" ? "All Teams" : selectedSP;
+  const scopeLabel = scopeName(scope);
   const maxShare = Math.max(0, ...ranking.tiers.map((t) => t.share));
 
   const list = useMemo(() => {
@@ -221,11 +217,7 @@ export default function DrilldownTab({ data, year, years, setYear, selectedSP, s
 
   const pickTier = (idx) => { setTier((cur) => (cur === idx ? null : idx)); setShown(PAGE); setOpen(null); };
   const pickYear = (y) => { setYear(y); setTier(null); setShown(PAGE); setOpen(null); };
-  const pickSP = (sp) => {
-    setExHouse(sp === ALL_EX_HOUSE);
-    setSelectedSP(sp === ALL_EX_HOUSE ? "All" : sp);
-    setTier(null); setShown(PAGE); setOpen(null);
-  };
+  const pickSP = (sp) => { setSelectedSP(sp); setTier(null); setShown(PAGE); setOpen(null); };
   const pillCls = (active) =>
     `cursor-pointer rounded-full px-4 py-1.5 font-metric text-xs font-semibold outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent ${
       active ? "bg-accent text-white" : "bg-wash text-muted hover:text-ink"
@@ -255,7 +247,7 @@ export default function DrilldownTab({ data, year, years, setYear, selectedSP, s
 
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Salesperson">
         <span className="w-24 text-sm text-muted">Salesperson</span>
-        <button type="button" aria-pressed={selectedSP === "All" && !excluding} onClick={() => pickSP("All")} className={pillCls(selectedSP === "All" && !excluding)}>
+        <button type="button" aria-pressed={selectedSP === "All"} onClick={() => pickSP("All")} className={pillCls(selectedSP === "All")}>
           All Teams
         </button>
         {salespeople.includes(HOUSE_SP) && (
@@ -292,7 +284,7 @@ export default function DrilldownTab({ data, year, years, setYear, selectedSP, s
         {ranking.customers.length > 0 && (
           <p className="mt-1 text-sm leading-relaxed text-muted">
             {top.count > 0
-              ? `${plural(top.count, "customer")} at RM 100K or more bring ${pct(top.share)} of ${selectedSP === "All" ? (excluding ? `sales outside ${HOUSE_SP}` : "all sales") : `${scopeLabel}'s sales`}. `
+              ? `${plural(top.count, "customer")} at RM 100K or more bring ${pct(top.share)} of ${isTeamScope(scope) ? (excluding ? `sales outside ${HOUSE_SP}` : "all sales") : `${scopeLabel}'s sales`}. `
               : `No customer reached RM 100K; the largest is ${biggest.customer} at ${money(biggest.total)}. `}
             Pick a band to see who is in it.
             {ranking.unranked > 0 && ` ${plural(ranking.unranked, "customer")} netted zero or less after credit notes and are not ranked.`}
