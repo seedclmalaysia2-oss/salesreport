@@ -29,6 +29,10 @@ export const SALES_ALIASES = {
   "OUR OPTOMETRIS": "OUR OPTOMETRIST", // code changed in 2025
   "POTT GLASSES SS2": "POTT GLASSES SS2 PJ",
   "POTT GLASSES SJ": "POTT GLASSES SS15 PJ", // Subang Jaya branch
+  "PY OPTIC (PUC JAYA)": "PY OPTIC - MERAK", // Puchong Jaya until 2024, Merak from 2025
+  // Registered company vs store signboard: Pro Eye Optique PLT trades as 1.0 Provision.
+  "PRO EYE OPTIQUE PLT": "1.0 PROVISION",
+  "PRO EYE OPTIQUE-ADV": "1.0 PROVISION",
 };
 
 // Known typos in the Autocount customer-type field, folded into the real code.
@@ -310,14 +314,17 @@ export function buildAccounts({ master = [], sales = [], year, lapseMonths = 6 }
     let status;
     if (last < 0) status = "never";
     else if (now - last >= lapseMonths) status = "lapsed";
-    else if (createdYear === year || (firstYear === year && ly <= 0)) status = "new";
+    // New = first order this year (an account re-coded from an older one keeps
+    // its history, so it is not new).
+    else if (firstYear === year) status = "new";
     else if (ly <= 0) status = ytd > 0 ? "growing" : "steady";
     else if (ytd >= ly * (1 + GROW)) status = "growing";
     else if (ytd <= ly * (1 - GROW)) status = "declining";
     else status = "steady";
     // Created after the as-of point (e.g. a 2026 account when looking at 2024)
-    // did not exist yet: leave it out of that year's picture.
-    if (createdYear && createdYear > year) return null;
+    // did not exist yet: leave it out of that year's picture, unless sales
+    // already reached it then (an old code merged into a newer account).
+    if (createdYear && createdYear > year && last < 0) return null;
     return {
       ...base,
       createdYear,

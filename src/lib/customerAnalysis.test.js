@@ -137,3 +137,20 @@ describe("sales aliases", () => {
     expect(accounts[0].ytd).toBe(600);
   });
 });
+
+describe("re-coded accounts opened later", () => {
+  it("keeps an account opened after the viewed year when merged old-code sales reach it", () => {
+    const master = [{ code: "1.0 PROVISION", name: "1.0 Provision", sp: "Khen", created: "2026-06-10", chain: "", type: "A", town: "", state: "" }];
+    const sales = [
+      { sp: "Khen", year: 2024, customer: "PRO EYE OPTIQUE PLT", months: mo({ 0: 500 }), total: 500 },
+      { sp: "Khen", year: 2025, customer: "PRO EYE OPTIQUE PLT", months: mo({ 0: 400 }), total: 400 },
+      { sp: "Khen", year: 2026, customer: "1.0 PROVISION", months: mo({ 0: 300 }), total: 300 },
+    ];
+    const y25 = buildAccounts({ master, sales, year: 2025 }).accounts;
+    expect(y25).toHaveLength(1);
+    expect(y25[0].ytd).toBe(400);
+    const y26 = buildAccounts({ master, sales, year: 2026 }).accounts[0];
+    expect(y26.status).not.toBe("new");
+    expect(y26.ly).toBe(400);
+  });
+});
