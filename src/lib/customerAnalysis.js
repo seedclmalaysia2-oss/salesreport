@@ -245,6 +245,14 @@ export const STATUSES = [
 
 // Build one record per account. `sales` is customers_data rows
 // ({sp, year, customer, months[12], total}).
+// Accounts the owner added here instead of in Autocount (2026-11-22). They join
+// the uploaded customer list unless it already has the same code.
+export const EXTRA_LIST = [
+  // Axis branch numbers 201–227 are the Melaka group; booked under Khen.
+  { code: "AXIS EYEWEAR-TLM 218", name: "AXIS EYEWEAR GROUP (M) SDN BHD - TLM 218", sp: "Khen", type: "KCS-LOC", chain: "AXIS", town: "", state: "Melaka", created: null },
+  { code: "BE & SEE", name: "BE & SEE", sp: "Dino", type: "", chain: "", town: "", state: "", created: null },
+];
+
 export function buildAccounts({ master = [], sales = [], year, lapseMonths = 6 }) {
   const asOf = asOfMonth(sales, year);
   const M = asOf < 0 ? 11 : asOf;
@@ -280,7 +288,9 @@ export function buildAccounts({ master = [], sales = [], year, lapseMonths = 6 }
   // spelt as in the uploaded sales files, then the newest row.
   const salesFor = (code) => byKey.get(exactOf(code)) || (loose.get(keyOf(code)) || []).map((k) => byKey.get(k))[0] || null;
   const groups = new Map();
-  master.forEach((m) => {
+  const have = new Set(master.map((m) => keyOf(m.code)));
+  const extra = master.length ? EXTRA_LIST.filter((m) => !have.has(keyOf(m.code)) && salesFor(m.code)) : [];
+  [...master, ...extra].forEach((m) => {
     const k = keyOf(m.code) || `#${groups.size}`;
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(m);

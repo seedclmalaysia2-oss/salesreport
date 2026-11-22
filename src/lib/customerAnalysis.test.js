@@ -179,3 +179,14 @@ describe("activeReps", () => {
     expect([...r]).toEqual(["Alan"]);
   });
 });
+
+describe("extra list entries", () => {
+  it("adds owner-entered accounts to the customer list", () => {
+    const master = [{ code: "OTHER", name: "Other", sp: "Alan", created: "2020-01-01", chain: "", type: "A", town: "", state: "" }];
+    const sales = [{ sp: "Khen", year: 2026, customer: "AXIS EYEWEAR-TLM 218", months: mo({ 0: 100 }), total: 100 }];
+    const { accounts } = buildAccounts({ master, sales, year: 2026 });
+    const axis = accounts.find((a) => a.code === "AXIS EYEWEAR-TLM 218");
+    expect(axis.listed).toBe(true);
+    expect(axis.state).toBe("Melaka");
+  });
+});
