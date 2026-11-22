@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseMasterRows, buildAccounts, summarize, normaliseArea, filterAccounts, NOT_LISTED } from "./customerAnalysis.js";
+import { parseMasterRows, buildAccounts, summarize, normaliseArea, filterAccounts, NOT_LISTED, activeReps } from "./customerAnalysis.js";
 
 const z = () => new Array(12).fill(0);
 const mo = (obj) => { const a = z(); for (const [k, v] of Object.entries(obj)) a[k] = v; return a; };
@@ -152,5 +152,18 @@ describe("re-coded accounts opened later", () => {
     const y26 = buildAccounts({ master, sales, year: 2026 }).accounts[0];
     expect(y26.status).not.toBe("new");
     expect(y26.ly).toBe(400);
+  });
+});
+
+describe("activeReps", () => {
+  it("lists only salespeople with sales in the year", () => {
+    const m = (v) => [v, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    const sales = [
+      { sp: "Alan", year: 2025, customer: "A", months: m(100), total: 100 },
+      { sp: "Wani", year: 2026, customer: "B", months: m(50), total: 50 },
+      { sp: "Jerry", year: 2025, customer: "C", months: m(0), total: 0 },
+    ];
+    const r = activeReps(sales, 2025);
+    expect([...r]).toEqual(["Alan"]);
   });
 });

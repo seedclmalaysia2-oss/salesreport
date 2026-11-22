@@ -195,6 +195,19 @@ export function parseMasterRows(rows) {
 
 // ---------- Joining ----------
 
+// Salespeople with any sales in `year`, so the picker hides reps who weren't
+// selling then (left, or not yet joined).
+export function activeReps(sales, year) {
+  const out = new Set();
+  for (const r of sales || []) {
+    if (Number(r.year) !== Number(year)) continue;
+    if (!(r.months || []).some((v) => Number(v) !== 0) && !Number(r.total)) continue;
+    const sp = canonSp(r.sp);
+    if (sp) out.add(sp);
+  }
+  return out;
+}
+
 // The last month of `year` that has any sales — the "as of" point for YTD.
 // A past year with data in December is a full year.
 export function asOfMonth(sales, year) {

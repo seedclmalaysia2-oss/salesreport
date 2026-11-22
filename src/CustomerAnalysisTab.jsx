@@ -3,7 +3,7 @@ import "./customeranalysis.css";
 import { supabase } from "./lib/supabase.js";
 import { ALL_EX_HOUSE, HOUSE_SP, scopeName } from "./lib/teamScope.js";
 import {
-  buildAccounts, filterAccounts, summarize, growth,
+  buildAccounts, filterAccounts, summarize, growth, activeReps, canonSp,
   MONTHS, STATUSES, REGIONS, NOT_LISTED,
 } from "./lib/customerAnalysis.js";
 
@@ -198,11 +198,20 @@ export default function CustomerAnalysisTab({ sales, years, year, setYear, selec
     [master.rows, sales, year, lapse]
   );
 
+  // Only salespeople who had sales in the chosen year.
   const reps = useMemo(() => {
-    if (!built) return salespeople;
-    const extra = [...new Set(built.accounts.map((a) => a.sp))].filter((s) => !salespeople.includes(s) && s !== "Unassigned").sort();
-    return [...salespeople, ...extra];
-  }, [built, salespeople]);
+    const active = activeReps(sales, year);
+    const isActive = (s) => active.has(canonSp(s) || s);
+    const base = salespeople.filter(isActive);
+    if (!built) return base;
+    const extra = [...new Set(built.accounts.map((a) => a.sp))].filter((s) => !salespeople.includes(s) && s !== "Unassigned" && isActive(s)).sort();
+    return [...base, ...extra];
+  }, [built, salespeople, sales, year]);
+
+  // A rep picked for another year who wasn't selling in this one: go back to All Teams.
+  useEffect(() => {
+    if (selectedSP && selectedSP !== "All" && selectedSP !== ALL_EX_HOUSE && !reps.includes(selectedSP)) setSelectedSP("All");
+  }, [reps, selectedSP, setSelectedSP]);
 
   const scoped = useMemo(() => (built ? filterAccounts(built.accounts, { scope: selectedSP }) : []), [built, selectedSP]);
   const filtered = useMemo(
