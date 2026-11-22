@@ -21,6 +21,16 @@ export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "
 // space ("TRUE VISION BAHAU" vs "TRUEVISION BAHAU" are two different accounts),
 // so matching tries this first and only falls back to the loose keyOf.
 export const exactOf = (s) => String(s ?? "").toUpperCase().replace(/\s+/g, " ").trim();
+// Old or variant customer codes in the sales files that belong to an account
+// on the customer list (confirmed by the owner 2026-11-22). Sales booked under
+// the left code count under the right one.
+export const SALES_ALIASES = {
+  "CHAN MAY MAY OPTOMET": "CHAN MAY MAY OPTOM", // code changed in 2025
+  "OUR OPTOMETRIS": "OUR OPTOMETRIST", // code changed in 2025
+  "POTT GLASSES SS2": "POTT GLASSES SS2 PJ",
+  "POTT GLASSES SJ": "POTT GLASSES SS15 PJ", // Subang Jaya branch
+};
+
 // Known typos in the Autocount customer-type field, folded into the real code.
 const TYPE_FIX = { "SIO-OPTOM-MY": "SIO-OPTM-MY" };
 export const normType = (t) => {
@@ -222,7 +232,8 @@ export function buildAccounts({ master = [], sales = [], year, lapseMonths = 6 }
   const loose = new Map(); // keyOf -> [exact keys]
   for (const r of sales) {
     if (!r || !Array.isArray(r.months)) continue;
-    const k = exactOf(r.customer);
+    const raw = exactOf(r.customer);
+    const k = SALES_ALIASES[raw] || raw;
     if (!k) continue;
     if (!byKey.has(k)) {
       const lk = keyOf(k);

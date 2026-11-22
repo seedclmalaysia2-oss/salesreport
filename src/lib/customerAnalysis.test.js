@@ -122,3 +122,18 @@ describe("type typos", () => {
     expect(parseMasterRows(rows)[0].type).toBe("SIO-OPTM-MY");
   });
 });
+
+describe("sales aliases", () => {
+  it("counts an old sales code under its list account", () => {
+    const master = [{ code: "CHAN MAY MAY OPTOM", name: "CMM Optometrist", sp: "Alan", created: "2025-01-01", chain: "", type: "A", town: "", state: "" }];
+    const sales = [
+      { sp: "Alan", year: 2025, customer: "CHAN MAY MAY OPTOMET", months: mo({ 0: 40 }), total: 40 },
+      { sp: "Alan", year: 2025, customer: "CHAN MAY MAY OPTOM", months: mo({ 0: 150 }), total: 150 },
+      { sp: "Alan", year: 2026, customer: "CHAN MAY MAY OPTOM", months: mo({ 0: 600 }), total: 600 },
+    ];
+    const { accounts } = buildAccounts({ master, sales, year: 2026 });
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0].ly).toBe(190);
+    expect(accounts[0].ytd).toBe(600);
+  });
+});
