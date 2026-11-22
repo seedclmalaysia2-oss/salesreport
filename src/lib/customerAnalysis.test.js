@@ -79,3 +79,19 @@ describe("buildAccounts", () => {
     expect(s.losers[0].code).toBe("DROP"); // GONE only bought in Mar, outside Jan–Feb
   });
 });
+
+describe("matching", () => {
+  it("never gives two accounts the same sales when codes differ only by spacing", () => {
+    const master = [
+      { code: "TRUE VISION BAHAU", name: "True Vision (Bahau)", sp: "Dino", created: "2021-01-01", chain: "", type: "A", town: "", state: "" },
+      { code: "TRUEVISION BAHAU", name: "Truevision Sdn Bhd", sp: "Simon", created: "2016-01-01", chain: "", type: "A", town: "", state: "" },
+    ];
+    const sales = [
+      { sp: "Dino", year: 2026, customer: "TRUE VISION BAHAU", months: mo({ 0: 100 }), total: 100 },
+      { sp: "Simon", year: 2026, customer: "TRUEVISION BAHAU", months: mo({ 0: 7 }), total: 7 },
+    ];
+    const { accounts } = buildAccounts({ master, sales, year: 2026 });
+    expect(accounts.map((a) => a.ytd)).toEqual([100, 7]);
+    expect(new Set(accounts.map((a) => a.id)).size).toBe(2);
+  });
+});

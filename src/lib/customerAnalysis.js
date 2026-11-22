@@ -17,6 +17,10 @@ export const UNKNOWN_AREA = "Unknown";
 
 export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// Exact key: case and spacing only. Autocount codes can differ by a single
+// space ("TRUE VISION BAHAU" vs "TRUEVISION BAHAU" are two different accounts),
+// so matching tries this first and only falls back to the loose keyOf.
+export const exactOf = (s) => String(s ?? "").toUpperCase().replace(/\s+/g, " ").trim();
 export const keyOf = (s) => String(s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 // Owner names on the master list are full names ("ALAN LOH"); the dashboard
@@ -206,12 +210,18 @@ export function buildAccounts({ master = [], sales = [], year, lapseMonths = 6 }
   const M = asOf < 0 ? 11 : asOf;
   const now = year * 12 + M;
 
-  // Sales per customer key: year -> months, plus who booked them.
+  // Sales per customer (exact key): year -> months, plus who booked them.
   const byKey = new Map();
+  const loose = new Map(); // keyOf -> [exact keys]
   for (const r of sales) {
     if (!r || !Array.isArray(r.months)) continue;
-    const k = keyOf(r.customer);
+    const k = exactOf(r.customer);
     if (!k) continue;
+    if (!byKey.has(k)) {
+      const lk = keyOf(k);
+      if (!loose.has(lk)) loose.set(lk, []);
+      loose.get(lk).push(k);
+    }
     let e = byKey.get(k);
     if (!e) byKey.set(k, (e = { name: r.customer, years: new Map(), sp: new Map() }));
     let ms = e.years.get(r.year);
@@ -271,21 +281,30 @@ export function buildAccounts({ master = [], sales = [], year, lapseMonths = 6 }
     };
   };
 
-  for (const m of master) {
-    const k = keyOf(m.code);
-    let e = byKey.get(k);
-    let hitKey = e ? k : null;
-    if (!e) {
-      const k2 = keyOf(m.name);
-      e = byKey.get(k2);
-      if (e) hitKey = k2;
+  // Each sales customer is claimed by at most one account: exact code/name
+  // matches first (for every account), then the loose fallback for the rest.
+  const hit = new Array(master.length).fill(null);
+  master.forEach((m, i) => {
+    for (const k of [exactOf(m.code), exactOf(m.name)]) {
+      if (k && byKey.has(k) && !used.has(k)) { hit[i] = k; used.add(k); break; }
     }
-    if (hitKey) used.add(hitKey);
+  });
+  master.forEach((m, i) => {
+    if (hit[i]) return;
+    for (const lk of [keyOf(m.code), keyOf(m.name)]) {
+      const k = (loose.get(lk) || []).find((x) => !used.has(x));
+      if (k) { hit[i] = k; used.add(k); break; }
+    }
+  });
+
+  for (let i = 0; i < master.length; i++) {
+    const m = master[i];
+    const e = hit[i] ? byKey.get(hit[i]) : null;
     const area = normaliseArea(m.state, m.type);
     const topSp = e ? [...e.sp.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] : null;
     const acc = finish(
       {
-        id: `m:${k || keyOf(m.name)}`,
+        id: `m:${i}`,
         name: m.name,
         code: m.code,
         sp: m.sp || topSp || "Unassigned",
@@ -311,7 +330,7 @@ export function buildAccounts({ master = [], sales = [], year, lapseMonths = 6 }
     const topSp = [...e.sp.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "Unassigned";
     const acc = finish(
       {
-        id: `s:${k}`,
+        id: `s:${keyOf(k)}:${k}`,
         name: e.name,
         code: e.name,
         sp: topSp,
