@@ -26,6 +26,20 @@ export function buildWeeklyShareText(summary) {
   const { monthName, periodLabel, isMonthView, target, scopes } = summary;
   const pctLine = (total) =>
     target > 0 ? ` (${Math.round((total / target) * 100)}% of ${fmtRM(target)})` : "";
+  // The same 65% / 80% floors and 100% target the board card shows, with each
+  // team's balance to each: "short RM …", or "✓ hit" once reached. Computed from
+  // the precise total so the figures match the card to the ringgit.
+  const floorLines = (total) => {
+    if (!(target > 0)) return [];
+    return [
+      ["65% floor", target * 0.65],
+      ["80% floor", target * 0.8],
+      ["100% target", target],
+    ].map(([label, amt]) => {
+      const bal = amt - total;
+      return `   ↳ ${label} ${fmtRM(amt)} — ${bal > 0 ? `short ${fmtRM(bal)}` : "✓ hit"}`;
+    });
+  };
   const lines = [];
   lines.push(`📊 SEED Weekly Sales — ${monthName}`);
   lines.push(`${periodLabel}${isMonthView ? " · month to date" : ""}`);
@@ -34,6 +48,7 @@ export function buildWeeklyShareText(summary) {
     lines.push(`*${s.title}*${s.subtitle ? ` (${s.subtitle})` : ""}`);
     for (const r of s.rows) lines.push(`• ${r.sp} — ${fmtRM(r.amount)}`);
     lines.push(`Total: ${fmtRM(s.total)}${pctLine(s.total)}`);
+    for (const fl of floorLines(s.total)) lines.push(fl);
   }
   if (target > 0) {
     lines.push("");

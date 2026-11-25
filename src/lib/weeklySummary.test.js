@@ -43,6 +43,20 @@ describe("monthToDateSummary", () => {
     expect(text).toContain("📊 SEED Weekly Sales — October 2026");
     expect(text).toContain("month to date");
     expect(text).toMatch(/Total: RM 380 \(38% of RM 1,000\)/);
+    // Floor / target balances follow each team's total (whole team = 380).
+    expect(text).toContain("↳ 65% floor RM 650 — short RM 270");
+    expect(text).toContain("↳ 80% floor RM 800 — short RM 420");
+    expect(text).toContain("↳ 100% target RM 1,000 — short RM 620");
+  });
+
+  it("share text marks a floor ✓ hit once reached", () => {
+    const text = buildWeeklyShareText({
+      monthName: "October 2026", periodLabel: "1 Oct – 30 Oct", isMonthView: true, target: 1000,
+      scopes: [{ title: "Team", total: 700, rows: [{ sp: "Alan", amount: 700 }] }],
+    });
+    expect(text).toContain("↳ 65% floor RM 650 — ✓ hit");
+    expect(text).toContain("↳ 80% floor RM 800 — short RM 100");
+    expect(text).toContain("↳ 100% target RM 1,000 — short RM 300");
   });
 });
 
